@@ -2,23 +2,18 @@
 //  ContentView.swift
 //  foxgita
 //
-//  Created by huguangyao on 2026/7/28.
-//
 
+import SwiftData
 import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        MainTabView()
     }
 }
 
 #Preview {
     ContentView()
+        .environment(AppRouter())
+        .modelContainer(for: [TaskItem.self, PracticeSession.self, RecordingRef.self], inMemory: true)
 }
