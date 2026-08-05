@@ -8,27 +8,43 @@ import SwiftUI
 
 @main
 struct foxgitaApp: App {
+    @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
     @State private var router = AppRouter()
+    @State private var store: PracticeStore
+    @State private var reminderDelegate: ReminderDelegate?
+    private let container: ModelContainer
 
-    private let container: ModelContainer = {
-        let schema = Schema([TaskItem.self, PracticeSession.self, RecordingRef.self])
-        let config = ModelConfiguration(isStoredInMemoryOnly: false)
+    init() {
+        let schema = Schema(versionedSchema: GitaSchemaV3.self)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
-            return try ModelContainer(for: schema, configurations: [config])
+            let container = try ModelContainer(
+                for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            )
+            self.container = container
+            _store = State(
+                initialValue: PracticeStore(
+                    repository: SwiftDataPracticeRepository(context: container.mainContext)
+                )
+            )
         } catch {
             fatalError("SwiftData failed: \(error)")
         }
-    }()
+    }
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environment(router)
+                .environment(store)
                 .modelContainer(container)
                 .tint(GitaTheme.brand500)
-                .preferredColorScheme(router.isDark ? .dark : .light)
+                .preferredColorScheme(appearance.colorScheme)
                 .onAppear {
-                    SeedData.seedIfNeeded(context: container.mainContext)
+                    store.prepare()
+                    if reminderDelegate == nil {
+                        reminderDelegate = ReminderDelegate { router.openTodayFirstPractice = true }
+                    }
                 }
         }
     }

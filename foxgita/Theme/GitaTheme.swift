@@ -2,43 +2,47 @@
 //  GitaTheme.swift
 //  foxgita — Design tokens from DESIGN_SYSTEM_SPEC v2.0
 //
+//  Colours live in Assets.xcassets/Colors as light/dark pairs, so appearance
+//  switching is handled by the system instead of by branching in views.
+//
 
 import SwiftUI
 
 enum GitaTheme {
     // Action
-    static let brand500 = Color(hex: 0xFF7925)
-    static let brand50 = Color(hex: 0xFFF0E6)
-    static let brandOn = Color.white
+    static let brand500 = Color(.brandPrimary)
+    static let brand50 = Color(.brandSoft)
+    static let brandOn = Color(.brandOn)
 
     // Background
-    static let bgDefault = Color(hex: 0xFAFAFA)
-    static let bgSurface = Color.white
-    static let bgSubtle = Color(hex: 0xF6F6F6)
+    static let bgDefault = Color(.bgDefault)
+    static let bgSurface = Color(.bgSurface)
+    static let bgSubtle = Color(.bgSubtle)
 
     // Text
-    static let textPrimary = Color(hex: 0x292929)
-    static let textSecondary = Color(hex: 0x999999)
-    static let textTertiary = Color(hex: 0xC6C8CC)
-    static let textOnPrimary = Color.white
+    static let textPrimary = Color(.textPrimary)
+    static let textSecondary = Color(.textSecondary)
+    static let textTertiary = Color(.textTertiary)
+    static let textOnPrimary = Color(.brandOn)
 
     // Icon
-    static let iconPrimary = Color(hex: 0x333333)
-    static let iconSecondary = Color(hex: 0x999999)
-    static let iconInactive = Color(hex: 0xD6D9DE)
-    static let iconActive = Color(hex: 0xFF7925)
+    static let iconPrimary = Color(.iconPrimary)
+    static let iconSecondary = Color(.iconSecondary)
+    static let iconInactive = Color(.iconInactive)
+    static let iconActive = Color(.brandPrimary)
 
     // Border / Status
-    static let borderSubtle = Color(hex: 0xEEEEEE)
-    static let borderInactive = Color(hex: 0xD6D9DE)
-    static let statusSuccess = Color(hex: 0x78E39D)
+    static let borderSubtle = Color(.borderSubtle)
+    static let borderInactive = Color(.borderInactive)
+    static let statusSuccess = Color(.statusSuccess)
+    static let statusError = Color(.statusError)
 
     // Category
-    static let categoryBlue = Color(hex: 0x6682ED)
-    static let categoryOrange = Color(hex: 0xF4A16F)
-    static let categoryYellow = Color(hex: 0xFFE58D)
-    static let categoryPurple = Color(hex: 0xA986D2)
-    static let categoryCyan = Color(hex: 0x27B3D3)
+    static let categoryBlue = Color(.categoryBlue)
+    static let categoryOrange = Color(.categoryOrange)
+    static let categoryYellow = Color(.categoryYellow)
+    static let categoryPurple = Color(.categoryPurple)
+    static let categoryCyan = Color(.categoryCyan)
 
     // Radius
     static let radius8: CGFloat = 8
@@ -58,20 +62,8 @@ enum GitaTheme {
     static let pagePadding: CGFloat = 16
     static let tabBarHeight: CGFloat = 56
 
-    static let shadowCard = Color.black.opacity(0.06)
-    static let shadowFab = Color(hex: 0xFF7925).opacity(0.18)
-}
-
-extension Color {
-    init(hex: UInt, alpha: Double = 1) {
-        self.init(
-            .sRGB,
-            red: Double((hex >> 16) & 0xFF) / 255,
-            green: Double((hex >> 8) & 0xFF) / 255,
-            blue: Double(hex & 0xFF) / 255,
-            opacity: alpha
-        )
-    }
+    static let shadowCard = Color(.shadowCard)
+    static let shadowFab = Color(.shadowFab)
 }
 
 enum PracticeCategory: String, Codable, CaseIterable, Identifiable {
@@ -81,23 +73,23 @@ enum PracticeCategory: String, Codable, CaseIterable, Identifiable {
 
     var label: String {
         switch self {
-        case .left: return "左手"
-        case .right: return "右手"
-        case .both: return "双手"
-        case .chord: return "和弦"
-        case .scale: return "音阶"
-        case .rhythm: return "节奏"
-        case .song: return "歌曲"
+        case .left: return String(localized: "左手")
+        case .right: return String(localized: "右手")
+        case .both: return String(localized: "双手")
+        case .chord: return String(localized: "和弦")
+        case .scale: return String(localized: "音阶")
+        case .rhythm: return String(localized: "节奏")
+        case .song: return String(localized: "歌曲")
         }
     }
 
     var shortTag: String {
         switch self {
-        case .left, .right, .both: return "技"
-        case .chord: return "弦"
-        case .scale: return "阶"
-        case .rhythm: return "节"
-        case .song: return "歌"
+        case .left, .right, .both: return String(localized: "技")
+        case .chord: return String(localized: "弦")
+        case .scale: return String(localized: "阶")
+        case .rhythm: return String(localized: "节")
+        case .song: return String(localized: "歌")
         }
     }
 
@@ -116,16 +108,4 @@ enum PracticeCategory: String, Codable, CaseIterable, Identifiable {
 
 enum TaskStatus: String, Codable {
     case active, done
-}
-
-enum UserRole: String, CaseIterable {
-    case guest, novice, vip
-
-    var label: String {
-        switch self {
-        case .guest: return "游客"
-        case .novice: return "新手"
-        case .vip: return "高光"
-        }
-    }
 }

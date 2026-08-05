@@ -8,13 +8,19 @@ import SwiftUI
 
 struct RecommendSheet: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
-    @Query(sort: \TaskItem.sortOrder) private var allTasks: [TaskItem]
+    @Environment(PracticeStore.self) private var store
+    @Query(
+        filter: #Predicate<TaskItem> { $0.deletedAt == nil },
+        sort: \TaskItem.sortOrder
+    )
+    private var allTasks: [TaskItem]
 
     @State private var category: PracticeCategory = .left
     @State private var name = ""
     @State private var duration = 10
-    let onSelect: (String) -> Void
+    /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
+    /// Pushing from inside the sheet races the dismissal animation.
+    @Binding var selection: String?
 
     private var cards: [TaskItem] {
         let templates = allTasks.filter { $0.isTemplate && $0.category == category }
@@ -71,10 +77,10 @@ struct RecommendSheet: View {
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                         Button {
-                            let task = SeedData.createCustom(name: name, minutes: duration, context: modelContext)
-                            let id = task.id
+                            selection = store.createCustomTask(
+                                name: name, minutes: duration, category: category
+                            )
                             dismiss()
-                            DispatchQueue.main.async { onSelect(id) }
                         } label: {
                             Text("创建练习")
                                 .font(.system(size: 16, weight: .semibold))
@@ -121,10 +127,8 @@ struct RecommendSheet: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(cards, id: \.id) { task in
                             Button {
-                                let active = SeedData.ensureActive(from: task, context: modelContext)
-                                let id = active.id
+                                selection = store.activateTemplate(task.id)
                                 dismiss()
-                                DispatchQueue.main.async { onSelect(id) }
                             } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(task.title)

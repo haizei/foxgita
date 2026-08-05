@@ -7,130 +7,82 @@ import SwiftUI
 
 struct SettingsView: View {
     @Environment(AppRouter.self) private var router
-    @State private var remindOn = false
-    @State private var hapticOn = true
+    @Environment(PracticeStore.self) private var store
+    @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
+    @AppStorage("gita.reminder.on") private var remindOn = false
+    @AppStorage("gita.reminder.hour") private var remindHour = 20
+    @AppStorage("gita.reminder.minute") private var remindMinute = 0
+    @State private var showClearConfirm = false
     @State private var toast: String?
 
     var body: some View {
-        @Bindable var router = router
         ZStack {
             PageBackground()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("设置").font(.system(size: 20, weight: .bold))
-                            Text("让练习更适合你的节奏")
-                                .font(.system(size: 12))
-                                .foregroundStyle(GitaTheme.textSecondary)
-                        }
-                        Spacer()
-                        Text("关于")
-                            .font(.system(size: 14))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("设置").font(GitaFont.title())
+                        Text("让练习更适合你的节奏")
+                            .font(GitaFont.caption())
                             .foregroundStyle(GitaTheme.textSecondary)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                    HStack(spacing: 12) {
-                        ZStack(alignment: .bottomTrailing) {
-                            Text(String(router.displayName.prefix(1)))
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(GitaTheme.iconActive)
-                                .frame(width: 52, height: 52)
-                                .background(GitaTheme.brand50)
-                                .clipShape(Circle())
-                            if router.role == .vip {
-                                Text("高光")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundStyle(GitaTheme.brand500)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 2)
-                                    .background(GitaTheme.brand50)
-                                    .clipShape(Capsule())
-                                    .offset(x: 4, y: 2)
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(router.displayName).font(.system(size: 16, weight: .bold))
-                            Text(roleDesc)
-                                .font(.system(size: 12))
-                                .foregroundStyle(GitaTheme.textSecondary)
-                        }
-                        Spacer()
-                        Text("编辑")
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textSecondary)
-                    }
-                    .padding(16)
-                    .background(GitaTheme.bgSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
-
-                    sectionLabel("账号与同步")
+                    sectionLabel("练习提醒")
                     group {
-                        rowButton(title: "云同步", subtitle: cloudDesc) {
-                            if router.role == .vip {
-                                toast = "云同步已开启（演示）"
-                            } else {
-                                toast = "登录后即可云同步练习记录"
-                            }
-                            hideToast()
-                        } trailing: {
-                            Text(router.role == .vip ? "已开启" : "未开启")
-                                .font(.system(size: 13))
-                                .foregroundStyle(GitaTheme.textSecondary)
-                        }
-                    }
-
-                    sectionLabel("练习偏好")
-                    group {
-                        toggleRow("每日提醒", "20:00 · 温柔提醒", $remindOn)
-                        Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        valueRow("默认练习时长", "新任务默认 10 分钟", "10 分钟")
-                        Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        valueRow("节拍器声音", "木质短音", "进入")
-                    }
-
-                    sectionLabel("外观与反馈")
-                    group {
-                        rowButton(title: "主题外观", subtitle: router.isDark ? "深色" : "浅色") {
-                            router.isDark.toggle()
-                        } trailing: {
-                            Text("切换").font(.system(size: 13)).foregroundStyle(GitaTheme.textSecondary)
-                        }
-                        Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        toggleRow("触感反馈", "节拍与完成反馈", $hapticOn)
-                        Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        valueRow("连续日提醒", "只鼓励，不制造压力", "已开启")
-                    }
-
-                    sectionLabel("成长角色（演示）")
-                    group {
-                        ForEach(UserRole.allCases, id: \.self) { role in
-                            Button {
-                                router.role = role
-                            } label: {
-                                HStack {
-                                    Text(role.label)
-                                        .foregroundStyle(GitaTheme.textPrimary)
-                                    Spacer()
-                                    if router.role == role {
-                                        Image(systemName: "checkmark")
-                                            .foregroundStyle(GitaTheme.brand500)
-                                    }
+                        toggleRow("每日提醒", "到点轻轻提醒你摸琴", $remindOn)
+                        if remindOn {
+                            Divider().foregroundStyle(GitaTheme.borderSubtle)
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("提醒时间").font(.system(size: 14, weight: .semibold))
+                                    Text("只鼓励，不制造压力")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(GitaTheme.textSecondary)
                                 }
-                                .padding(16)
+                                Spacer()
+                                DatePicker(
+                                    selection: reminderTime, displayedComponents: .hourAndMinute
+                                ) { EmptyView() }
+                                    .labelsHidden()
                             }
-                            .buttonStyle(.plain)
-                            if role != .vip { Divider().foregroundStyle(GitaTheme.borderSubtle) }
+                            .padding(16)
                         }
                     }
 
-                    sectionLabel("数据与应用")
+                    sectionLabel("外观")
                     group {
-                        valueRow("导出练习数据", "生成本地文件", "进入")
+                        VStack(alignment: .leading, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("主题外观").font(.system(size: 14, weight: .semibold))
+                                Text("深色模式下卡片、文字与图标会一起切换")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(GitaTheme.textSecondary)
+                            }
+                            SegmentedPills(
+                                titles: AppAppearance.allCases.map(\.label),
+                                selection: appearanceIndex
+                            )
+                        }
+                        .padding(16)
+                    }
+
+                    sectionLabel("数据")
+                    group {
+                        rowButton(title: "清除本地数据", subtitle: "删除全部练习记录、笔记与录音") {
+                            showClearConfirm = true
+                        } trailing: {
+                            Text("清除").font(.system(size: 13)).foregroundStyle(GitaTheme.statusError)
+                        }
+                    }
+
+                    sectionLabel("关于")
+                    group {
+                        infoRow("Gita", "今天只练一点点")
                         Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        valueRow("清除本地数据", "需再次确认", "进入")
+                        infoRow("版本", appVersion)
                         Divider().foregroundStyle(GitaTheme.borderSubtle)
-                        valueRow("关于吉他训记", "版本 1.0.0 · Hi-Fi", "进入")
+                        infoRow("数据存储", "全部保存在本设备，不会上传")
                     }
 
                     Text("今天只练一点点，也算向前")
@@ -150,19 +102,66 @@ struct SettingsView: View {
                 }
             }
         }
-        .preferredColorScheme(router.isDark ? .dark : .light)
-    }
-
-    private var roleDesc: String {
-        switch router.role {
-        case .guest: return "游客 · 示例可练，数据仅本地"
-        case .novice: return "本地练习者 · 数据仅保存在设备"
-        case .vip: return "坚持高光 · 云同步与分享已解锁"
+        .alert("清除本地数据？", isPresented: $showClearConfirm) {
+            Button("取消", role: .cancel) {}
+            Button("清除", role: .destructive) {
+                store.resetAll()
+                router.selectedTab = .practice
+            }
+        } message: {
+            Text("将删除全部练习记录、笔记与录音，且无法恢复。入门练习会恢复为初始状态。")
+        }
+        .onChange(of: remindOn) { _, on in
+            Task { await applyReminder(enabled: on) }
+        }
+        .onChange(of: remindHour) { _, _ in
+            Task { await applyReminder(enabled: remindOn) }
+        }
+        .onChange(of: remindMinute) { _, _ in
+            Task { await applyReminder(enabled: remindOn) }
         }
     }
 
-    private var cloudDesc: String {
-        router.role == .vip ? "跨设备同步练习记录" : "登录后跨设备同步练习记录"
+    private var appVersion: String {
+        let short = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
+        return "\(short) (\(build))"
+    }
+
+    private var appearanceIndex: Binding<Int> {
+        Binding(
+            get: { AppAppearance.allCases.firstIndex(of: appearance) ?? 0 },
+            set: { appearance = AppAppearance.allCases[$0] }
+        )
+    }
+
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: {
+                Calendar.current.date(
+                    bySettingHour: remindHour, minute: remindMinute, second: 0, of: Date()
+                ) ?? Date()
+            },
+            set: {
+                let c = Calendar.current.dateComponents([.hour, .minute], from: $0)
+                remindHour = c.hour ?? 20
+                remindMinute = c.minute ?? 0
+            }
+        )
+    }
+
+    private func applyReminder(enabled: Bool) async {
+        guard enabled else {
+            ReminderScheduler.cancel()
+            return
+        }
+        guard await ReminderScheduler.requestAuthorization() else {
+            remindOn = false
+            toast = String(localized: "请在系统「设置 · 通知」中允许 Gita 发送提醒")
+            hideToast()
+            return
+        }
+        await ReminderScheduler.schedule(hour: remindHour, minute: remindMinute)
     }
 
     private func sectionLabel(_ t: String) -> some View {
@@ -178,14 +177,11 @@ struct SettingsView: View {
             .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
-    private func valueRow(_ title: String, _ sub: String, _ val: String) -> some View {
+    private func infoRow(_ title: String, _ value: String) -> some View {
         HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 14, weight: .semibold))
-                Text(sub).font(.system(size: 12)).foregroundStyle(GitaTheme.textSecondary)
-            }
+            Text(title).font(.system(size: 14, weight: .semibold))
             Spacer()
-            Text(val).font(.system(size: 13)).foregroundStyle(GitaTheme.textSecondary)
+            Text(value).font(.system(size: 13)).foregroundStyle(GitaTheme.textSecondary)
         }
         .padding(16)
     }
@@ -197,7 +193,7 @@ struct SettingsView: View {
                 Text(sub).font(.system(size: 12)).foregroundStyle(GitaTheme.textSecondary)
             }
             Spacer()
-            Toggle("", isOn: on).labelsHidden().tint(GitaTheme.brand500)
+            Toggle(isOn: on) { EmptyView() }.labelsHidden().tint(GitaTheme.brand500)
         }
         .padding(16)
     }

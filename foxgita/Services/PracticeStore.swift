@@ -1,0 +1,254 @@
+//
+//  PracticeStore.swift
+//  foxgita
+//
+
+import Foundation
+
+/// Command layer. Views read through `@Query` for free reactivity and write
+/// only through here, so every invariant and every error path lives in one
+/// place. Failures surface as `lastError` for the toast to pick up.
+@Observable
+@MainActor
+final class PracticeStore {
+    private(set) var lastError: StoreError?
+
+    @ObservationIgnored private let repository: PracticeRepository
+    @ObservationIgnored private let defaults: UserDefaults
+
+    init(repository: PracticeRepository, defaults: UserDefaults = .standard) {
+        self.repository = repository
+        self.defaults = defaults
+    }
+
+    func clearError() { lastError = nil }
+
+    // MARK: - Launch
+
+    func prepare() {
+        RecordingStore.migrateLegacyFiles()
+        seedIfNeeded()
+        gcOrphanRecordings()
+    }
+
+    func seedIfNeeded() {
+        guard !defaults.bool(forKey: SeedData.seededKey) else { return }
+        perform {
+            for task in SeedData.todayTasks() { try repository.add(task) }
+            for template in SeedData.templates() { try repository.add(template) }
+            try repository.save()
+            defaults.set(true, forKey: SeedData.seededKey)
+        }
+    }
+
+    /// Removes clips no longer referenced by any recording row — e.g. a take
+    /// recorded and then abandoned by leaving the practice screen.
+    @discardableResult
+    func gcOrphanRecordings() -> Int {
+        guard let sessions = try? repository.sessions() else { return 0 }
+        let referenced = Set(sessions.flatMap { $0.recordings.map(\.fileName) })
+        return RecordingStore.removeOrphans(referenced: referenced)
+    }
+
+    // MARK: - Tasks
+
+    @discardableResult
+    func activateTemplate(_ templateId: String) -> String? {
+        guard let template = try? repository.task(id: templateId) else {
+            lastError = .notFound
+            return nil
+        }
+        guard template.isTemplate else { return template.id }
+
+        let activeId = "active-\(template.id)"
+        if let existing = try? repository.task(id: activeId) { return existing.id }
+
+        let copy = TaskItem(
+            id: activeId, title: template.title, subtitle: template.subtitle,
+            category: template.category, targetMin: template.targetMin,
+            defaultBpm: template.defaultBpm, timeSig: template.timeSig,
+            steps: template.steps, status: .active, startedOn: Date(),
+            sortOrder: template.sortOrder, isTemplate: false
+        )
+        return produce {
+            try repository.add(copy)
+            try repository.save()
+            return copy.id
+        }
+    }
+
+    @discardableResult
+    func createCustomTask(name: String, minutes: Int, category: PracticeCategory) -> String? {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedMinutes = min(60, max(1, minutes))
+        let task = TaskItem(
+            id: "custom-\(UUID().uuidString)",
+            title: trimmed.isEmpty ? String(localized: "未命名练习") : trimmed,
+            subtitle: String(localized: "自定义 · \(clampedMinutes) 分钟"),
+            category: category,
+            targetMin: clampedMinutes,
+            steps: [String(localized: "新步骤")],
+            startedOn: Date(),
+            sortOrder: 50
+        )
+        return produce {
+            try repository.add(task)
+            try repository.save()
+            return task.id
+        }
+    }
+
+    func setTaskStatus(_ taskId: String, to status: TaskStatus) {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return
+        }
+        perform {
+            task.status = status
+            task.touch()
+            try repository.save()
+        }
+    }
+
+    func updateTask(_ taskId: String, title: String, subtitle: String, minutes: Int) {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return
+        }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        perform {
+            task.title = trimmed.isEmpty ? task.title : trimmed
+            task.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            task.targetMin = min(60, max(1, minutes))
+            task.touch()
+            try repository.save()
+        }
+    }
+
+    /// Soft-delete so sync can still see the tombstone later.
+    func softDeleteTask(_ taskId: String) {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return
+        }
+        perform {
+            task.deletedAt = Date()
+            task.touch()
+            try repository.save()
+        }
+    }
+
+    func updateSession(_ sessionId: String, title: String, note: String, minutes: Int) {
+        guard let session = try? repository.session(id: sessionId) else {
+            lastError = .notFound
+            return
+        }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let clampedMinutes = min(180, max(1, minutes))
+        perform {
+            session.taskTitle = trimmed.isEmpty ? session.taskTitle : trimmed
+            session.noteText = note.trimmingCharacters(in: .whitespacesAndNewlines)
+            session.durationSec = clampedMinutes * 60
+            session.updatedAt = Date()
+            try repository.save()
+        }
+    }
+
+    func softDeleteSession(_ sessionId: String) {
+        guard let session = try? repository.session(id: sessionId) else {
+            lastError = .notFound
+            return
+        }
+        perform {
+            session.deletedAt = Date()
+            session.updatedAt = Date()
+            try repository.save()
+        }
+    }
+
+    // MARK: - Sessions
+
+    /// Invariants: the window must be ordered, the duration non-negative, and a
+    /// recording row is only created for a clip that is actually on disk. The
+    /// session and its recordings commit together or not at all.
+    @discardableResult
+    func finishSession(
+        taskId: String,
+        steps: [String],
+        note: String,
+        startedAt: Date,
+        endedAt: Date,
+        durationSec: Int,
+        bpm: Int,
+        recordings: [AudioRecorderService.Clip]
+    ) -> Bool {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return false
+        }
+        guard endedAt >= startedAt, durationSec >= 0 else {
+            lastError = .invalidInput
+            return false
+        }
+
+        let session = PracticeSession(
+            taskId: task.id,
+            taskTitle: task.title,
+            category: task.category,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSec: durationSec,
+            bpm: bpm,
+            timeSig: task.timeSig,
+            steps: steps,
+            noteText: note
+        )
+        for clip in recordings where FileManager.default.fileExists(atPath: clip.url.path) {
+            session.recordings.append(
+                RecordingRef(
+                    id: clip.id, fileName: clip.fileName, bytes: clip.bytes,
+                    durationSec: clip.durationSec, createdAt: clip.createdAt, label: clip.label
+                )
+            )
+        }
+
+        return produce {
+            task.steps = steps
+            task.touch()
+            try repository.add(session)
+            try repository.save()
+            return true
+        } ?? false
+    }
+
+    // MARK: - Data
+
+    func resetAll() {
+        perform {
+            try repository.removeAll()
+            for task in SeedData.todayTasks() { try repository.add(task) }
+            for template in SeedData.templates() { try repository.add(template) }
+            try repository.save()
+            defaults.set(true, forKey: SeedData.seededKey)
+            RecordingStore.removeAll()
+        }
+    }
+
+    // MARK: - Error plumbing
+
+    private func perform(_ work: () throws -> Void) {
+        _ = produce(work)
+    }
+
+    private func produce<T>(_ work: () throws -> T) -> T? {
+        do {
+            let value = try work()
+            lastError = nil
+            return value
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            return nil
+        }
+    }
+}

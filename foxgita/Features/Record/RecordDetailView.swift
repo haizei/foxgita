@@ -11,27 +11,37 @@ struct RecordDetailView: View {
     let taskId: String
     @Environment(AppRouter.self) private var router
     @Query private var tasks: [TaskItem]
-    @Query(sort: \PracticeSession.endedAt, order: .reverse) private var allSessions: [PracticeSession]
+    @Query private var sessions: [PracticeSession]
     @State private var tab = 0
     @State private var player = AudioPlayerService()
 
-    private var task: TaskItem? { tasks.first { $0.id == taskId } }
-    private var sessions: [PracticeSession] { allSessions.filter { $0.taskId == taskId } }
+    init(taskId: String) {
+        self.taskId = taskId
+        _tasks = Query(
+            filter: #Predicate<TaskItem> { $0.id == taskId && $0.deletedAt == nil },
+            sort: \.sortOrder
+        )
+        _sessions = Query(
+            filter: #Predicate<PracticeSession> { $0.taskId == taskId && $0.deletedAt == nil },
+            sort: \.endedAt,
+            order: .reverse
+        )
+    }
+
+    private var task: TaskItem? { tasks.first }
     private var totalMinutes: Int { sessions.reduce(0) { $0 + $1.durationMinutes } }
 
+    private var currentWeek: DateInterval { StatsAggregator.week() }
+
     private var weekPoints: [(String, Int)] {
-        let cal = Calendar.current
-        let interval = cal.dateInterval(of: .weekOfYear, for: Date()) ?? DateInterval(start: Date(), duration: 86400 * 7)
-        let map = [1: "日", 2: "一", 3: "二", 4: "三", 5: "四", 6: "五", 7: "六"]
-        return StatsAggregator.minutesByDay(sessions: sessions, in: interval).map {
-            (map[cal.component(.weekday, from: $0.0)] ?? "", $0.1)
+        StatsAggregator.minutesByDay(sessions: sessions, in: currentWeek).map {
+            (StatsAggregator.weekdaySymbol(for: $0.0), $0.1)
         }
     }
 
     private var weekCount: Int {
-        let cal = Calendar.current
-        guard let w = cal.dateInterval(of: .weekOfYear, for: Date()) else { return 0 }
-        return sessions.filter { $0.endedAt >= w.start && $0.endedAt < w.end }.count
+        let week = currentWeek
+        return sessions.filter { $0.endedAt >= week.start && $0.endedAt < week.end }.count
     }
 
     private var avgMin: Int {
@@ -65,7 +75,7 @@ struct RecordDetailView: View {
                         .foregroundStyle(GitaTheme.textSecondary)
                         .frame(minWidth: 40, alignment: .trailing)
                 }
-                .frame(height: 56)
+                .frame(minHeight: 56)
                 .padding(.horizontal, 16)
 
                 ScrollView {
@@ -127,7 +137,7 @@ struct RecordDetailView: View {
             MetricGrid(items: [
                 ("\(weekCount)", "本周次数"),
                 ("\(avgMin)", "平均分钟"),
-                ("+12%", "环比"),
+                (StatsAggregator.deltaLabel(sessions, in: currentWeek), "环比"),
             ])
             Chart(weekPoints, id: \.0) { p in
                 BarMark(x: .value("d", p.0), y: .value("m", p.1))
@@ -152,7 +162,7 @@ struct RecordDetailView: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(timeLabel(r.createdAt))
                                     .font(.system(size: 13, weight: .semibold))
-                                Text("\(r.sizeLabel)\(r.label.isEmpty ? "" : " · \(r.label)")")
+                                Text("\(r.durationLabel)\(r.label.isEmpty ? "" : " · \(r.label)")")
                                     .font(.system(size: 12))
                                     .foregroundStyle(GitaTheme.textSecondary)
                             }
@@ -167,6 +177,9 @@ struct RecordDetailView: View {
                                     .clipShape(Circle())
                             }
                             .buttonStyle(.plain)
+                            .accessibilityLabel(
+                                Text(player.playingId == r.id ? "暂停播放" : "播放这段录音")
+                            )
                         }
                         .padding(14)
                         .background(GitaTheme.bgSubtle)
@@ -210,12 +223,10 @@ struct RecordDetailView: View {
     }
 
     private func timeLabel(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M 月 d 日 HH:mm"
-        return f.string(from: d)
+        d.formatted(.dateTime.month().day().hour().minute())
     }
 
     private func dayLabel(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M 月 d 日"
-        return f.string(from: d)
+        d.formatted(.dateTime.month().day())
     }
 }

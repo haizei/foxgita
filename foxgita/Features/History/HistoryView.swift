@@ -8,20 +8,21 @@ import SwiftData
 import SwiftUI
 
 struct HistoryView: View {
-    @Environment(AppRouter.self) private var router
-    @Query(sort: \PracticeSession.endedAt, order: .reverse) private var sessions: [PracticeSession]
+    @Query(
+        filter: #Predicate<PracticeSession> { $0.deletedAt == nil },
+        sort: \PracticeSession.endedAt, order: .reverse
+    )
+    private var sessions: [PracticeSession]
     @State private var segment = 0
     @State private var month = Date()
     @State private var period = 0
     @State private var selectedDay: Date?
-    @State private var toast: String?
 
     private var cal: Calendar { .current }
     private var summaries: [Date: DaySummary] { StatsAggregator.daySummaries(sessions: sessions, month: month) }
 
     private var monthTitle: String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "yyyy 年 M 月"
-        return f.string(from: month)
+        month.formatted(.dateTime.year().month(.wide))
     }
 
     private var days: [Date?] {
@@ -54,9 +55,9 @@ struct HistoryView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("练习历史").font(.system(size: 20, weight: .bold))
+                            Text("练习历史").font(GitaFont.title())
                             Text("回头看，也是在向前走")
-                                .font(.system(size: 12))
+                                .font(GitaFont.caption())
                                 .foregroundStyle(GitaTheme.textSecondary)
                         }
                         Spacer()
@@ -80,13 +81,6 @@ struct HistoryView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }
-
-            if let toast {
-                VStack {
-                    Spacer()
-                    ToastBanner(text: toast).padding(.bottom, 40)
-                }
-            }
         }
     }
 
@@ -105,7 +99,7 @@ struct HistoryView: View {
             }
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 7), spacing: 4) {
-                ForEach(["一", "二", "三", "四", "五", "六", "日"], id: \.self) { w in
+                ForEach(StatsAggregator.weekdaySymbols, id: \.self) { w in
                     Text(w)
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(GitaTheme.textTertiary)
@@ -115,7 +109,7 @@ struct HistoryView: View {
                     if let date {
                         dayCell(date)
                     } else {
-                        Color.clear.frame(minHeight: 52)
+                        Color.clear.frame(minHeight: 48)
                     }
                 }
             }
@@ -189,7 +183,7 @@ struct HistoryView: View {
                 Spacer(minLength: 0)
             }
             .padding(4)
-            .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+            .frame(maxWidth: .infinity, minHeight: 48, alignment: .topLeading)
             .background(selected ? GitaTheme.brand50 : GitaTheme.bgDefault)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
@@ -205,25 +199,18 @@ struct HistoryView: View {
             switch period {
             case 1: return cal.dateInterval(of: .month, for: Date()) ?? DateInterval(start: Date(), duration: 86400 * 30)
             case 2: return cal.dateInterval(of: .year, for: Date()) ?? DateInterval(start: Date(), duration: 86400 * 365)
-            default: return cal.dateInterval(of: .weekOfYear, for: Date()) ?? DateInterval(start: Date(), duration: 86400 * 7)
+            default: return StatsAggregator.week()
             }
         }()
         let total = StatsAggregator.totalMinutes(sessions, in: interval)
-        let prev = DateInterval(start: interval.start.addingTimeInterval(-interval.duration), end: interval.start)
-        let prevTotal = StatsAggregator.totalMinutes(sessions, in: prev)
-        let deltaPct: String = {
-            guard prevTotal > 0 else { return "—" }
-            let v = Int((Double(total - prevTotal) / Double(prevTotal) * 100).rounded())
-            return v >= 0 ? "+\(v)%" : "\(v)%"
-        }()
+        let deltaPct = StatsAggregator.deltaLabel(sessions, in: interval)
         let count = sessions.filter { $0.endedAt >= interval.start && $0.endedAt < interval.end }.count
         let chord = sessions.filter { $0.endedAt >= interval.start && $0.endedAt < interval.end && $0.category == .chord }
             .reduce(0) { $0 + $1.durationMinutes }
         let chart: [(String, Int)] = {
             if period == 0 {
-                let map = [1: "日", 2: "一", 3: "二", 4: "三", 5: "四", 6: "五", 7: "六"]
                 return StatsAggregator.minutesByDay(sessions: sessions, in: interval).map {
-                    (map[cal.component(.weekday, from: $0.0)] ?? "", $0.1)
+                    (StatsAggregator.weekdaySymbol(for: $0.0), $0.1)
                 }
             }
             return StatsAggregator.minutesByDay(sessions: sessions, in: interval).enumerated().map {
@@ -251,24 +238,6 @@ struct HistoryView: View {
             .background(GitaTheme.bgSurface)
             .clipShape(RoundedRectangle(cornerRadius: 16))
 
-            Button {
-                if router.role == .vip {
-                    toast = "已生成分享卡片（演示）"
-                } else {
-                    toast = "再完成 3 次练习即可分享本周节奏"
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) { toast = nil }
-            } label: {
-                Text("分享本周节奏")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(router.role == .vip ? GitaTheme.brandOn : GitaTheme.textTertiary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 12)
-                    .background(router.role == .vip ? GitaTheme.brand500 : GitaTheme.bgSubtle)
-                    .clipShape(Capsule())
-            }
-            .buttonStyle(.plain)
-
             Text("语气中性，只鼓励，不制造压力")
                 .font(.system(size: 12))
                 .foregroundStyle(GitaTheme.textSecondary)
@@ -289,7 +258,6 @@ struct HistoryView: View {
     }
 
     private func dayTitle(_ d: Date) -> String {
-        let f = DateFormatter(); f.locale = Locale(identifier: "zh_CN"); f.dateFormat = "M 月 d 日"
-        return f.string(from: d)
+        d.formatted(.dateTime.month().day())
     }
 }

@@ -23,7 +23,7 @@ final class AppRouter {
     var selectedTab: MainTab = .practice
     var practicePath: [PracticeRoute] = []
     var recordPath: [RecordRoute] = []
-    var role: UserRole = .novice
-    var isDark: Bool = false
-    var displayName: String = "海仔"
+    /// Raised when a reminder notification is tapped. `PracticeView` resolves it
+    /// to today's first task, since only it holds the task query.
+    var openTodayFirstPractice = false
 }

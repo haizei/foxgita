@@ -14,15 +14,15 @@ struct TaskAggregate: Identifiable {
     let sessionCount: Int
 
     var lastLabel: String {
-        guard let lastAt else { return "尚未练习" }
+        guard let lastAt else { return String(localized: "尚未练习") }
         let days = Calendar.current.dateComponents(
             [.day],
             from: Calendar.current.startOfDay(for: lastAt),
             to: Calendar.current.startOfDay(for: Date())
         ).day ?? 0
-        if days == 0 { return "今天" }
-        if days == 1 { return "昨天" }
-        return "\(days) 天前"
+        if days == 0 { return String(localized: "今天") }
+        if days == 1 { return String(localized: "昨天") }
+        return String(localized: "\(days) 天前")
     }
 }
 
@@ -34,6 +34,62 @@ struct DaySummary {
 }
 
 enum StatsAggregator {
+    /// Weekday symbols in the user's locale, reordered so Monday comes first.
+    static var weekdaySymbols: [String] {
+        let symbols = Calendar.current.veryShortWeekdaySymbols
+        guard symbols.count == 7 else { return symbols }
+        return Array(symbols[1...6]) + [symbols[0]]
+    }
+
+    /// One cell in the home week strip: weekday label + calendar day number.
+    struct WeekDay: Identifiable, Equatable {
+        var id: Date { date }
+        let date: Date
+        let weekdayLabel: String
+        let dayNumber: Int
+        let isToday: Bool
+        let isFuture: Bool
+        let practiced: Bool
+    }
+
+    static func weekDays(
+        from sessions: [PracticeSession], now: Date = .now, calendar: Calendar = .current
+    ) -> [WeekDay] {
+        let labels = weekdaySymbols
+        let start = week(containing: now, calendar: calendar).start
+        let today = calendar.startOfDay(for: now)
+        return (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: start) ?? today
+            let practiced = sessions.contains { calendar.isDate($0.endedAt, inSameDayAs: date) }
+            return WeekDay(
+                date: date,
+                weekdayLabel: labels[offset],
+                dayNumber: calendar.component(.day, from: date),
+                isToday: calendar.isDate(date, inSameDayAs: today),
+                isFuture: date > today,
+                practiced: practiced
+            )
+        }
+    }
+
+    static func weekdaySymbol(for date: Date, calendar: Calendar = .current) -> String {
+        weekdaySymbols[mondayOffset(of: date, calendar: calendar)]
+    }
+
+    /// Monday-first week containing `now`. The app presents every week starting
+    /// on Monday, so this is used instead of the locale's week definition.
+    static func week(containing now: Date = .now, calendar: Calendar = .current) -> DateInterval {
+        let today = calendar.startOfDay(for: now)
+        let start = calendar.date(byAdding: .day, value: -mondayOffset(of: today, calendar: calendar), to: today) ?? today
+        let end = calendar.date(byAdding: .day, value: 7, to: start) ?? start
+        return DateInterval(start: start, end: end)
+    }
+
+    /// 0 for Monday … 6 for Sunday.
+    private static func mondayOffset(of date: Date, calendar: Calendar) -> Int {
+        (calendar.component(.weekday, from: date) + 5) % 7 // .weekday is 1 = Sunday
+    }
+
     static func streakDays(from sessions: [PracticeSession], now: Date = .now) -> Int {
         let cal = Calendar.current
         let days = Set(sessions.map { cal.startOfDay(for: $0.endedAt) })
@@ -57,24 +113,15 @@ enum StatsAggregator {
 
     static func weekDots(from sessions: [PracticeSession], now: Date = .now) -> [(String, WeekDot)] {
         let cal = Calendar.current
-        let labels = ["一", "二", "三", "四", "五", "六", "日"]
-        guard let week = cal.dateInterval(of: .weekOfYear, for: now) else {
-            return labels.map { ($0, .empty) }
-        }
-        // Make Monday-first
-        var start = week.start
-        let wd = cal.component(.weekday, from: start) // 1=Sun
-        if wd != 2 {
-            let shift = (wd + 5) % 7
-            start = cal.date(byAdding: .day, value: -shift, to: start) ?? start
-        }
+        let labels = weekdaySymbols
+        let start = week(containing: now, calendar: cal).start
         let today = cal.startOfDay(for: now)
         return (0..<7).map { i in
-            let day = cal.date(byAdding: .day, value: i, to: start).map { cal.startOfDay(for: $0) } ?? today
+            let day = cal.date(byAdding: .day, value: i, to: start) ?? today
             let practiced = sessions.contains { cal.isDate($0.endedAt, inSameDayAs: day) }
             let label = labels[i]
-            if day > today { return (label, .future) }
             if cal.isDate(day, inSameDayAs: today) { return (label, practiced ? .done : .today) }
+            if day > today { return (label, .future) }
             return (label, practiced ? .done : .empty)
         }
     }
@@ -84,8 +131,7 @@ enum StatsAggregator {
     }
 
     static func aggregate(tasks: [TaskItem], sessions: [PracticeSession]) -> [TaskAggregate] {
-        let cal = Calendar.current
-        let weekStart = cal.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+        let weekStart = week().start
         return tasks.map { task in
             let related = sessions.filter { $0.taskId == task.id }
             return TaskAggregate(
@@ -143,5 +189,20 @@ enum StatsAggregator {
     static func totalMinutes(_ sessions: [PracticeSession], in interval: DateInterval) -> Int {
         sessions.filter { $0.endedAt >= interval.start && $0.endedAt < interval.end }
             .reduce(0) { $0 + $1.durationMinutes }
+    }
+
+    /// Minutes in `interval` compared with the equally long span before it.
+    static func deltaLabel(_ sessions: [PracticeSession], in interval: DateInterval) -> String {
+        let current = totalMinutes(sessions, in: interval)
+        let previous = totalMinutes(
+            sessions,
+            in: DateInterval(
+                start: interval.start.addingTimeInterval(-interval.duration),
+                end: interval.start
+            )
+        )
+        guard previous > 0 else { return current > 0 ? String(localized: "新增") : "—" }
+        let pct = Int((Double(current - previous) / Double(previous) * 100).rounded())
+        return pct >= 0 ? "+\(pct)%" : "\(pct)%"
     }
 }

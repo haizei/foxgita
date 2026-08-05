@@ -8,12 +8,20 @@ import SwiftUI
 
 struct RecordView: View {
     @Environment(AppRouter.self) private var router
-    @Query(sort: \TaskItem.sortOrder) private var tasks: [TaskItem]
-    @Query(sort: \PracticeSession.endedAt, order: .reverse) private var sessions: [PracticeSession]
+    @Query(
+        filter: #Predicate<TaskItem> { !$0.isTemplate && $0.deletedAt == nil },
+        sort: \TaskItem.sortOrder
+    )
+    private var tasks: [TaskItem]
+    @Query(
+        filter: #Predicate<PracticeSession> { $0.deletedAt == nil },
+        sort: \PracticeSession.endedAt, order: .reverse
+    )
+    private var sessions: [PracticeSession]
     @State private var filter = 0
 
     private var aggregates: [TaskAggregate] {
-        StatsAggregator.aggregate(tasks: tasks.filter { !$0.isTemplate }, sessions: sessions)
+        StatsAggregator.aggregate(tasks: tasks, sessions: sessions)
     }
 
     private var filtered: [TaskAggregate] {
@@ -21,9 +29,8 @@ struct RecordView: View {
     }
 
     private var weekCount: Int {
-        let cal = Calendar.current
-        guard let w = cal.dateInterval(of: .weekOfYear, for: Date()) else { return 0 }
-        return sessions.filter { $0.endedAt >= w.start && $0.endedAt < w.end }.count
+        let week = StatsAggregator.week()
+        return sessions.filter { $0.endedAt >= week.start && $0.endedAt < week.end }.count
     }
 
     private var totalMinutes: Int {
@@ -40,9 +47,9 @@ struct RecordView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("练习记录")
-                                    .font(.system(size: 20, weight: .bold))
+                                    .font(GitaFont.title())
                                 Text("把每一次进步留在这里")
-                                    .font(.system(size: 12))
+                                    .font(GitaFont.caption())
                                     .foregroundStyle(GitaTheme.textSecondary)
                             }
                             Spacer()
