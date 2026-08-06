@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gita · 图片生成练习 — 方案选择</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --ink: #1a1410;
+      --ink-soft: #3d322a;
+      --muted: #7a6a5c;
+      --paper: #f7f1e8;
+      --paper-2: #efe6d8;
+      --line: #d9cbb8;
+      --amber: #e08a2e;
+      --amber-deep: #c46f14;
+      --sea: #2f6f6a;
+      --rose: #b54a4a;
+      --card: #fffdf8;
+      --shadow: 0 18px 40px rgba(26, 20, 16, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; }
+    body {
+      font-family: "Sora", system-ui, sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 600px at 10% -10%, #ffe7c2 0%, transparent 55%),
+        radial-gradient(900px 500px at 100% 0%, #dceee9 0%, transparent 50%),
+        linear-gradient(180deg, var(--paper) 0%, var(--paper-2) 100%);
+      line-height: 1.5;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.035;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 40px 20px 80px;
+      position: relative;
+    }
+
+    header {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 28px;
+      animation: rise 0.6s ease both;
+    }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--amber-deep);
+      font-weight: 600;
+    }
+
+    h1 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-weight: 400;
+      font-size: clamp(2.2rem, 5vw, 3.4rem);
+      line-height: 1.1;
+      margin: 0;
+      max-width: 16ch;
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--amber-deep);
+    }
+
+    .lead {
+      max-width: 52ch;
+      color: var(--ink-soft);
+      font-size: 15px;
+      margin: 0;
+    }
+
+    .constraints {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .chip {
+      font-size: 12px;
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 253, 248, 0.7);
+      color: var(--ink-soft);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 14px;
+      margin: 28px 0 18px;
+    }
+
+    @media (max-width: 900px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 18px 18px 16px;
+      box-shadow: var(--shadow);
+      cursor: pointer;
+      text-align: left;
+      transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+      animation: rise 0.6s ease both;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .card:nth-child(1) { animation-delay: 0.05s; }
+    .card:nth-child(2) { animation-delay: 0.12s; }
+    .card:nth-child(3) { animation-delay: 0.19s; }
+
+    .card:hover { transform: translateY(-3px); }
+    .card:focus-visible {
+      outline: 2px solid var(--amber);
+      outline-offset: 3px;
+    }
+
+    .card[aria-pressed="true"] {
+      border-color: var(--amber);
+      box-shadow: 0 0 0 3px rgba(224, 138, 46, 0.2), var(--shadow);
+    }
+
+    .card.rec::after {
+      content: "推荐";
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+      background: var(--amber-deep);
+      padding: 4px 8px;
+      border-radius: 999px;
+    }
+
+    .letter {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 42px;
+      line-height: 1;
+      color: var(--amber-deep);
+      margin-bottom: 6px;
+    }
+
+    .card h2 {
+      margin: 0 0 6px;
+      font-size: 17px;
+      font-weight: 700;
+      padding-right: 48px;
+    }
+
+    .card p {
+      margin: 0;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 3.9em;
+    }
+
+    .meta {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px dashed var(--line);
+      font-size: 12px;
+    }
+
+    .meta div {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .meta span:last-child { font-weight: 600; color: var(--ink-soft); }
+    .good { color: var(--sea) !important; }
+    .bad { color: var(--rose) !important; }
+    .mid { color: var(--amber-deep) !important; }
+
+    .detail {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: calc(var(--radius) + 4px);
+      padding: 22px;
+      box-shadow: var(--shadow);
+      animation: rise 0.45s ease both;
+    }
+
+    .detail h3 {
+      font-family: "Instrument Serif", Georgia, serif;
+      font-size: 28px;
+      font-weight: 400;
+      margin: 0 0 6px;
+    }
+
+    .detail .sub {
+      color: var(--muted);
+      font-size: 13px;
+      margin: 0 0 18px;
+    }
+
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .node {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 10px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-soft);
+    }
+
+    .node.accent {
+      background: #fff1dd;
+      border-color: #efc48a;
+      color: var(--amber-deep);
+    }
+
+    .arrow {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .cols {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 18px;
+    }
+
+    @media (max-width: 720px) {
+      .cols { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: linear-gradient(180deg, #fffaf2, #f4ebe0);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+
+    .panel h4 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .panel ul {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: var(--ink-soft);
+    }
+
+    .panel li { margin: 4px 0; }
+
+    .phone {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: #fff;
+      padding: 12px;
+      min-height: 280px;
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+    }
+
+    .phone .bar {
+      height: 4px;
+      width: 36px;
+      background: var(--line);
+      border-radius: 99px;
+      margin: 4px auto 14px;
+    }
+
+    .phone h5 {
+      margin: 0 0 10px;
+      font-size: 16px;
+    }
+
+    .mock-btn {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      background: #fff1dd;
+      border: 1px dashed #efc48a;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--amber-deep);
+      margin-bottom: 10px;
+    }
+
+    .thumbs {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+      margin-bottom: 10px;
+    }
+
+    .thumb {
+      aspect-ratio: 1;
+      border-radius: 10px;
+      background:
+        linear-gradient(135deg, #f0e2cf, #e8d5b8);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .thumb.on {
+      background: linear-gradient(135deg, #ffe2b5, #f5c97a);
+      color: var(--amber-deep);
+      font-weight: 700;
+    }
+
+    .status {
+      font-size: 12px;
+      color: var(--muted);
+      min-height: 2.8em;
+    }
+
+    .cta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+      align-items: center;
+    }
+
+    .pick {
+      border: none;
+      background: var(--ink);
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 12px 18px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .pick:hover { background: #2b211a; }
+
+    .hint {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    footer {
+      margin-top: 22px;
+      font-size: 12px;
+      color: var(--muted);
+      animation: rise 0.6s ease both;
+      animation-delay: 0.25s;
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="eyebrow">Foxgita · Brainstorm</div>
+      <h1>图片生成练习：选哪条路 <em>更合适？</em></h1>
+      <p class="lead">
+        目标一致：推荐 Sheet 里选最多 3 张图 → 兼容 API 视觉模型 → 自动生成名称/分类/时长/步骤 → 直接建任务并打开详情。
+        差别在「怎么把图变成步骤」。点卡片看流程。
+      </p>
+      <div class="constraints">
+        <span class="chip">入口：推荐练习</span>
+        <span class="chip">≤ 3 张图</span>
+        <span class="chip">用户自备 Key</span>
+        <span class="chip">OpenAI Compatible</span>
+        <span class="chip">直接创建进详情</span>
+      </div>
+    </header>
+
+    <div class="grid" role="listbox" aria-label="方案">
+      <button class="card rec" data-id="a" aria-pressed="true" role="option">
+        <div class="letter">A</div>
+        <h2>薄客户端 + 视觉模型</h2>
+        <p>图片压缩后直送兼容视觉 API，一次拿到结构化 JSON，Store 建任务。</p>
+        <div class="meta">
+          <div><span>贴合现有架构</span><span class="good">高</span></div>
+          <div><span>实现成本</span><span class="good">低</span></div>
+          <div><span>谱/指法图理解</span><span class="good">强</span></div>
+          <div><span>需视觉模型</span><span class="mid">是</span></div>
+        </div>
+      </button>
+
+      <button class="card" data-id="b" aria-pressed="false" role="option">
+        <div class="letter">B</div>
+        <h2>本地 OCR → 文本 LLM</h2>
+        <p>先认字，再把文字交给文本模型总结成步骤。无视觉模型也能跑。</p>
+        <div class="meta">
+          <div><span>贴合现有架构</span><span class="mid">中</span></div>
+          <div><span>实现成本</span><span class="mid">中</span></div>
+          <div><span>谱/指法图理解</span><span class="bad">弱</span></div>
+          <div><span>链路长度</span><span class="bad">更长</span></div>
+        </div>
+      </button>
+
+      <button class="card" data-id="c" aria-pressed="false" role="option">
+        <div class="letter">C</div>
+        <h2>完整 AI 向导多页</h2>
+        <p>选图 → 流式预览 → 人工改稿 → 确认创建。可控，但和「直接创建」冲突。</p>
+        <div class="meta">
+          <div><span>用户可控性</span><span class="good">高</span></div>
+          <div><span>实现成本</span><span class="bad">高</span></div>
+          <div><span>与已选流程</span><span class="bad">冲突</span></div>
+          <div><span>P0 适合度</span><span class="bad">低</span></div>
+        </div>
+      </button>
+    </div>
+
+    <section class="detail" id="detail" aria-live="polite"></section>
+
+    <footer>
+      这是 brainstorm 决策页，不是产品 UI。选定后回到对话回复「选 A / B / C」即可继续出详细设计。
+    </footer>
+  </div>
+
+  <script>
+    const data = {
+      a: {
+        title: "方案 A · 薄客户端 + 视觉模型",
+        sub: "推荐。最少新概念，最贴合你已选的「直接创建进详情」。",
+        flow: [
+          ["设置里填 Base URL / Model / Key", false],
+          ["推荐 Sheet 选 ≤3 图", true],
+          ["VisionPracticeClient 调兼容 API", true],
+          ["校验 JSON", false],
+          ["PracticeStore 建任务", false],
+          ["打开详情可再改", false],
+        ],
+        pros: [
+          "不改 SwiftData Schema",
+          "一张接口可 mock，单测友好",
+          "谱/和弦图/手写都能靠视觉模型理解",
+          "和现有 RecommendSheet → selection → 详情导航一致",
+        ],
+        cons: [
+          "必须选支持 vision 的模型",
+          "JSON 偶发不合规，需要校验与默认值降级",
+          "图片会上传到用户配置的云端（需在 UI 提示）",
+        ],
+        mock: "选图后显示「正在读图生成练习…」，成功则关闭 Sheet 进入详情；失败 toast + 留在 Sheet。",
+      },
+      b: {
+        title: "方案 B · 本地 OCR → 文本 LLM",
+        sub: "适合「模型没有视觉能力」的场景；对吉他图材料不友好。",
+        flow: [
+          ["选 ≤3 图", true],
+          ["设备端 OCR 抽文字", true],
+          ["文本 LLM 总结步骤", true],
+          ["Store 建任务", false],
+          ["打开详情", false],
+        ],
+        pros: [
+          "可用纯文本模型，Key/模型选择更宽",
+          "上传体积可能更小（只传文本）",
+        ],
+        cons: [
+          "指法图、谱面结构信息大量丢失",
+          "两段流水线，失败点更多",
+          "和「通用看图」目标不完全匹配",
+        ],
+        mock: "可能先闪「正在识别文字…」再「正在生成步骤…」。纯图无字时结果会很空。",
+      },
+      c: {
+        title: "方案 C · 完整 AI 向导",
+        sub: "体验最稳，但推翻了你选的「B：直接创建并打开详情」。",
+        flow: [
+          ["选图", true],
+          ["流式预览名称/步骤", true],
+          ["用户编辑确认", true],
+          ["再创建任务", false],
+          ["进详情", false],
+        ],
+        pros: [
+          "出错前可改，心理负担小",
+          "适合以后做付费/配额时的高可控流程",
+        ],
+        cons: [
+          "UI 与状态机明显变重",
+          "与当前产品选择冲突，P0 范围膨胀",
+          "多一次确认，违背「今天只练一点点」的轻量感",
+        ],
+        mock: "Sheet 变成多步向导；创建按钮在最后一页才出现。",
+      },
+    };
+
+    const detail = document.getElementById("detail");
+    const cards = [...document.querySelectorAll(".card")];
+
+    function render(id) {
+      const d = data[id];
+      detail.innerHTML = `
+        <h3>${d.title}</h3>
+        <p class="sub">${d.sub}</p>
+        <div class="flow">
+          ${d.flow.map(([label, accent], i) => `
+            ${i ? '<span class="arrow">→</span>' : ""}
+            <span class="node ${accent ? "accent" : ""}">${label}</span>
+          `).join("")}
+        </div>
+        <div class="cols">
+          <div>
+            <div class="panel" style="margin-bottom:12px">
+              <h4>优点</h4>
+              <ul>${d.pros.map(x => `<li>${x}</li>`).join("")}</ul>
+            </div>
+            <div class="panel">
+              <h4>代价</h4>
+              <ul>${d.cons.map(x => `<li>${x}</li>`).join("")}</ul>
+            </div>
+            <div class="cta-row">
+              <button class="pick" type="button" data-pick="${id}">我就选 ${id.toUpperCase()}</button>
+              <span class="hint">点了只是帮你记住选择文案；请回到 Cursor 回复「选 ${id.toUpperCase()}」。</span>
+            </div>
+          </div>
+          <div class="phone" aria-hidden="true">
+            <div class="bar"></div>
+            <h5>推荐练习</h5>
+            <div class="mock-btn">📷 从图片生成练习</div>
+            <div class="thumbs">
+              <div class="thumb on">1</div>
+              <div class="thumb on">2</div>
+              <div class="thumb">+</div>
+            </div>
+            <p class="status">${d.mock}</p>
+          </div>
+        </div>
+      `;
+      detail.querySelector(".pick")?.addEventListener("click", () => {
+        const el = detail.querySelector(".hint");
+        if (el) el.textContent = `已高亮方案 ${id.toUpperCase()}。请在对话里回复：选 ${id.toUpperCase()}`;
+      });
+    }
+
+    cards.forEach(card => {
+      card.addEventListener("click", () => {
+        cards.forEach(c => c.setAttribute("aria-pressed", String(c === card)));
+        render(card.dataset.id);
+      });
+    });
+
+    render("a");
+  </script>
+</body>
+</html>
