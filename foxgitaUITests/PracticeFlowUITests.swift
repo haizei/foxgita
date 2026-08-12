@@ -43,6 +43,16 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
     }
 
+    func testRecommendSheetShowsImageGenerateEntry() {
+        let add = app.buttons["添加练习"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["从图片生成练习"].waitForExistence(timeout: 5)
+            || app.staticTexts["从图片生成练习"].waitForExistence(timeout: 5))
+        app.buttons["关闭"].tap()
+    }
+
     func testSettingsAppearanceSegmentExists() {
         app.tabBars.buttons["设置"].tap()
         XCTAssertTrue(app.staticTexts["主题外观"].waitForExistence(timeout: 5))

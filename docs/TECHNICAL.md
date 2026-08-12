@@ -349,6 +349,7 @@ typealias RecordingRef = GitaSchemaV3.RecordingRef
 | `seedIfNeeded()` | 仅首次写入今日任务与模板 |
 | `activateTemplate(id)` | 模板 → `active-{id}` 活跃副本；幂等 |
 | `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」 |
+| `createFromAIDraft(_:)` | 由 `AIPracticeDraft` 写入活跃任务（含完整 `steps`）；副标题 `AI · N 分钟` |
 | `setTaskStatus(id:to:)` | 改状态并 `touch()` |
 | `updateTask(id:title:subtitle:minutes:)` | 编辑标题/备注；分钟钳制 1…60；空标题保留原值 |
 | `softDeleteTask(id)` | 写 `deletedAt` 并 `touch()`（tombstone，供未来同步） |
@@ -357,6 +358,10 @@ typealias RecordingRef = GitaSchemaV3.RecordingRef
 | `gcOrphanRecordings()` | 删除无引用的 m4a/mov/mp4 |
 
 错误模型 `StoreError`：`notFound` / `invalidInput` / `saveFailed` / `fileMissing` / `permissionDenied` / `diskFull`。失败写入 `store.lastError`，视图用 `ToastBanner` 展示；禁止静默 `try?` 吞掉写失败。
+
+### 6.3.1 图片生成练习（Vision）
+
+`RecommendSheet` 可从最多 3 张相册图片生成练习任务：用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘、不改 Schema。设计说明：`docs/superpowers/specs/2026-08-06-image-to-practice-steps-design.md`。
 
 ### 6.4 统计：StatsAggregator
 

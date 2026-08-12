@@ -51,8 +51,12 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 |---|---|
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按时长进位等通过 |
 | `PracticeTimerTests` | 墙钟计时、暂停不计时、后台不丢时通过 |
-| `PracticeStoreTests` | seed / 激活模板 / finish 不变量 / 回滚 / reset 通过 |
+| `PracticeStoreTests` | seed / 激活模板 / finish 不变量 / 回滚 / reset / `createFromAIDraft` 通过 |
 | `MigrationTests` | V2→V3 磁盘库迁移不丢数据通过 |
+| `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制通过 |
+| `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` 通过 |
+| `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试通过 |
+| `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验通过 |
 
 **通过**：日志出现 `TEST SUCCEEDED`，无 `✘` / `error:`（业务测试失败）。
 
@@ -69,6 +73,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `testLaunchShowsTodayPractice` | 见「今日练习」 |
 | `testStartFirstTaskOpensDetail` | 进详情见节拍器 |
 | `testRecommendSheetCanBeOpenedAndDismissed` | 打开/关闭推荐 Sheet |
+| `testRecommendSheetShowsImageGenerateEntry` | 推荐 Sheet 可见「从图片生成练习」 |
 | `testSettingsAppearanceSegmentExists` | 设置页有主题外观 |
 
 **通过**：单元 + UI 全部绿色，`** TEST SUCCEEDED **`。
