@@ -85,6 +85,24 @@ struct PracticeStoreTests {
         #expect(task.category == .scale)
     }
 
+    @Test func createFromAIDraftPersistsSteps() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let draft = AIPracticeDraft(
+            title: "扫弦入门",
+            category: .rhythm,
+            targetMin: 12,
+            steps: ["熟悉下下上", "60 BPM", "80 BPM"]
+        )
+        let id = try #require(store.createFromAIDraft(draft))
+        let task = try #require(try repo.task(id: id))
+        #expect(task.title == "扫弦入门")
+        #expect(task.category == .rhythm)
+        #expect(task.targetMin == 12)
+        #expect(task.steps == ["熟悉下下上", "60 BPM", "80 BPM"])
+        #expect(task.subtitle.contains("AI"))
+        #expect(task.steps != ["新步骤"])
+    }
+
     @Test func setTaskStatusTouchesUpdatedAt() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)

@@ -98,6 +98,25 @@ final class PracticeStore {
         }
     }
 
+    @discardableResult
+    func createFromAIDraft(_ draft: AIPracticeDraft) -> String? {
+        let task = TaskItem(
+            id: "custom-\(UUID().uuidString)",
+            title: draft.title,
+            subtitle: String(localized: "AI · \(draft.targetMin) 分钟"),
+            category: draft.category,
+            targetMin: draft.targetMin,
+            steps: draft.steps,
+            startedOn: Date(),
+            sortOrder: 50
+        )
+        return produce {
+            try repository.add(task)
+            try repository.save()
+            return task.id
+        }
+    }
+
     func setTaskStatus(_ taskId: String, to status: TaskStatus) {
         guard let task = try? repository.task(id: taskId) else {
             lastError = .notFound
