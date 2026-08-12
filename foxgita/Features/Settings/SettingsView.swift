@@ -12,8 +12,13 @@ struct SettingsView: View {
     @AppStorage("gita.reminder.on") private var remindOn = false
     @AppStorage("gita.reminder.hour") private var remindHour = 20
     @AppStorage("gita.reminder.minute") private var remindMinute = 0
+    @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
+    @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    @State private var llmAPIKey = ""
+    @State private var llmKeyStored = false
     @State private var showClearConfirm = false
     @State private var toast: String?
+    private let llmCredentials = LLMCredentialsStore()
 
     var body: some View {
         ZStack {
@@ -76,6 +81,50 @@ struct SettingsView: View {
                         }
                     }
 
+                    sectionLabel("AI 接口")
+                    group {
+                        VStack(alignment: .leading, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Base URL").font(.system(size: 13, weight: .semibold))
+                                TextField("https://api.openai.com/v1", text: $llmBaseURL)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .font(.system(size: 14))
+                            }
+                            Divider().foregroundStyle(GitaTheme.borderSubtle)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Model").font(.system(size: 13, weight: .semibold))
+                                TextField("gpt-4o", text: $llmModel)
+                                    .textInputAutocapitalization(.never)
+                                    .autocorrectionDisabled()
+                                    .font(.system(size: 14))
+                            }
+                            Divider().foregroundStyle(GitaTheme.borderSubtle)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("API Key").font(.system(size: 13, weight: .semibold))
+                                SecureField(
+                                    llmKeyStored ? "已保存，输入新值可覆盖" : "sk-…",
+                                    text: $llmAPIKey
+                                )
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .font(.system(size: 14))
+                            }
+                            HStack(spacing: 12) {
+                                Button("保存") { saveLLMKey() }
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                Button("清除密钥") { clearLLMKey() }
+                                    .font(.system(size: 14))
+                                    .foregroundStyle(GitaTheme.statusError)
+                            }
+                            Text("图片会发送到你填写的接口地址，费用由该服务商向你收取。Gita 不托管密钥。")
+                                .font(.system(size: 11))
+                                .foregroundStyle(GitaTheme.textSecondary)
+                        }
+                        .padding(16)
+                    }
+
                     sectionLabel("关于")
                     group {
                         infoRow("Gita", "今天只练一点点")
@@ -111,6 +160,9 @@ struct SettingsView: View {
         } message: {
             Text("将删除全部练习记录、笔记与录音，且无法恢复。入门练习会恢复为初始状态。")
         }
+        .onAppear {
+            llmKeyStored = llmCredentials.loadAPIKey()?.isEmpty == false
+        }
         .onChange(of: remindOn) { _, on in
             Task { await applyReminder(enabled: on) }
         }
@@ -120,6 +172,33 @@ struct SettingsView: View {
         .onChange(of: remindMinute) { _, _ in
             Task { await applyReminder(enabled: remindOn) }
         }
+    }
+
+    private func saveLLMKey() {
+        let trimmed = llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            toast = String(localized: "请输入 API Key")
+            hideToast()
+            return
+        }
+        do {
+            try llmCredentials.saveAPIKey(trimmed)
+            llmAPIKey = ""
+            llmKeyStored = true
+            toast = String(localized: "已保存")
+            hideToast()
+        } catch {
+            toast = String(localized: "保存失败")
+            hideToast()
+        }
+    }
+
+    private func clearLLMKey() {
+        llmCredentials.clearAPIKey()
+        llmAPIKey = ""
+        llmKeyStored = false
+        toast = String(localized: "已清除")
+        hideToast()
     }
 
     private var appVersion: String {
