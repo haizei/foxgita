@@ -3,6 +3,7 @@
 //  foxgita
 //
 
+import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -18,6 +19,13 @@ struct RecommendSheet: View {
     @State private var category: PracticeCategory = .left
     @State private var name = ""
     @State private var duration = 10
+    @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
+    @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var isGenerating = false
+    @State private var toast: String?
+    private let credentials = LLMCredentialsStore()
+    private let generator = ImageStepGenerator(client: VisionPracticeClient())
     /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
     /// Pushing from inside the sheet races the dismissal animation.
     @Binding var selection: String?
@@ -91,6 +99,29 @@ struct RecommendSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .disabled(isGenerating)
+
+                        PhotosPicker(
+                            selection: $pickerItems,
+                            maxSelectionCount: 3,
+                            matching: .images
+                        ) {
+                            Text("从图片生成练习")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(GitaTheme.brand500)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .disabled(isGenerating)
+                        .onChange(of: pickerItems) { _, items in
+                            Task { await handlePicked(items) }
+                        }
+
+                        if isGenerating {
+                            Text("正在读图生成练习…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(GitaTheme.textSecondary)
+                        }
                     }
                     .padding(16)
                     .background(GitaTheme.bgSurface)
@@ -154,7 +185,90 @@ struct RecommendSheet: View {
             }
         }
         .background(GitaTheme.bgDefault)
+        .overlay {
+            if let toast {
+                VStack {
+                    Spacer()
+                    ToastBanner(text: toast).padding(.bottom, 40)
+                }
+            }
+        }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+    }
+
+    @MainActor
+    private func handlePicked(_ items: [PhotosPickerItem]) async {
+        guard !items.isEmpty else { return }
+        guard !isGenerating else { return }
+
+        let base = llmBaseURL
+        let model = llmModel
+        guard credentials.isConfigured(baseURL: base, model: model) else {
+            toast = String(localized: "先去设置里填写 AI 接口")
+            hideToastLater()
+            pickerItems = []
+            return
+        }
+
+        isGenerating = true
+        defer {
+            isGenerating = false
+            pickerItems = []
+        }
+
+        do {
+            var blobs: [Data] = []
+            for item in items.prefix(3) {
+                if let data = try await item.loadTransferable(type: Data.self) {
+                    blobs.append(data)
+                }
+            }
+            let draft = try await generator.generate(
+                imageData: blobs,
+                baseURL: base,
+                model: model,
+                fallbackCategory: category
+            )
+            if let id = store.createFromAIDraft(draft) {
+                selection = id
+                dismiss()
+            } else {
+                toast = String(localized: "生成失败，请稍后重试")
+                hideToastLater()
+            }
+        } catch let error as ImageStepGeneratorError {
+            toast = message(for: error)
+            hideToastLater()
+        } catch {
+            toast = String(localized: "生成失败，请稍后重试")
+            hideToastLater()
+        }
+    }
+
+    private func message(for error: ImageStepGeneratorError) -> String {
+        switch error {
+        case .notConfigured:
+            return String(localized: "先去设置里填写 AI 接口")
+        case .noImages:
+            return String(localized: "请选择图片")
+        case .tooManyImages:
+            return String(localized: "一次最多 3 张图片")
+        case .failed(let vision):
+            switch vision {
+            case .unauthorized:
+                return String(localized: "API Key 无效或无权限")
+            case .invalidJSON, .emptyContent:
+                return String(localized: "模型返回格式不对，可换模型或重试")
+            case .transport:
+                return String(localized: "网络异常，请重试")
+            case .invalidURL, .httpStatus:
+                return String(localized: "生成失败，请稍后重试")
+            }
+        }
+    }
+
+    private func hideToastLater() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { toast = nil }
     }
 }
