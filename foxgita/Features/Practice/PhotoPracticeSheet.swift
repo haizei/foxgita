@@ -90,9 +90,9 @@ struct PhotoPracticeSheet: View {
     private var sourceContent: some View {
         VStack(alignment: .leading, spacing: 20) {
             VStack(alignment: .leading, spacing: 8) {
-                Text("选择一张乐谱、和弦图或练习笔记")
+                Text("选择图片来源")
                     .font(.system(size: 17, weight: .bold))
-                Text("AI 会识别图片内容，并整理成可以直接开始的练习步骤。")
+                Text("适合乐谱、练习清单和手写内容")
                     .font(.system(size: 13))
                     .foregroundStyle(GitaTheme.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -101,7 +101,7 @@ struct PhotoPracticeSheet: View {
             HStack(spacing: 12) {
                 sourceCard(
                     title: String(localized: "拍照"),
-                    subtitle: String(localized: "拍摄一张图片"),
+                    subtitle: String(localized: "立即拍摄纸质内容"),
                     systemImage: "camera.fill",
                     background: GitaTheme.brand50,
                     titleColor: GitaTheme.brand500
@@ -116,7 +116,7 @@ struct PhotoPracticeSheet: View {
                 ) {
                     sourceCardLabel(
                         title: String(localized: "相册"),
-                        subtitle: String(localized: "最多选择 3 张"),
+                        subtitle: String(localized: "选择截图或已有照片"),
                         systemImage: "photo.on.rectangle",
                         background: GitaTheme.bgSubtle,
                         titleColor: GitaTheme.textPrimary

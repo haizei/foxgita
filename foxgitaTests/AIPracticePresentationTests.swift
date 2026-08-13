@@ -19,4 +19,22 @@ struct AIPracticePresentationTests {
         #expect(plain.title == "慢速按弦")
         #expect(plain.minutes == nil)
     }
+
+    @Test func roundTripsEncodedDraftStrings() {
+        let raw = AIPracticeDraft.Raw(
+            title: "转换",
+            category: "chord",
+            targetMin: 10,
+            steps: ["识别和弦顺序"],
+            chords: ["C", "G"],
+            stepMinutes: [2]
+        )
+        let draft = AIPracticeDraft.normalize(raw, fallbackCategory: .left)
+
+        #expect(AIPracticePresentation.isAIGenerated(subtitle: draft.subtitleLine))
+        #expect(AIPracticePresentation.chords(fromSubtitle: draft.subtitleLine) == ["C", "G"])
+        let parts = AIPracticePresentation.stepParts(draft.steps[0])
+        #expect(parts.title == "识别和弦顺序")
+        #expect(parts.minutes == 2)
+    }
 }
