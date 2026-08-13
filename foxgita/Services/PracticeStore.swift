@@ -103,7 +103,7 @@ final class PracticeStore {
         let task = TaskItem(
             id: "custom-\(UUID().uuidString)",
             title: draft.title,
-            subtitle: String(localized: "AI · \(draft.targetMin) 分钟"),
+            subtitle: draft.subtitleLine,
             category: draft.category,
             targetMin: draft.targetMin,
             steps: draft.steps,

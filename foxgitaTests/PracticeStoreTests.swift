@@ -104,6 +104,21 @@ struct PracticeStoreTests {
         #expect(task.steps != ["新步骤"])
     }
 
+    @Test func createFromAIDraftEncodesChordsInSubtitle() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let draft = AIPracticeDraft(
+            title: "转换",
+            category: .chord,
+            targetMin: 10,
+            steps: ["识别和弦顺序 · 2 分钟"],
+            chords: ["C", "G", "Am", "F"]
+        )
+        let id = try #require(store.createFromAIDraft(draft))
+        let task = try #require(try repo.task(id: id))
+        #expect(task.subtitle == "AI · 10 分钟 · C · G · Am · F")
+        #expect(task.steps == ["识别和弦顺序 · 2 分钟"])
+    }
+
     @Test func setTaskStatusTouchesUpdatedAt() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
