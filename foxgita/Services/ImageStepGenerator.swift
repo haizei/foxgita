@@ -6,6 +6,28 @@ enum ImageStepGeneratorError: Error, Equatable {
     case noImages
     case tooManyImages
     case failed(VisionPracticeError)
+
+    var userMessage: String {
+        switch self {
+        case .notConfigured:
+            return String(localized: "先去设置里填写 AI 接口")
+        case .noImages:
+            return String(localized: "请选择图片")
+        case .tooManyImages:
+            return String(localized: "一次最多 3 张图片")
+        case .failed(let vision):
+            switch vision {
+            case .unauthorized:
+                return String(localized: "API Key 无效或无权限")
+            case .invalidJSON, .emptyContent:
+                return String(localized: "模型返回格式不对，可换模型或重试")
+            case .transport:
+                return String(localized: "网络异常，请重试")
+            case .invalidURL, .httpStatus:
+                return String(localized: "生成失败，请稍后重试")
+            }
+        }
+    }
 }
 
 enum PracticeImageCodec {
