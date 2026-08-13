@@ -64,6 +64,21 @@ struct AIPracticeDraftTests {
         #expect(draft.subtitleLine == "AI · 10 分钟 · C · G · Am · F")
     }
 
+    @Test func normalizePairsStepMinutesByRawIndexBeforeFilteringEmptySteps() {
+        let raw = AIPracticeDraft.Raw(
+            title: "练习",
+            category: "chord",
+            targetMin: 10,
+            steps: ["第一步", "", "第三步"],
+            stepMinutes: [1, 2, 3]
+        )
+        let draft = AIPracticeDraft.normalize(raw, fallbackCategory: .left)
+        #expect(draft.steps == [
+            "第一步 · 1 分钟",
+            "第三步 · 3 分钟",
+        ])
+    }
+
     @Test func normalizeOmitsChordsAndMinutesWhenMissing() {
         let raw = AIPracticeDraft.Raw(
             title: "音阶",

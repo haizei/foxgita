@@ -41,20 +41,20 @@ struct AIPracticeDraft: Equatable {
             minutes = 10
         }
 
-        var steps = (raw.steps ?? [])
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
+        var steps: [String] = []
+        for (index, step) in (raw.steps ?? []).enumerated() {
+            let trimmed = step.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            if let stepMinutes = raw.stepMinutes, index < stepMinutes.count, stepMinutes[index] >= 1 {
+                steps.append(String(localized: "\(trimmed) · \(stepMinutes[index]) 分钟"))
+            } else {
+                steps.append(trimmed)
+            }
+        }
         if steps.isEmpty {
             steps = [String(localized: "新步骤")]
         } else if steps.count > 12 {
             steps = Array(steps.prefix(12))
-        }
-
-        if let stepMinutes = raw.stepMinutes {
-            steps = steps.enumerated().map { index, step in
-                guard index < stepMinutes.count, stepMinutes[index] >= 1 else { return step }
-                return "\(step) · \(stepMinutes[index]) 分钟"
-            }
         }
 
         let chords = (raw.chords ?? [])
