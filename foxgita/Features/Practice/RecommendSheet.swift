@@ -3,7 +3,6 @@
 //  foxgita
 //
 
-import PhotosUI
 import SwiftData
 import SwiftUI
 
@@ -21,11 +20,9 @@ struct RecommendSheet: View {
     @State private var duration = 10
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
-    @State private var pickerItems: [PhotosPickerItem] = []
-    @State private var isGenerating = false
+    @State private var showPhotoSheet = false
     @State private var toast: String?
     private let credentials = LLMCredentialsStore()
-    private let generator = ImageStepGenerator(client: VisionPracticeClient())
     /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
     /// Pushing from inside the sheet races the dismissal animation.
     @Binding var selection: String?
@@ -63,27 +60,47 @@ struct RecommendSheet: View {
                         Text("写下练习名称，设定今天的小目标")
                             .font(.system(size: 12))
                             .foregroundStyle(GitaTheme.textSecondary)
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
                             TextField("例如：F 和弦转换", text: $name)
-                                .padding(12)
-                                .background(GitaTheme.bgSubtle)
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                                .padding(.leading, 10)
+                            Button {
+                                if credentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
+                                    showPhotoSheet = true
+                                } else {
+                                    toast = String(localized: "先去设置里填写 AI 接口")
+                                    hideToastLater()
+                                }
+                            } label: {
+                                Text("拍摄/照片")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 34)
+                                    .background(GitaTheme.brand50)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(showPhotoSheet)
+                            Rectangle()
+                                .fill(GitaTheme.borderSubtle)
+                                .frame(width: 1, height: 24)
                             HStack(spacing: 8) {
                                 Button { duration = max(5, duration - 5) } label: {
                                     Text("－").frame(width: 28, height: 28)
                                 }
                                 Text("\(duration) 分钟")
                                     .font(.system(size: 12, weight: .semibold))
-                                    .frame(minWidth: 56)
+                                    .frame(minWidth: 40)
                                 Button { duration = min(60, duration + 5) } label: {
                                     Text("＋").frame(width: 28, height: 28)
                                 }
                             }
                             .foregroundStyle(GitaTheme.textSecondary)
-                            .padding(8)
-                            .background(GitaTheme.bgSubtle)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .padding(.trailing, 6)
                         }
+                        .padding(.vertical, 6)
+                        .background(GitaTheme.bgSubtle)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                         Button {
                             selection = store.createCustomTask(
                                 name: name, minutes: duration, category: category
@@ -99,29 +116,6 @@ struct RecommendSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
-                        .disabled(isGenerating)
-
-                        PhotosPicker(
-                            selection: $pickerItems,
-                            maxSelectionCount: 3,
-                            matching: .images
-                        ) {
-                            Text("从图片生成练习")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(GitaTheme.brand500)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 12)
-                        }
-                        .disabled(isGenerating)
-                        .onChange(of: pickerItems) { _, items in
-                            Task { await handlePicked(items) }
-                        }
-
-                        if isGenerating {
-                            Text("正在读图生成练习…")
-                                .font(.system(size: 12))
-                                .foregroundStyle(GitaTheme.textSecondary)
-                        }
                     }
                     .padding(16)
                     .background(GitaTheme.bgSurface)
@@ -185,6 +179,18 @@ struct RecommendSheet: View {
             }
         }
         .background(GitaTheme.bgDefault)
+        .sheet(isPresented: $showPhotoSheet) {
+            PhotoPracticeSheet(
+                fallbackCategory: category,
+                baseURL: llmBaseURL,
+                model: llmModel,
+                selection: $selection,
+                onFinished: {
+                    showPhotoSheet = false
+                    dismiss()
+                }
+            )
+        }
         .overlay {
             if let toast {
                 VStack {
@@ -195,59 +201,6 @@ struct RecommendSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
-    }
-
-    @MainActor
-    private func handlePicked(_ items: [PhotosPickerItem]) async {
-        guard !items.isEmpty else { return }
-        guard !isGenerating else { return }
-
-        let base = llmBaseURL
-        let model = llmModel
-        guard credentials.isConfigured(baseURL: base, model: model) else {
-            toast = String(localized: "先去设置里填写 AI 接口")
-            hideToastLater()
-            pickerItems = []
-            return
-        }
-
-        isGenerating = true
-        defer {
-            isGenerating = false
-            pickerItems = []
-        }
-
-        do {
-            var blobs: [Data] = []
-            for item in items.prefix(3) {
-                if let data = try await item.loadTransferable(type: Data.self) {
-                    blobs.append(data)
-                }
-            }
-            let draft = try await generator.generate(
-                imageData: blobs,
-                baseURL: base,
-                model: model,
-                fallbackCategory: category
-            )
-            if let id = store.createFromAIDraft(draft) {
-                selection = id
-                dismiss()
-            } else {
-                toast = String(localized: "生成失败，请稍后重试")
-                hideToastLater()
-            }
-        } catch let error as ImageStepGeneratorError {
-            toast = message(for: error)
-            hideToastLater()
-        } catch {
-            toast = String(localized: "生成失败，请稍后重试")
-            hideToastLater()
-        }
-    }
-
-    private func message(for error: ImageStepGeneratorError) -> String {
-        error.userMessage
     }
 
     private func hideToastLater() {
