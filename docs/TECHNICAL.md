@@ -361,7 +361,7 @@ typealias RecordingRef = GitaSchemaV3.RecordingRef
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 可从最多 3 张相册图片生成练习任务：用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘、不改 Schema。设计说明：`docs/superpowers/specs/2026-08-06-image-to-practice-steps-design.md`。
+`RecommendSheet` 可从最多 3 张相册图片生成练习任务：用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘、不改 Schema。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。
 
 ### 6.4 统计：StatsAggregator
 
