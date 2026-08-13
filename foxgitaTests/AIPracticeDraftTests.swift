@@ -44,4 +44,38 @@ struct AIPracticeDraftTests {
         #expect(draft.steps.first == "步骤1")
         #expect(draft.steps.last == "步骤12")
     }
+
+    @Test func normalizeEncodesChordsAndStepMinutes() {
+        let raw = AIPracticeDraft.Raw(
+            title: "转换",
+            category: "chord",
+            targetMin: 10,
+            steps: ["识别和弦顺序", "分段慢速转换", "完整循环练习"],
+            chords: [" C ", "G", "", "Am", "F"],
+            stepMinutes: [2, 4, 4, 99]
+        )
+        let draft = AIPracticeDraft.normalize(raw, fallbackCategory: .left)
+        #expect(draft.chords == ["C", "G", "Am", "F"])
+        #expect(draft.steps == [
+            "识别和弦顺序 · 2 分钟",
+            "分段慢速转换 · 4 分钟",
+            "完整循环练习 · 4 分钟",
+        ])
+        #expect(draft.subtitleLine == "AI · 10 分钟 · C · G · Am · F")
+    }
+
+    @Test func normalizeOmitsChordsAndMinutesWhenMissing() {
+        let raw = AIPracticeDraft.Raw(
+            title: "音阶",
+            category: "scale",
+            targetMin: 8,
+            steps: ["上行"],
+            chords: nil,
+            stepMinutes: [0, 3]
+        )
+        let draft = AIPracticeDraft.normalize(raw, fallbackCategory: .left)
+        #expect(draft.chords.isEmpty)
+        #expect(draft.steps == ["上行"])
+        #expect(draft.subtitleLine == "AI · 8 分钟")
+    }
 }

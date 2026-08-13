@@ -91,7 +91,8 @@ struct PracticeStoreTests {
             title: "扫弦入门",
             category: .rhythm,
             targetMin: 12,
-            steps: ["熟悉下下上", "60 BPM", "80 BPM"]
+            steps: ["熟悉下下上", "60 BPM", "80 BPM"],
+            chords: []
         )
         let id = try #require(store.createFromAIDraft(draft))
         let task = try #require(try repo.task(id: id))

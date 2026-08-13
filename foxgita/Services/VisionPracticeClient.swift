@@ -139,6 +139,8 @@ struct VisionPracticeClient: VisionGenerating {
                 - category: 仅能为 left/right/both/chord/scale/rhythm/song 之一
                 - targetMin: 整数分钟
                 - steps: 字符串数组（练习步骤）
+                - chords: 可选，识别到的和弦名字符串数组（如 C、G、Am）
+                - stepMinutes: 可选，与 steps 按下标对齐的整数分钟；没有则省略
                 """,
             ]
         ]
