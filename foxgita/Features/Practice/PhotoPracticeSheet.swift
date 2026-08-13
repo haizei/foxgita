@@ -100,8 +100,8 @@ struct PhotoPracticeSheet: View {
 
             HStack(spacing: 12) {
                 sourceCard(
-                    title: "拍照",
-                    subtitle: "拍摄一张图片",
+                    title: String(localized: "拍照"),
+                    subtitle: String(localized: "拍摄一张图片"),
                     systemImage: "camera.fill",
                     background: GitaTheme.brand50,
                     titleColor: GitaTheme.brand500
@@ -115,8 +115,8 @@ struct PhotoPracticeSheet: View {
                     matching: .images
                 ) {
                     sourceCardLabel(
-                        title: "相册",
-                        subtitle: "最多选择 3 张",
+                        title: String(localized: "相册"),
+                        subtitle: String(localized: "最多选择 3 张"),
                         systemImage: "photo.on.rectangle",
                         background: GitaTheme.bgSubtle,
                         titleColor: GitaTheme.textPrimary
@@ -274,6 +274,7 @@ struct PhotoPracticeSheet: View {
             } catch is CancellationError {
                 return
             } catch {
+                if Task.isCancelled { return }
                 fail(with: error)
             }
         }
@@ -287,6 +288,7 @@ struct PhotoPracticeSheet: View {
             } catch is CancellationError {
                 return
             } catch {
+                if Task.isCancelled { return }
                 fail(with: error)
             }
         }
