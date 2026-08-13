@@ -48,8 +48,8 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
         XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["从图片生成练习"].waitForExistence(timeout: 5)
-            || app.staticTexts["从图片生成练习"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["拍摄/照片"].waitForExistence(timeout: 5)
+            || app.staticTexts["拍摄/照片"].waitForExistence(timeout: 5))
         app.buttons["关闭"].tap()
     }
 

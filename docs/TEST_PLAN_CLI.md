@@ -73,7 +73,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `testLaunchShowsTodayPractice` | 见「今日练习」 |
 | `testStartFirstTaskOpensDetail` | 进详情见节拍器 |
 | `testRecommendSheetCanBeOpenedAndDismissed` | 打开/关闭推荐 Sheet |
-| `testRecommendSheetShowsImageGenerateEntry` | 推荐 Sheet 可见「从图片生成练习」 |
+| `testRecommendSheetShowsImageGenerateEntry` | 推荐 Sheet 可见「拍摄/照片」 |
 | `testSettingsAppearanceSegmentExists` | 设置页有主题外观 |
 
 **通过**：单元 + UI 全部绿色，`** TEST SUCCEEDED **`。
