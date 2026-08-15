@@ -33,6 +33,9 @@ Icon?
 .Spotlight-V100
 .Trashes
 
+# Git worktrees
+.worktrees/
+
 # IDEs / Agents
 .idea/
 .vscode/
