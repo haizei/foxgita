@@ -26,8 +26,7 @@ struct PracticeDetailView: View {
     @State private var toast: String?
     @State private var confirmExit = false
     @State private var isCompleting = false
-    @State private var reviewClipIds: [String] = []
-    @State private var showReviewSheet = false
+    @State private var openSessionId: String?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -42,6 +41,7 @@ struct PracticeDetailView: View {
             || !recorder.pending.isEmpty
             || !video.pending.isEmpty
             || !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || openSessionId != nil
     }
 
     var body: some View {
@@ -77,6 +77,7 @@ struct PracticeDetailView: View {
             practiceTimer.pause()
             metronome.stop()
             if recorder.isRecording { recorder.stop() }
+            if let task { persistPending(task: task) }
             // Takes never attached to a session would otherwise linger on disk.
             recorder.discardPending()
             for clip in video.takeAll() {
@@ -103,6 +104,7 @@ struct PracticeDetailView: View {
                 ),
                 onPicked: { url in
                     video.ingest(tempURL: url, label: task?.title ?? "")
+                    if let task { persistPending(task: task) }
                 },
                 onCancel: { video.dismiss() }
             )
@@ -115,13 +117,6 @@ struct PracticeDetailView: View {
             Button("继续练习", role: .cancel) {}
         } message: {
             Text("返回会丢掉本次计时、录音和笔记。")
-        }
-        .sheet(isPresented: $showReviewSheet) {
-            ReviewGenerationSheet(recordingIds: reviewClipIds, taskTitle: task?.title ?? "") {
-                showReviewSheet = false
-                router.returnPracticeToToday = true
-                router.practicePath.removeAll()
-            }
         }
     }
 
@@ -347,6 +342,7 @@ struct PracticeDetailView: View {
                 Task {
                     if recorder.isRecording {
                         recorder.stop(label: task.title)
+                        persistPending(task: task)
                     } else {
                         showNote = false
                         await recorder.start(label: task.title)
@@ -361,7 +357,10 @@ struct PracticeDetailView: View {
                 systemImage: "video.fill",
                 on: !video.pending.isEmpty
             ) {
-                if recorder.isRecording { recorder.stop(label: task.title) }
+                if recorder.isRecording {
+                    recorder.stop(label: task.title)
+                    persistPending(task: task)
+                }
                 video.presentCamera()
             }
         }
@@ -409,6 +408,7 @@ struct PracticeDetailView: View {
 
                 Button {
                     recorder.stop(label: task.title)
+                    persistPending(task: task)
                 } label: {
                     Text("停止")
                         .font(.system(size: 14, weight: .semibold))
@@ -501,6 +501,15 @@ struct PracticeDetailView: View {
     private func requestExit() {
         practiceTimer.pause()
         metronome.stop()
+        if let task, recorder.isRecording {
+            recorder.stop(label: task.title)
+            persistPending(task: task)
+        }
+        if openSessionId != nil {
+            if let task { saveOpenSession(task: task) }
+            leave()
+            return
+        }
         if hasUnsavedWork {
             confirmExit = true
         } else {
@@ -512,13 +521,74 @@ struct PracticeDetailView: View {
         router.practicePath.removeAll()
     }
 
+    private func audioClip(_ clip: VideoRecorderService.Clip) -> AudioRecorderService.Clip {
+        AudioRecorderService.Clip(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes,
+            durationSec: clip.durationSec, createdAt: clip.createdAt, label: clip.label
+        )
+    }
+
+    private func persist(_ clip: AudioRecorderService.Clip, task: TaskItem) {
+        guard FileManager.default.fileExists(atPath: clip.url.path) else {
+            show(String(localized: MediaReviewMedia.isVideo(fileName: clip.fileName) ? "录像没保存" : "录音没保存"))
+            return
+        }
+        let end = Date()
+        let elapsed = practiceTimer.elapsedSec
+        let start = practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed))
+        let sid: String?
+        if let open = openSessionId {
+            sid = store.appendRecording(sessionId: open, clip: clip) ? open : nil
+        } else {
+            sid = store.beginOpenSession(
+                taskId: task.id, steps: steps, note: noteText,
+                startedAt: start, endedAt: end, durationSec: elapsed,
+                bpm: metronome.bpm, clip: clip
+            )
+        }
+        guard let sid else { return }
+        openSessionId = sid
+        recorder.detach(clip.id)
+        video.detach(clip.id)
+        if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
+            store.markReviewsPending(recordingIds: [clip.id])
+            reviewRunner.enqueue([clip.id], baseURL: llmBaseURL, model: llmModel)
+        }
+    }
+
+    private func persistPending(task: TaskItem) {
+        for clip in recorder.pending { persist(clip, task: task) }
+        for clip in video.pending { persist(audioClip(clip), task: task) }
+    }
+
+    private func saveOpenSession(task: TaskItem) {
+        guard let openSessionId else { return }
+        let end = Date()
+        _ = store.updateOpenSession(
+            sessionId: openSessionId,
+            steps: steps,
+            note: noteText,
+            endedAt: end,
+            durationSec: practiceTimer.elapsedSec,
+            bpm: metronome.bpm
+        )
+    }
+
     private func complete(_ task: TaskItem) {
         guard !isCompleting else { return }
         isCompleting = true
-
         if recorder.isRecording { recorder.stop(label: task.title) }
         practiceTimer.pause()
         metronome.stop()
+        persistPending(task: task)
+
+        if let _ = openSessionId {
+            saveOpenSession(task: task)
+            Haptics.success()
+            router.returnPracticeToToday = true
+            router.practicePath.removeAll()
+            return
+        }
 
         if !hasUnsavedWork {
             router.practiceToast = String(localized: "这次没有留下记录")
@@ -528,42 +598,19 @@ struct PracticeDetailView: View {
         }
 
         var clips = recorder.consume()
-        clips += video.takeAll().map {
-            AudioRecorderService.Clip(
-                id: $0.id,
-                fileName: $0.fileName,
-                bytes: $0.bytes,
-                durationSec: $0.durationSec,
-                createdAt: $0.createdAt,
-                label: $0.label
-            )
-        }
-
+        clips += video.takeAll().map { audioClip($0) }
         let end = Date()
         let elapsed = practiceTimer.elapsedSec
         let saved = store.finishSession(
-            taskId: task.id,
-            steps: steps,
-            note: noteText,
+            taskId: task.id, steps: steps, note: noteText,
             startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
-            endedAt: end,
-            durationSec: elapsed,
-            bpm: metronome.bpm,
-            recordings: clips
+            endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: clips
         )
         guard saved else {
             isCompleting = false
             return
         }
         Haptics.success()
-        let ids = clips.filter { FileManager.default.fileExists(atPath: $0.url.path) }.map(\.id)
-        if !ids.isEmpty && llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
-            store.markReviewsPending(recordingIds: ids)
-            reviewRunner.enqueue(ids, baseURL: llmBaseURL, model: llmModel)
-            reviewClipIds = ids
-            showReviewSheet = true
-            return
-        }
         router.returnPracticeToToday = true
         router.practicePath.removeAll()
     }

@@ -141,6 +141,11 @@ final class AudioRecorderService {
         return items
     }
 
+    /// Drops the take from `pending` but leaves the file for a persisted `RecordingRef`.
+    func detach(_ id: String) {
+        pending.removeAll { $0.id == id }
+    }
+
     private func requestMic() async -> Bool {
         await withCheckedContinuation { continuation in
             AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }

@@ -68,6 +68,11 @@ final class VideoRecorderService {
         pending.removeAll()
         return all
     }
+
+    /// Drops the take from `pending` but leaves the file for a persisted `RecordingRef`.
+    func detach(_ id: String) {
+        pending.removeAll { $0.id == id }
+    }
 }
 
 struct VideoCameraPicker: UIViewControllerRepresentable {
