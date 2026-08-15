@@ -21,6 +21,8 @@ struct PracticeView: View {
     private var sessions: [PracticeSession]
 
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
+    @State private var weekAnchor = StatsAggregator.week().start
+    @State private var toast: String?
     @State private var showSheet = false
     @State private var pendingTaskId: String?
     @State private var editingTaskId: String?
@@ -52,15 +54,17 @@ struct PracticeView: View {
     }
 
     private var activeTasks: [TaskItem] {
-        tasks.filter { $0.status == .active }
+        tasks.filter { $0.status == .active && $0.isUserAdded }
     }
 
-    private var daySessions: [PracticeSession] {
-        sessions.filter { calendar.isDate($0.endedAt, inSameDayAs: selectedDay) }
+    private var dayGroups: [StatsAggregator.DayTaskGroup] {
+        StatsAggregator.dayTaskGroups(sessions: sessions, on: selectedDay)
     }
 
     private var streak: Int { StatsAggregator.streakDays(from: sessions) }
-    private var weekDays: [StatsAggregator.WeekDay] { StatsAggregator.weekDays(from: sessions) }
+    private var weekDays: [StatsAggregator.WeekDay] {
+        StatsAggregator.weekDays(from: sessions, containing: weekAnchor)
+    }
     private var weekDone: Int { weekDays.filter(\.practiced).count }
     private var totalTarget: Int { activeTasks.reduce(0) { $0 + $1.targetMin } }
     private var weekMinutes: Int {
@@ -80,7 +84,7 @@ struct PracticeView: View {
         if isSelectedFuture {
             return String(localized: "先练今天")
         }
-        return String(localized: "\(daySessions.count) 次记录")
+        return String(localized: "\(dayGroups.count) 次记录")
     }
 
     private var greeting: String {
@@ -174,6 +178,13 @@ struct PracticeView: View {
                     .padding(.trailing, 22)
                     .padding(.bottom, 24)
                 }
+
+                if let toast {
+                    VStack {
+                        Spacer()
+                        ToastBanner(text: toast).padding(.bottom, 40)
+                    }
+                }
             }
             .navigationBarHidden(true)
             .navigationDestination(for: PracticeRoute.self) { route in
@@ -261,6 +272,17 @@ struct PracticeView: View {
                 router.selectedTab = .practice
                 router.practicePath = [.detail(taskId: first.id)]
             }
+            .onChange(of: router.returnPracticeToToday) { _, requested in
+                guard requested else { return }
+                router.returnPracticeToToday = false
+                selectedDay = calendar.startOfDay(for: Date())
+                weekAnchor = StatsAggregator.week().start
+            }
+            .onChange(of: router.practiceToast) { _, message in
+                guard let message else { return }
+                router.practiceToast = nil
+                showToast(message)
+            }
         }
     }
 
@@ -296,28 +318,37 @@ struct PracticeView: View {
                     )
                 }
             }
-        } else if daySessions.isEmpty {
+        } else if dayGroups.isEmpty {
             lockedEmpty(
                 title: String(localized: "这天没有练习"),
                 subtitle: String(localized: "选中的日期没有留下记录")
             )
         } else {
-            ForEach(daySessions, id: \.id) { session in
-                SwipeableSessionRow(
-                    session: session,
-                    openRowId: $openSwipeRowId,
-                    onOpen: {
-                        openSwipeRowId = nil
-                        router.selectedTab = .record
-                    },
-                    onEdit: {
-                        editingSessionId = session.id
-                    },
-                    onDelete: {
-                        deleteSessionId = session.id
-                    }
-                )
+            ForEach(dayGroups) { group in
+                DaySessionCard(
+                    title: group.title,
+                    minutes: group.totalMinutes,
+                    category: group.category
+                ) {
+                    openPastGroup(group)
+                }
             }
+        }
+    }
+
+    private func openPastGroup(_ group: StatsAggregator.DayTaskGroup) {
+        if tasks.contains(where: { $0.id == group.taskId }) {
+            router.practicePath.append(.detail(taskId: group.taskId))
+        } else {
+            showToast(String(localized: "练习已删除，无法再练"))
+        }
+    }
+
+    private func showToast(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if toast == message { toast = nil }
         }
     }
 

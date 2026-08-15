@@ -352,22 +352,48 @@ struct SwipeableSessionRow: View {
 }
 
 struct DaySessionCard: View {
-    let session: PracticeSession
+    let title: String
+    let minutes: Int
+    let category: PracticeCategory
     var showsShadow: Bool = true
     var action: (() -> Void)?
+
+    init(
+        title: String,
+        minutes: Int,
+        category: PracticeCategory,
+        showsShadow: Bool = true,
+        action: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.minutes = minutes
+        self.category = category
+        self.showsShadow = showsShadow
+        self.action = action
+    }
+
+    init(session: PracticeSession, showsShadow: Bool = true, action: (() -> Void)? = nil) {
+        self.init(
+            title: session.taskTitle,
+            minutes: session.durationMinutes,
+            category: session.category,
+            showsShadow: showsShadow,
+            action: action
+        )
+    }
 
     var body: some View {
         let card = HStack(spacing: 12) {
             Capsule()
-                .fill(session.category.accent)
+                .fill(category.accent)
                 .frame(width: 5)
                 .frame(minHeight: 42)
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.taskTitle)
+                Text(title)
                     .font(GitaFont.body(.bold))
                     .foregroundStyle(GitaTheme.textPrimary)
                     .lineLimit(2)
-                Text("已练 \(session.durationMinutes) 分钟")
+                Text("已练 \(minutes) 分钟")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
             }
@@ -395,7 +421,7 @@ struct DaySessionCard: View {
         if let action {
             Button(action: action) { card }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("\(session.taskTitle)，已练 \(session.durationMinutes) 分钟"))
+                .accessibilityLabel(Text("\(title)，已练 \(minutes) 分钟"))
         } else {
             card
         }

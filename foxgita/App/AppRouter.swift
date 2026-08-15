@@ -26,4 +26,8 @@ final class AppRouter {
     /// Raised when a reminder notification is tapped. `PracticeView` resolves it
     /// to today's first task, since only it holds the task query.
     var openTodayFirstPractice = false
+    /// Raised after a successful (or empty) complete so PracticeView snaps back to today.
+    var returnPracticeToToday = false
+    /// Set by detail / past-day open; PracticeView shows it then clears.
+    var practiceToast: String?
 }
