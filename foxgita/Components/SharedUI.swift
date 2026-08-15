@@ -41,9 +41,14 @@ struct SegmentedPills: View {
 
 struct StreakCard: View {
     let streak: Int
-    let weekDays: [StatsAggregator.WeekDay]
+    let sessions: [PracticeSession]
     let weekDone: Int
+    let isCurrentWeek: Bool
     @Binding var selectedDay: Date
+    @Binding var weekAnchor: Date
+
+    @State private var weekStarts = StatsAggregator.weekStarts(back: 26)
+    private var calendar: Calendar { .current }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -59,7 +64,7 @@ struct StreakCard: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
-                Text("本周 \(weekDone)/7")
+                Text(isCurrentWeek ? "本周 \(weekDone)/7" : "该周 \(weekDone)/7")
                     .font(GitaFont.caption(.medium))
                     .foregroundStyle(GitaTheme.iconActive)
                     .padding(.horizontal, 10)
@@ -67,35 +72,66 @@ struct StreakCard: View {
                     .background(GitaTheme.brand50)
                     .clipShape(Capsule())
             }
-            HStack(spacing: 0) {
-                ForEach(weekDays) { day in
-                    Button {
-                        selectedDay = day.date
-                    } label: {
-                        VStack(spacing: 6) {
-                            Text(day.weekdayLabel)
-                                .font(GitaFont.micro())
-                                .foregroundStyle(labelColor(day))
-                            Text("\(day.dayNumber)")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(numberColor(day))
-                                .frame(width: 32, height: 32)
-                                .background(numberBackground(day))
-                                .clipShape(Circle())
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("\(day.weekdayLabel) \(day.dayNumber)"))
-                    .accessibilityAddTraits(isSelected(day) ? [.isSelected] : [])
+            TabView(selection: $weekAnchor) {
+                ForEach(weekStarts, id: \.self) { start in
+                    weekStrip(
+                        days: StatsAggregator.weekDays(from: sessions, containing: start)
+                    )
+                    .tag(start)
                 }
             }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 62)
+            .accessibilityElement(children: .contain)
+            .accessibilityIdentifier("week-pager")
+            .accessibilityHint(Text("左右滑动查看其他星期"))
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 18)
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
         .shadow(color: GitaTheme.shadowCard, radius: 10, y: 6)
+        .onAppear {
+            let latest = StatsAggregator.weekStarts(back: 26)
+            if latest.last != weekStarts.last {
+                weekStarts = latest
+            }
+            let start = StatsAggregator.week(containing: selectedDay).start
+            if !calendar.isDate(start, inSameDayAs: weekAnchor) {
+                weekAnchor = start
+            }
+        }
+        .onChange(of: weekAnchor) { _, newStart in
+            selectedDay = StatsAggregator.clampedDay(
+                selected: selectedDay, inWeekStarting: newStart
+            )
+        }
+    }
+
+    private func weekStrip(days: [StatsAggregator.WeekDay]) -> some View {
+        HStack(spacing: 0) {
+            ForEach(days) { day in
+                Button {
+                    selectedDay = day.date
+                } label: {
+                    VStack(spacing: 6) {
+                        Text(day.weekdayLabel)
+                            .font(GitaFont.micro())
+                            .foregroundStyle(labelColor(day))
+                        Text("\(day.dayNumber)")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(numberColor(day))
+                            .frame(width: 32, height: 32)
+                            .background(numberBackground(day))
+                            .clipShape(Circle())
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("\(day.weekdayLabel) \(day.dayNumber)"))
+                .accessibilityAddTraits(isSelected(day) ? [.isSelected] : [])
+            }
+        }
     }
 
     private func isSelected(_ day: StatsAggregator.WeekDay) -> Bool {

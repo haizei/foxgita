@@ -54,10 +54,22 @@ final class LLMCredentialsStore: Sendable {
         SecItemDelete(query as CFDictionary)
     }
 
-    func isConfigured(baseURL: String, model: String) -> Bool {
-        let url = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let m = model.trimmingCharacters(in: .whitespacesAndNewlines)
+    func missingFieldLabels(baseURL: String, model: String) -> [String] {
+        var missing: [String] = []
+        if baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("Base URL")
+        }
+        if model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            missing.append("Model")
+        }
         let key = loadAPIKey()?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return !url.isEmpty && !m.isEmpty && !key.isEmpty
+        if key.isEmpty {
+            missing.append("API Key")
+        }
+        return missing
+    }
+
+    func isConfigured(baseURL: String, model: String) -> Bool {
+        missingFieldLabels(baseURL: baseURL, model: model).isEmpty
     }
 }

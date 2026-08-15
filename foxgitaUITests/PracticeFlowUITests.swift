@@ -27,6 +27,7 @@ final class PracticeFlowUITests: XCTestCase {
         )
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
+        XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
     }
 
     func testCreateCustomTaskOpensDetail() {

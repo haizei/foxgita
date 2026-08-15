@@ -22,6 +22,7 @@ struct PracticeView: View {
 
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
     @State private var toast: String?
+    @State private var weekAnchor = StatsAggregator.week().start
     @State private var showSheet = false
     @State private var pendingTaskId: String?
     @State private var editingTaskId: String?
@@ -62,12 +63,15 @@ struct PracticeView: View {
 
     private var streak: Int { StatsAggregator.streakDays(from: sessions) }
     private var weekDays: [StatsAggregator.WeekDay] {
-        StatsAggregator.weekDays(from: sessions)
+        StatsAggregator.weekDays(from: sessions, containing: weekAnchor)
     }
     private var weekDone: Int { weekDays.filter(\.practiced).count }
     private var totalTarget: Int { activeTasks.reduce(0) { $0 + $1.targetMin } }
+    private var isVisibleWeekCurrent: Bool {
+        calendar.isDate(weekAnchor, inSameDayAs: StatsAggregator.week().start)
+    }
     private var weekMinutes: Int {
-        StatsAggregator.totalMinutes(sessions, in: StatsAggregator.week())
+        StatsAggregator.totalMinutes(sessions, in: StatsAggregator.week(containing: weekAnchor))
     }
 
     private var sectionTitle: String {
@@ -112,9 +116,11 @@ struct PracticeView: View {
 
                         StreakCard(
                             streak: streak,
-                            weekDays: weekDays,
+                            sessions: sessions,
                             weekDone: weekDone,
-                            selectedDay: $selectedDay
+                            isCurrentWeek: isVisibleWeekCurrent,
+                            selectedDay: $selectedDay,
+                            weekAnchor: $weekAnchor
                         )
 
                         HStack {
@@ -130,7 +136,7 @@ struct PracticeView: View {
 
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text("本周节奏")
+                                Text(isVisibleWeekCurrent ? "本周节奏" : "当周节奏")
                                     .font(.system(size: 16, weight: .bold))
                                 Text("已练 \(weekDone) 天 · 累计 \(weekMinutes) 分钟")
                                     .font(.system(size: 12))
@@ -261,13 +267,18 @@ struct PracticeView: View {
                     Text("删除后这条练习记录将从历史中消失。")
                 }
             }
-            .onChange(of: selectedDay) { _, _ in
+            .onChange(of: selectedDay) { _, newDay in
                 openSwipeRowId = nil
+                let start = StatsAggregator.week(containing: newDay).start
+                if !calendar.isDate(start, inSameDayAs: weekAnchor) {
+                    weekAnchor = start
+                }
             }
             .onChange(of: router.openTodayFirstPractice) { _, requested in
                 guard requested else { return }
                 router.openTodayFirstPractice = false
                 selectedDay = calendar.startOfDay(for: Date())
+                weekAnchor = StatsAggregator.week().start
                 guard let first = activeTasks.first else { return }
                 router.selectedTab = .practice
                 router.practicePath = [.detail(taskId: first.id)]
@@ -276,6 +287,7 @@ struct PracticeView: View {
                 guard requested else { return }
                 router.returnPracticeToToday = false
                 selectedDay = calendar.startOfDay(for: Date())
+                weekAnchor = StatsAggregator.week().start
             }
             .onChange(of: router.practiceToast) { _, message in
                 guard let message else { return }

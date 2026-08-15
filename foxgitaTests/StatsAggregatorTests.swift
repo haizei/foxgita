@@ -145,6 +145,103 @@ struct StatsAggregatorTests {
         #expect(StatsAggregator.weekdaySymbol(for: sunday, calendar: calendar) == symbols[6])
     }
 
+    // MARK: - weekDays paging (visible week vs today)
+
+    @Test func weekDaysFollowsContainingWeekAndTodayFromNow() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let lastMonday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 6))!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        let days = StatsAggregator.weekDays(
+            from: [], containing: lastMonday, now: friday, calendar: calendar
+        )
+        #expect(days.count == 7)
+        #expect(calendar.component(.day, from: days[0].date) == 6)
+        #expect(calendar.component(.day, from: days[6].date) == 12)
+        #expect(days.allSatisfy { !$0.isToday })
+        #expect(days.allSatisfy { !$0.isFuture })
+    }
+
+    @Test func weekDaysMarksFutureRelativeToNowNotContaining() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let monday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 13))!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        let days = StatsAggregator.weekDays(
+            from: [], containing: monday, now: friday, calendar: calendar
+        )
+        #expect(days.filter(\.isToday).map { calendar.component(.day, from: $0.date) } == [17])
+        #expect(days.filter(\.isFuture).map { calendar.component(.day, from: $0.date) } == [18, 19])
+    }
+
+    @Test func weekDaysMarksPracticeOnlyInTheDisplayedWeek() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let context = try makeContext()
+        let lastTuesday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 7, hour: 12))!
+        let thisTuesday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 14, hour: 12))!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        insertSession(endedAt: lastTuesday, minutes: 10, into: context)
+        insertSession(endedAt: thisTuesday, minutes: 10, into: context)
+
+        let lastWeek = StatsAggregator.weekDays(
+            from: sessions(in: context),
+            containing: lastTuesday,
+            now: friday,
+            calendar: calendar
+        )
+        #expect(lastWeek.filter(\.practiced).map { calendar.component(.day, from: $0.date) } == [7])
+
+        let thisWeek = StatsAggregator.weekDays(
+            from: sessions(in: context),
+            containing: thisTuesday,
+            now: friday,
+            calendar: calendar
+        )
+        #expect(thisWeek.filter(\.practiced).map { calendar.component(.day, from: $0.date) } == [14])
+    }
+
+    @Test func weekStartsAreMondaysEndingAtTheCurrentWeek() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        let starts = StatsAggregator.weekStarts(back: 2, from: friday, calendar: calendar)
+        #expect(starts.count == 3)
+        #expect(starts.map { calendar.component(.day, from: $0) } == [30, 6, 13])
+        #expect(starts.last == StatsAggregator.week(containing: friday, calendar: calendar).start)
+    }
+
+    @Test func clampedDayKeepsSelectionInsideTheWeekOtherwisePicksTodayOrMonday() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let thisMonday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 13))!
+        let lastMonday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 6))!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        let thursday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 16))!
+
+        #expect(
+            StatsAggregator.clampedDay(
+                selected: thursday, inWeekStarting: thisMonday, now: friday, calendar: calendar
+            ) == calendar.startOfDay(for: thursday)
+        )
+        #expect(
+            StatsAggregator.clampedDay(
+                selected: lastMonday, inWeekStarting: thisMonday, now: friday, calendar: calendar
+            ) == calendar.startOfDay(for: friday)
+        )
+        #expect(
+            StatsAggregator.clampedDay(
+                selected: friday, inWeekStarting: lastMonday, now: friday, calendar: calendar
+            ) == calendar.startOfDay(for: lastMonday)
+        )
+        // Next Monday is the previous interval's exclusive end — must not stick.
+        #expect(
+            StatsAggregator.clampedDay(
+                selected: thisMonday, inWeekStarting: lastMonday, now: friday, calendar: calendar
+            ) == calendar.startOfDay(for: lastMonday)
+        )
+    }
+
     // MARK: - week boundaries
 
     @Test func weekStartsOnMondayEvenWhereTheLocaleStartsOnSunday() {

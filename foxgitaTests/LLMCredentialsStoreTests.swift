@@ -25,5 +25,8 @@ struct LLMCredentialsStoreTests {
         #expect(store.isConfigured(baseURL: "  ", model: "gpt-4o") == false)
         #expect(store.isConfigured(baseURL: "https://api.openai.com/v1", model: "") == false)
         #expect(store.isConfigured(baseURL: "https://api.openai.com/v1", model: "gpt-4o") == true)
+        #expect(
+            store.missingFieldLabels(baseURL: "https://api.openai.com/v1", model: "") == ["Model"]
+        )
     }
 }

@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct SettingsView: View {
     @Environment(AppRouter.self) private var router
@@ -14,6 +15,8 @@ struct SettingsView: View {
     @AppStorage("gita.reminder.minute") private var remindMinute = 0
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    @State private var llmBaseURLDraft = ""
+    @State private var llmModelDraft = ""
     @State private var llmAPIKey = ""
     @State private var llmKeyStored = false
     @State private var showClearConfirm = false
@@ -85,25 +88,79 @@ struct SettingsView: View {
                     group {
                         VStack(alignment: .leading, spacing: 12) {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Base URL").font(.system(size: 13, weight: .semibold))
-                                TextField("https://api.openai.com/v1", text: $llmBaseURL)
+                                HStack {
+                                    Text("Base URL").font(.system(size: 13, weight: .semibold))
+                                    Spacer()
+                                    Button("粘贴") {
+                                        if let pasted = UIPasteboard.general.string?
+                                            .trimmingCharacters(in: .whitespacesAndNewlines),
+                                            !pasted.isEmpty
+                                        {
+                                            llmBaseURLDraft = pasted
+                                        }
+                                    }
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                    if !llmBaseURLDraft.isEmpty {
+                                        Button("清空") { llmBaseURLDraft = "" }
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(GitaTheme.statusError)
+                                    }
+                                }
+                                ZStack(alignment: .topLeading) {
+                                    if llmBaseURLDraft.isEmpty {
+                                        Text("点「粘贴」填入接口地址，灰色字不是已填内容")
+                                            .font(.system(size: 13))
+                                            .foregroundStyle(GitaTheme.textTertiary)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 10)
+                                            .allowsHitTesting(false)
+                                    }
+                                    TextEditor(text: $llmBaseURLDraft)
+                                        .font(.system(size: 14))
+                                        .scrollContentBackground(.hidden)
+                                        .textInputAutocapitalization(.never)
+                                        .autocorrectionDisabled()
+                                        .frame(minHeight: 88)
+                                }
+                                .padding(4)
+                                .background(GitaTheme.bgSubtle)
+                                .clipShape(RoundedRectangle(cornerRadius: 10))
+                            }
+                            Divider().foregroundStyle(GitaTheme.borderSubtle)
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text("Model").font(.system(size: 13, weight: .semibold))
+                                    Spacer()
+                                    Button("填 qwen3.8-max") {
+                                        llmModelDraft = "qwen3.8-max"
+                                    }
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                }
+                                TextField("这里要手填，灰色提示不算数", text: $llmModelDraft)
                                     .textInputAutocapitalization(.never)
                                     .autocorrectionDisabled()
                                     .font(.system(size: 14))
                             }
                             Divider().foregroundStyle(GitaTheme.borderSubtle)
                             VStack(alignment: .leading, spacing: 6) {
-                                Text("Model").font(.system(size: 13, weight: .semibold))
-                                TextField("gpt-4o", text: $llmModel)
-                                    .textInputAutocapitalization(.never)
-                                    .autocorrectionDisabled()
-                                    .font(.system(size: 14))
-                            }
-                            Divider().foregroundStyle(GitaTheme.borderSubtle)
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text("API Key").font(.system(size: 13, weight: .semibold))
+                                HStack {
+                                    Text("API Key").font(.system(size: 13, weight: .semibold))
+                                    Spacer()
+                                    Button("粘贴") {
+                                        if let pasted = UIPasteboard.general.string?
+                                            .trimmingCharacters(in: .whitespacesAndNewlines),
+                                            !pasted.isEmpty
+                                        {
+                                            llmAPIKey = pasted
+                                        }
+                                    }
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                }
                                 SecureField(
-                                    llmKeyStored ? "已保存，输入新值可覆盖" : "sk-…",
+                                    llmKeyStored ? "已保存，输入新值可覆盖" : "点粘贴，再点下面保存",
                                     text: $llmAPIKey
                                 )
                                 .textInputAutocapitalization(.never)
@@ -118,6 +175,11 @@ struct SettingsView: View {
                                     .font(.system(size: 14))
                                     .foregroundStyle(GitaTheme.statusError)
                             }
+                            Text(llmStatusText)
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(
+                                    llmMissingFields.isEmpty ? GitaTheme.statusSuccess : GitaTheme.statusError
+                                )
                             Text("图片会发送到你填写的接口地址，费用由该服务商向你收取。Gita 不托管密钥。")
                                 .font(.system(size: 11))
                                 .foregroundStyle(GitaTheme.textSecondary)
@@ -161,7 +223,14 @@ struct SettingsView: View {
             Text("将删除全部练习记录、笔记与录音，且无法恢复。入门练习会恢复为初始状态。")
         }
         .onAppear {
+            llmBaseURLDraft = llmBaseURL
+            llmModelDraft = llmModel
             llmKeyStored = llmCredentials.loadAPIKey()?.isEmpty == false
+        }
+        .onChange(of: llmBaseURLDraft) { _, _ in persistLLMFields() }
+        .onChange(of: llmModelDraft) { _, _ in persistLLMFields() }
+        .onDisappear {
+            persistLLMFields()
         }
         .onChange(of: remindOn) { _, on in
             Task { await applyReminder(enabled: on) }
@@ -174,10 +243,32 @@ struct SettingsView: View {
         }
     }
 
+    private var llmMissingFields: [String] {
+        llmCredentials.missingFieldLabels(baseURL: llmBaseURLDraft, model: llmModelDraft)
+    }
+
+    private var llmStatusText: String {
+        if llmMissingFields.isEmpty {
+            return String(localized: "已就绪，可去练习页使用拍摄/照片")
+        }
+        return String(localized: "还缺 \(llmMissingFields.joined(separator: "、"))。API Key 必须点保存。")
+    }
+
+    private func persistLLMFields() {
+        llmBaseURL = llmBaseURLDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        llmModel = llmModelDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private func saveLLMKey() {
+        persistLLMFields()
         let trimmed = llmAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else {
-            toast = String(localized: "请输入 API Key")
+        if trimmed.isEmpty {
+            guard llmKeyStored else {
+                toast = String(localized: "请输入 API Key")
+                hideToast()
+                return
+            }
+            toast = String(localized: "已保存")
             hideToast()
             return
         }

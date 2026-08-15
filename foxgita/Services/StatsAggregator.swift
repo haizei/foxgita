@@ -62,12 +62,12 @@ enum StatsAggregator {
 
     static func weekDays(
         from sessions: [PracticeSession],
-        containing dateInWeek: Date? = nil,
+        containing weekDate: Date = .now,
         now: Date = .now,
         calendar: Calendar = .current
     ) -> [WeekDay] {
         let labels = weekdaySymbols
-        let start = week(containing: dateInWeek ?? now, calendar: calendar).start
+        let start = week(containing: weekDate, calendar: calendar).start
         let today = calendar.startOfDay(for: now)
         return (0..<7).map { offset in
             let date = calendar.date(byAdding: .day, value: offset, to: start) ?? today
@@ -109,6 +109,37 @@ enum StatsAggregator {
             return left > right
         }
     }
+
+    /// Mondays from `weeks` lookback through the week containing `now` (inclusive).
+    static func weekStarts(
+        back weeks: Int,
+        from now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [Date] {
+        let current = week(containing: now, calendar: calendar).start
+        return (0...weeks).reversed().compactMap { offset in
+            calendar.date(byAdding: .day, value: -offset * 7, to: current)
+        }
+    }
+
+    /// Keep `selected` when it already sits in the week; otherwise today (if
+    /// that week contains today) or the week's Monday.
+    static func clampedDay(
+        selected: Date,
+        inWeekStarting weekStart: Date,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> Date {
+        let interval = week(containing: weekStart, calendar: calendar)
+        let day = calendar.startOfDay(for: selected)
+        // DateInterval.contains is closed at `end` (next Monday 00:00), so a
+        // Monday would otherwise still belong to the previous week.
+        if day >= interval.start && day < interval.end { return day }
+        let today = calendar.startOfDay(for: now)
+        if today >= interval.start && today < interval.end { return today }
+        return calendar.startOfDay(for: interval.start)
+    }
+
 
     static func weekdaySymbol(for date: Date, calendar: Calendar = .current) -> String {
         weekdaySymbols[mondayOffset(of: date, calendar: calendar)]

@@ -64,10 +64,15 @@ struct RecommendSheet: View {
                             TextField("例如：F 和弦转换", text: $name)
                                 .padding(.leading, 10)
                             Button {
-                                if credentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
+                                let missing = credentials.missingFieldLabels(
+                                    baseURL: llmBaseURL, model: llmModel
+                                )
+                                if missing.isEmpty {
                                     showPhotoSheet = true
                                 } else {
-                                    toast = String(localized: "先去设置里填写 AI 接口")
+                                    toast = String(
+                                        localized: "还缺 \(missing.joined(separator: "、"))，请在设置里填完并点保存"
+                                    )
                                     hideToastLater()
                                 }
                             } label: {
