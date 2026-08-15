@@ -21,16 +21,44 @@ final class PracticeFlowUITests: XCTestCase {
     func testLaunchShowsTodayPractice() {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天只练一点点"].exists)
+        XCTAssertTrue(
+            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "连续练习"))
+                .firstMatch.exists
+        )
+        XCTAssertFalse(app.staticTexts["指尖热身"].exists)
+        XCTAssertFalse(app.staticTexts["和弦转换"].exists)
     }
 
-    func testStartFirstTaskOpensDetail() {
-        // Seeded first card CTA.
-        let start = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "开始")).firstMatch
-        XCTAssertTrue(start.waitForExistence(timeout: 5))
-        start.tap()
+    func testCreateCustomTaskOpensDetail() {
+        let add = app.buttons["添加练习"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
 
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("知足前奏")
+
+        app.buttons["创建练习"].tap()
         XCTAssertTrue(app.staticTexts["节拍器"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["完成"].exists || app.staticTexts["完成本次练习"].exists)
+    }
+
+    func testEmptyCompleteStaysOnPracticeTab() {
+        let add = app.buttons["添加练习"]
+        XCTAssertTrue(add.waitForExistence(timeout: 5))
+        add.tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("空完成")
+        app.buttons["创建练习"].tap()
+        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
+        app.buttons["完成"].tap()
+
+        XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["练习记录"].exists)
     }
 
     func testRecommendSheetCanBeOpenedAndDismissed() {

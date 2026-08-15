@@ -101,7 +101,7 @@ flowchart TD
     D --> E[完成练习]
     E --> F[PracticeStore.finishSession]
     F --> G[SwiftData + Recordings/]
-    G --> H[切到记录 Tab]
+    G --> H[回到今天的练习列表]
 ```
 
 关键交互细节：
@@ -122,9 +122,11 @@ flowchart TD
 
 | 选中日 | 列表内容 | FAB 添加 | 左滑编辑/删除 | 进入详情 |
 |---|---|---|---|---|
-| **今天** | `status == .active` 的任务 | 显示 | 有 | 「开始」→ 详情 |
-| **过去** | 该日 `PracticeSession`（`DaySessionCard`） | 隐藏 | 无 | 跳转记录 Tab（只读回顾） |
+| **今天** | `status == .active` 且 id 为 `custom-*` / `active-*` 的任务 | 显示 | 有 | 「开始」→ 详情 |
+| **过去** | 当天有效 session 按 `taskId` 聚合（`DayTaskGroup`） | 隐藏 | 无 | 「查看」→ 练习详情（新记录记今天） |
 | **未来** | 空态「这一天还没到」 | 隐藏 | 无 | 不可练 |
+
+有效记录：`durationSec > 0`，或笔记非空，或至少一条录音/视频。空完成不落库、不点亮周历。
 
 数据来源：`StatsAggregator.weekDays(from:)` 提供周一～周日的 `WeekDay`（星期标签、日号、是否今天/未来、是否已练）。
 
@@ -346,15 +348,15 @@ typealias RecordingRef = GitaSchemaV3.RecordingRef
 | 命令 | 不变量 / 行为 |
 |---|---|
 | `prepare()` | 迁移旧录音路径 → seed → GC 孤儿文件 |
-| `seedIfNeeded()` | 仅首次写入今日任务与模板 |
+| `seedIfNeeded()` | 只写入模板，不写入 `todayTasks()` |
 | `activateTemplate(id)` | 模板 → `active-{id}` 活跃副本；幂等 |
 | `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」 |
 | `createFromAIDraft(_:)` | 由 `AIPracticeDraft` 写入活跃任务（含完整 `steps`）；副标题 `AI · N 分钟` |
 | `setTaskStatus(id:to:)` | 改状态并 `touch()` |
 | `updateTask(id:title:subtitle:minutes:)` | 编辑标题/备注；分钟钳制 1…60；空标题保留原值 |
 | `softDeleteTask(id)` | 写 `deletedAt` 并 `touch()`（tombstone，供未来同步） |
-| `finishSession(...)` | `endedAt >= startedAt`、`durationSec >= 0`；媒体文件存在才建 `RecordingRef`（音频+视频）；一次 save 成功或整体 rollback |
-| `resetAll()` | 清库 + 清录音文件 + 恢复初始清单 |
+| `finishSession(...)` | `endedAt >= startedAt`、`durationSec >= 0`；无效记录（0 秒且无笔记/录音）返回 `false` 并设 `.invalidInput`；媒体文件存在才建 `RecordingRef`（音频+视频）；一次 save 成功或整体 rollback |
+| `resetAll()` | 清库 + 清录音文件；只写入模板，不写入 `todayTasks()` |
 | `gcOrphanRecordings()` | 删除无引用的 m4a/mov/mp4 |
 
 错误模型 `StoreError`：`notFound` / `invalidInput` / `saveFailed` / `fileMissing` / `permissionDenied` / `diskFull`。失败写入 `store.lastError`，视图用 `ToastBanner` 展示；禁止静默 `try?` 吞掉写失败。
