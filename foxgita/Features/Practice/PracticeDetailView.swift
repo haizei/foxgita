@@ -12,9 +12,14 @@ struct PracticeDetailView: View {
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Query private var tasks: [TaskItem]
+    @Query private var sessions: [PracticeSession]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
     private let llmCredentials = LLMCredentialsStore()
+
+    private enum ToolMode {
+        case audio, note, video
+    }
 
     @State private var metronome = MetronomeEngine()
     @State private var practiceTimer = PracticeTimer()
@@ -22,7 +27,8 @@ struct PracticeDetailView: View {
     @State private var video = VideoRecorderService()
     @State private var steps: [String] = []
     @State private var noteText = ""
-    @State private var showNote = true
+    @State private var toolMode: ToolMode = .note
+    @State private var expandedReviewId: String?
     @State private var toast: String?
     @State private var confirmExit = false
     @State private var abandoning = false
@@ -32,9 +38,22 @@ struct PracticeDetailView: View {
     init(taskId: String) {
         self.taskId = taskId
         _tasks = Query(filter: #Predicate<TaskItem> { $0.id == taskId && $0.deletedAt == nil })
+        let tid = taskId
+        _sessions = Query(filter: #Predicate<PracticeSession> { $0.taskId == tid && $0.deletedAt == nil })
     }
 
     private var task: TaskItem? { tasks.first }
+
+    private var openRecordings: [RecordingRef] {
+        sessions.first(where: { $0.id == openSessionId })?
+            .recordings.filter { $0.deletedAt == nil } ?? []
+    }
+
+    private var visibleClips: [RecordingRef] {
+        openRecordings
+            .filter { MediaReviewMedia.isVideo(fileName: $0.fileName) == (toolMode == .video) }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
 
     /// Anything worth losing a confirmation tap over.
     private var hasUnsavedWork: Bool {
@@ -188,7 +207,7 @@ struct PracticeDetailView: View {
                         recordingActivePanel(task)
                     }
 
-                    if showNote {
+                    if toolMode == .note {
                         VStack(alignment: .leading, spacing: 4) {
                             TextField("记录一点感受…", text: $noteText, axis: .vertical)
                                 .font(.system(size: 14))
@@ -203,11 +222,8 @@ struct PracticeDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 16))
                     }
 
-                    let clipCount = recorder.pending.count + video.pending.count
-                    if clipCount > 0 {
-                        Text("本次已录 \(clipCount) 段")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(GitaTheme.brand500)
+                    if toolMode != .note {
+                        clipList(task)
                     }
 
                     Button { complete(task) } label: {
@@ -341,33 +357,143 @@ struct PracticeDetailView: View {
             tool(
                 title: recorder.isRecording ? String(localized: "录音中") : String(localized: "录音"),
                 systemImage: recorder.isRecording ? "mic.fill" : "mic",
-                on: recorder.isRecording
+                on: toolMode == .audio
             ) {
                 Task {
+                    if toolMode != .audio {
+                        if recorder.isRecording {
+                            recorder.stop(label: task.title)
+                            persistPending(task: task)
+                        }
+                        toolMode = .audio
+                        return
+                    }
                     if recorder.isRecording {
                         recorder.stop(label: task.title)
                         persistPending(task: task)
                     } else {
-                        showNote = false
                         await recorder.start(label: task.title)
                     }
                 }
             }
-            tool(title: String(localized: "写笔记"), systemImage: "square.and.pencil", on: showNote) {
-                showNote = true
+            tool(title: String(localized: "写笔记"), systemImage: "square.and.pencil", on: toolMode == .note) {
+                if recorder.isRecording {
+                    recorder.stop(label: task.title)
+                    persistPending(task: task)
+                }
+                toolMode = .note
             }
             tool(
                 title: String(localized: "录视频"),
                 systemImage: "video.fill",
-                on: !video.pending.isEmpty
+                on: toolMode == .video
             ) {
                 if recorder.isRecording {
                     recorder.stop(label: task.title)
                     persistPending(task: task)
                 }
+                if toolMode != .video {
+                    toolMode = .video
+                    return
+                }
                 video.presentCamera()
             }
         }
+    }
+
+    private func clipList(_ task: TaskItem) -> some View {
+        VStack(spacing: 10) {
+            ForEach(visibleClips, id: \.id) { rec in
+                clipCard(rec, taskTitle: task.title)
+            }
+        }
+    }
+
+    private func clipCard(_ rec: RecordingRef, taskTitle: String) -> some View {
+        let video = MediaReviewMedia.isVideo(fileName: rec.fileName)
+        let configured = llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel)
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(video ? GitaTheme.categoryBlue : GitaTheme.brand500)
+                    .frame(width: 6, height: 6)
+                Text(video ? String(localized: "视频记录") : String(localized: "录音记录"))
+                    .font(.system(size: 12, weight: .semibold))
+                Text("·")
+                Text(relativeTime(rec.createdAt))
+                    .font(.system(size: 12))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Spacer()
+            }
+            Text("\(taskTitle) · \(rec.durationLabel)")
+                .font(.system(size: 16, weight: .semibold))
+            Text(video ? String(localized: "姿势、指法与节奏分析") : String(localized: "节奏与和弦切换分析"))
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            if configured {
+                aiRow(rec)
+            }
+            if expandedReviewId == rec.id, rec.reviewStatus == .ready {
+                reviewFields(rec)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    @ViewBuilder
+    private func aiRow(_ rec: RecordingRef) -> some View {
+        let running = reviewRunner.isRunning(rec.id)
+        switch rec.reviewStatus {
+        case .ready:
+            HStack {
+                Text(String(localized: "AI 复盘已生成"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                Spacer()
+                Button(
+                    expandedReviewId == rec.id
+                        ? String(localized: "收起")
+                        : String(localized: "查看复盘")
+                ) {
+                    expandedReviewId = expandedReviewId == rec.id ? nil : rec.id
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(GitaTheme.brand500)
+            }
+        case .pending where running:
+            Text(String(localized: "分析中")).font(.system(size: 12, weight: .semibold))
+        case .pending:
+            Text(String(localized: "未完成")).font(.system(size: 12, weight: .semibold))
+        case .failed:
+            Text(String(localized: "生成失败")).font(.system(size: 12, weight: .semibold))
+        case .none:
+            EmptyView()
+        }
+    }
+
+    private func reviewFields(_ rec: RecordingRef) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            labeled("亮点", rec.reviewHighlight)
+            labeled("优先改善", rec.reviewFocus)
+            labeled("下次练法", rec.reviewNextAction)
+        }
+    }
+
+    private func labeled(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(GitaTheme.textSecondary)
+            Text(body).font(.system(size: 14))
+        }
+    }
+
+    private func relativeTime(_ date: Date) -> String {
+        let f = RelativeDateTimeFormatter()
+        f.locale = Locale(identifier: "zh-Hans")
+        f.unitsStyle = .short
+        return f.localizedString(for: date, relativeTo: Date())
     }
 
     private func recordingActivePanel(_ task: TaskItem) -> some View {

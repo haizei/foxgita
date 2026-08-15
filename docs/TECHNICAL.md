@@ -374,7 +374,7 @@ typealias RecordingRef = GitaSchemaV4.RecordingRef
 
 ### 6.3.2 练后媒体复盘
 
-`PracticeStore.finishSession` 先落库。有新媒体且 AI 已配齐时，相关 `RecordingRef` 标 `pending`，`ReviewJobRunner`（App 级）按片段顺序调用 `MediaReviewGenerator` → `MediaReviewClient`；结果经 `MediaReviewDraft.normalize` 写回该条（`ready` / `failed`）。只上传 JPEG：录音 1 张波形图，录像最多 3 帧；不传完整音视频。记录详情第四栏「复盘」按条展示 / 生成 / 重试。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。
+停录即 `beginOpenSession` / `appendRecording` 并入队；完成与返回走 `updateOpenSession`，不再出处理 Sheet。有新媒体且 AI 已配齐时，相关 `RecordingRef` 标 `pending`，`ReviewJobRunner`（App 级）按片段顺序调用 `MediaReviewGenerator` → `MediaReviewClient`；结果经 `MediaReviewDraft.normalize` 写回该条（`ready` / `failed`）。只上传 JPEG：录音 1 张波形图，录像最多 3 帧；不传完整音视频。记录详情第四栏「复盘」按条展示 / 生成 / 重试。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。片段卡规格：`docs/superpowers/2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md`。
 
 ### 6.4 统计：StatsAggregator
 

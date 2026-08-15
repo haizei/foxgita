@@ -51,7 +51,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 |---|---|
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按时长进位等通过 |
 | `PracticeTimerTests` | 墙钟计时、暂停不计时、后台不丢时通过 |
-| `PracticeStoreTests` | seed / 激活模板 / finish 不变量 / 回滚 / reset / `createFromAIDraft` 通过 |
+| `PracticeStoreTests` | seed / 激活模板 / finish 不变量 / 回滚 / reset / `createFromAIDraft` / `beginOpenSession` / `appendRecording` / `updateOpenSession` 通过 |
 | `MigrationTests` | V2→V4 / V3→V4 磁盘库迁移不丢数据通过 |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制通过 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` 通过 |
