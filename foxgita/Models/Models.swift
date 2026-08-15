@@ -123,7 +123,7 @@ enum GitaSchemaV3: VersionedSchema {
         var timeSig: String
         var stepsSnapshotRaw: String
         var noteText: String
-        @Relationship(deleteRule: .cascade, inverse: \RecordingRef.session)
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV3.RecordingRef.session)
         var recordings: [RecordingRef]
 
         var createdAt: Date = Date()
@@ -190,7 +190,7 @@ enum GitaSchemaV3: VersionedSchema {
         var durationSec: Int = 0
         var createdAt: Date
         var label: String
-        var session: PracticeSession?
+        var session: GitaSchemaV3.PracticeSession?
 
         var updatedAt: Date = Date()
         var deletedAt: Date?

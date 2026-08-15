@@ -99,7 +99,11 @@ final class SwiftDataPracticeRepository: PracticeRepository {
     }
 
     func recording(id: String) throws -> RecordingRef? {
-        try sessions().lazy.flatMap(\.recordings).first { $0.id == id && $0.deletedAt == nil }
+        try context.fetch(
+            FetchDescriptor<RecordingRef>(
+                predicate: #Predicate { $0.id == id && $0.deletedAt == nil }
+            )
+        ).first
     }
 
     func add(_ task: TaskItem) throws { context.insert(task) }

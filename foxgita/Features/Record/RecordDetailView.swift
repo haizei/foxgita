@@ -234,7 +234,7 @@ struct RecordDetailView: View {
     }
 
     private func reviewHeader(_ r: RecordingRef) -> String {
-        let kind = r.fileName.lowercased().hasSuffix(".mov")
+        let kind = MediaReviewMedia.isVideo(fileName: r.fileName)
             ? String(localized: "视频")
             : String(localized: "录音")
         return "\(kind) \(r.durationLabel) · \(timeLabel(r.createdAt))"

@@ -96,7 +96,7 @@ struct ReviewGenerationSheet: View {
 
     private func rowTitle(_ recording: RecordingRef?) -> String {
         guard let recording else { return String(localized: "录音") }
-        let isVideo = URL(fileURLWithPath: recording.fileName).pathExtension.lowercased() == "mov"
+        let isVideo = MediaReviewMedia.isVideo(fileName: recording.fileName)
         let kind = isVideo ? String(localized: "视频") : String(localized: "录音")
         return "\(kind) \(recording.durationLabel)"
     }

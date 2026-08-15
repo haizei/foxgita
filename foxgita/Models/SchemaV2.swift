@@ -65,14 +65,14 @@ enum GitaSchemaV2: VersionedSchema {
         var timeSig: String
         var stepsSnapshotRaw: String
         var noteText: String
-        @Relationship(deleteRule: .cascade, inverse: \RecordingRef.session)
-        var recordings: [RecordingRef]
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV2.RecordingRef.session)
+        var recordings: [GitaSchemaV2.RecordingRef]
 
         init(
             id: String, taskId: String, taskTitle: String, categoryRaw: String,
             startedAt: Date, endedAt: Date, durationSec: Int, bpm: Int,
             timeSig: String, stepsSnapshotRaw: String, noteText: String,
-            recordings: [RecordingRef] = []
+            recordings: [GitaSchemaV2.RecordingRef] = []
         ) {
             self.id = id
             self.taskId = taskId
@@ -96,7 +96,7 @@ enum GitaSchemaV2: VersionedSchema {
         var bytes: Int
         var createdAt: Date
         var label: String
-        var session: PracticeSession?
+        var session: GitaSchemaV2.PracticeSession?
 
         init(id: String, fileName: String, bytes: Int, createdAt: Date, label: String) {
             self.id = id

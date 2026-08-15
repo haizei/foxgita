@@ -556,7 +556,7 @@ struct PracticeDetailView: View {
             return
         }
         Haptics.success()
-        let ids = clips.map(\.id)
+        let ids = clips.filter { FileManager.default.fileExists(atPath: $0.url.path) }.map(\.id)
         if !ids.isEmpty && llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
             store.markReviewsPending(recordingIds: ids)
             reviewRunner.enqueue(ids, baseURL: llmBaseURL, model: llmModel)

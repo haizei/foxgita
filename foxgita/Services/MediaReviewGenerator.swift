@@ -9,6 +9,13 @@ enum MediaReviewGeneratorError: Error, Equatable {
     case failed(VisionPracticeError)
 }
 
+enum MediaReviewMedia {
+    static func isVideo(fileName: String) -> Bool {
+        let ext = URL(fileURLWithPath: fileName).pathExtension.lowercased()
+        return ext == "mov" || ext == "mp4" || ext == "m4v"
+    }
+}
+
 protocol MediaImagePreparing: Sendable {
     func jpegImages(fileName: String) throws -> [Data]
 }
@@ -46,7 +53,9 @@ final class MediaReviewGenerator: MediaReviewGenerating {
 
         let jpegs: [Data]
         do {
-            jpegs = try images.jpegImages(fileName: context.fileName)
+            let preparer = images
+            let name = context.fileName
+            jpegs = try await Task.detached { try preparer.jpegImages(fileName: name) }.value
         } catch let error as MediaReviewGeneratorError {
             throw error
         } catch {
@@ -95,7 +104,7 @@ final class MediaReviewGenerator: MediaReviewGenerating {
             lines.append("笔记：\(note)")
         }
         lines.append("时长：\(context.durationSec)秒")
-        let isVideo = URL(fileURLWithPath: context.fileName).pathExtension.lowercased() == "mov"
+        let isVideo = MediaReviewMedia.isVideo(fileName: context.fileName)
         lines.append("媒介：\(isVideo ? "录像" : "录音")")
         return lines.joined(separator: "\n")
     }
@@ -107,7 +116,7 @@ struct FileMediaImagePreparer: MediaImagePreparing {
         guard FileManager.default.fileExists(atPath: url.path) else {
             throw MediaReviewGeneratorError.fileMissing
         }
-        if url.pathExtension.lowercased() == "mov" {
+        if MediaReviewMedia.isVideo(fileName: fileName) {
             return try Self.videoFrames(url: url)
         }
         return [try Self.waveformJPEG(url: url)]
@@ -120,7 +129,7 @@ struct FileMediaImagePreparer: MediaImagePreparing {
         if seconds <= 0 {
             times = [.zero]
         } else {
-            times = [0.0, 0.5, 1.0].map { fraction in
+            times = [0.0, 0.5, 0.98].map { fraction in
                 CMTime(seconds: seconds * fraction, preferredTimescale: 600)
             }
         }
