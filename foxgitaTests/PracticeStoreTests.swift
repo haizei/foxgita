@@ -191,7 +191,7 @@ struct PracticeStoreTests {
         #expect(
             store.finishSession(
                 taskId: "warm", steps: ["x"], note: "",
-                startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
+                startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
             ) == false
         )
         #expect(store.lastError == .diskFull)
@@ -200,15 +200,53 @@ struct PracticeStoreTests {
         #expect(repo.saveCount == 1) // only the seedActive save
     }
 
+    @Test func finishSessionRejectsEmptySession() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(
+            store.finishSession(
+                taskId: "warm", steps: [], note: "",
+                startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
+            ) == false
+        )
+        #expect(store.lastError == .invalidInput)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func finishSessionAcceptsZeroDurationWithNote() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(
+            store.finishSession(
+                taskId: "warm", steps: [], note: "只记一句",
+                startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
+            )
+        )
+        #expect(try repo.sessions().count == 1)
+        #expect(try repo.sessions()[0].noteText == "只记一句")
+    }
+
+    @Test func seedIfNeededWritesOnlyTemplates() throws {
+        let (store, repo, defaults) = makeStore(seeded: false)
+        store.seedIfNeeded()
+        #expect(defaults.bool(forKey: SeedData.seededKey))
+        let tasks = try repo.tasks()
+        #expect(tasks.allSatisfy { $0.isTemplate })
+        #expect(tasks.contains { $0.id == "warm" } == false)
+        #expect(tasks.contains { $0.id.hasPrefix("tpl-") })
+    }
+
     // MARK: - Reset
 
-    @Test func resetAllRestoresSeededCatalogue() throws {
+    @Test func resetAllRestoresTemplatesOnly() throws {
         let (store, repo, defaults) = makeStore(seeded: true)
         try seedActive(into: repo, id: "custom-only")
         store.resetAll()
         #expect(defaults.bool(forKey: SeedData.seededKey))
         let tasks = try repo.tasks()
-        #expect(tasks.contains { $0.id == "warm" })
+        #expect(tasks.contains { $0.id == "warm" } == false)
         #expect(tasks.contains { $0.isTemplate })
         #expect(tasks.contains { $0.id == "custom-only" } == false)
     }

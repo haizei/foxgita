@@ -34,7 +34,6 @@ final class PracticeStore {
     func seedIfNeeded() {
         guard !defaults.bool(forKey: SeedData.seededKey) else { return }
         perform {
-            for task in SeedData.todayTasks() { try repository.add(task) }
             for template in SeedData.templates() { try repository.add(template) }
             try repository.save()
             defaults.set(true, forKey: SeedData.seededKey)
@@ -210,6 +209,18 @@ final class PracticeStore {
             return false
         }
 
+        let existingClipCount = recordings.filter {
+            FileManager.default.fileExists(atPath: $0.url.path)
+        }.count
+        guard PracticeRecordRules.isEffective(
+            durationSec: durationSec,
+            noteText: note,
+            recordingCount: existingClipCount
+        ) else {
+            lastError = .invalidInput
+            return false
+        }
+
         let session = PracticeSession(
             taskId: task.id,
             taskTitle: task.title,
@@ -245,7 +256,6 @@ final class PracticeStore {
     func resetAll() {
         perform {
             try repository.removeAll()
-            for task in SeedData.todayTasks() { try repository.add(task) }
             for template in SeedData.templates() { try repository.add(template) }
             try repository.save()
             defaults.set(true, forKey: SeedData.seededKey)
