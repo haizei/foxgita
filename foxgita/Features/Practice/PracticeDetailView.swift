@@ -10,7 +10,11 @@ struct PracticeDetailView: View {
     let taskId: String
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
+    @Environment(ReviewJobRunner.self) private var reviewRunner
     @Query private var tasks: [TaskItem]
+    @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
+    @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    private let llmCredentials = LLMCredentialsStore()
 
     @State private var metronome = MetronomeEngine()
     @State private var practiceTimer = PracticeTimer()
@@ -22,6 +26,8 @@ struct PracticeDetailView: View {
     @State private var toast: String?
     @State private var confirmExit = false
     @State private var isCompleting = false
+    @State private var reviewClipIds: [String] = []
+    @State private var showReviewSheet = false
 
     init(taskId: String) {
         self.taskId = taskId
@@ -109,6 +115,13 @@ struct PracticeDetailView: View {
             Button("继续练习", role: .cancel) {}
         } message: {
             Text("返回会丢掉本次计时、录音和笔记。")
+        }
+        .sheet(isPresented: $showReviewSheet) {
+            ReviewGenerationSheet(recordingIds: reviewClipIds, taskTitle: task?.title ?? "") {
+                showReviewSheet = false
+                router.returnPracticeToToday = true
+                router.practicePath.removeAll()
+            }
         }
     }
 
@@ -543,6 +556,14 @@ struct PracticeDetailView: View {
             return
         }
         Haptics.success()
+        let ids = clips.map(\.id)
+        if !ids.isEmpty && llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
+            store.markReviewsPending(recordingIds: ids)
+            reviewRunner.enqueue(ids, baseURL: llmBaseURL, model: llmModel)
+            reviewClipIds = ids
+            showReviewSheet = true
+            return
+        }
         router.returnPracticeToToday = true
         router.practicePath.removeAll()
     }
