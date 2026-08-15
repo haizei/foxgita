@@ -25,6 +25,7 @@ struct PracticeDetailView: View {
     @State private var showNote = true
     @State private var toast: String?
     @State private var confirmExit = false
+    @State private var abandoning = false
     @State private var isCompleting = false
     @State private var openSessionId: String?
 
@@ -77,7 +78,7 @@ struct PracticeDetailView: View {
             practiceTimer.pause()
             metronome.stop()
             if recorder.isRecording { recorder.stop() }
-            if let task { persistPending(task: task) }
+            if !abandoning, let task { persistPending(task: task) }
             // Takes never attached to a session would otherwise linger on disk.
             recorder.discardPending()
             for clip in video.takeAll() {
@@ -113,7 +114,10 @@ struct PracticeDetailView: View {
         .confirmationDialog(
             "这次练习还没保存", isPresented: $confirmExit, titleVisibility: .visible
         ) {
-            Button("放弃并返回", role: .destructive) { leave() }
+            Button("放弃并返回", role: .destructive) {
+                abandoning = true
+                leave()
+            }
             Button("继续练习", role: .cancel) {}
         } message: {
             Text("返回会丢掉本次计时、录音和笔记。")
