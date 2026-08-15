@@ -15,6 +15,7 @@ protocol PracticeRepository: AnyObject {
     func task(id: String) throws -> TaskItem?
     func sessions() throws -> [PracticeSession]
     func session(id: String) throws -> PracticeSession?
+    func recording(id: String) throws -> RecordingRef?
     func add(_ task: TaskItem) throws
     func add(_ session: PracticeSession) throws
     func removeAll() throws
@@ -97,6 +98,10 @@ final class SwiftDataPracticeRepository: PracticeRepository {
         ).first
     }
 
+    func recording(id: String) throws -> RecordingRef? {
+        try sessions().lazy.flatMap(\.recordings).first { $0.id == id && $0.deletedAt == nil }
+    }
+
     func add(_ task: TaskItem) throws { context.insert(task) }
 
     func add(_ session: PracticeSession) throws { context.insert(session) }
@@ -141,6 +146,10 @@ final class InMemoryPracticeRepository: PracticeRepository {
 
     func session(id: String) throws -> PracticeSession? {
         try sessions().first { $0.id == id }
+    }
+
+    func recording(id: String) throws -> RecordingRef? {
+        storedSessions.lazy.flatMap(\.recordings).first { $0.id == id && $0.deletedAt == nil }
     }
 
     func add(_ task: TaskItem) throws { pendingTasks.append(task) }

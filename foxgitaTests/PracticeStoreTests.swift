@@ -250,4 +250,76 @@ struct PracticeStoreTests {
         #expect(tasks.contains { $0.isTemplate })
         #expect(tasks.contains { $0.id == "custom-only" } == false)
     }
+
+    // MARK: - Review writes
+
+    @Test func markPendingClearsReadyText() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: ["a"], note: "n",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 72,
+            recordings: []
+        ))
+        let session = try repo.sessions()[0]
+        let rec = RecordingRef(id: "clip-1", fileName: "x.m4a", bytes: 1, durationSec: 8)
+        rec.reviewStatus = .ready
+        rec.reviewHighlight = "旧"
+        rec.reviewFocus = "旧"
+        rec.reviewNextAction = "旧"
+        session.recordings.append(rec)
+        try repo.save()
+
+        store.markReviewsPending(recordingIds: ["clip-1"])
+        let after = try #require(try repo.recording(id: "clip-1"))
+        #expect(after.reviewStatus == .pending)
+        #expect(after.reviewHighlight.isEmpty)
+    }
+
+    @Test func applyReviewWritesThreeFields() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: ["慢速"], note: "笔记",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 80,
+            recordings: []
+        ))
+        let session = try repo.sessions()[0]
+        session.recordings.append(RecordingRef(id: "clip-2", fileName: "y.mov", bytes: 2, durationSec: 20))
+        try repo.save()
+
+        store.applyReview(
+            recordingId: "clip-2",
+            draft: MediaReviewDraft(highlight: "稳", focus: "F", nextAction: "70")
+        )
+        let rec = try #require(try repo.recording(id: "clip-2"))
+        #expect(rec.reviewStatus == .ready)
+        #expect(rec.reviewHighlight == "稳")
+
+        let ctx = try #require(store.reviewContext(recordingId: "clip-2"))
+        #expect(ctx.taskTitle == "指尖热身")
+        #expect(ctx.bpm == 80)
+        #expect(ctx.note == "笔记")
+        #expect(ctx.fileName == "y.mov")
+    }
+
+    @Test func markFailedClearsText() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: [], note: "n",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
+        ))
+        let session = try repo.sessions()[0]
+        let rec = RecordingRef(id: "clip-3", fileName: "z.m4a", bytes: 1)
+        rec.reviewStatus = .pending
+        session.recordings.append(rec)
+        try repo.save()
+
+        store.markReviewsFailed(recordingIds: ["clip-3", "missing"])
+        #expect(try repo.recording(id: "clip-3")?.reviewStatus == .failed)
+    }
 }

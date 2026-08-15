@@ -5,6 +5,17 @@
 
 import Foundation
 
+struct MediaReviewContext: Equatable, Sendable {
+    var recordingId: String
+    var fileName: String
+    var durationSec: Int
+    var taskTitle: String
+    var steps: [String]
+    var bpm: Int
+    var timeSig: String
+    var note: String
+}
+
 /// Command layer. Views read through `@Query` for free reactivity and write
 /// only through here, so every invariant and every error path lives in one
 /// place. Failures surface as `lastError` for the toast to pick up.
@@ -249,6 +260,70 @@ final class PracticeStore {
             try repository.save()
             return true
         } ?? false
+    }
+
+    // MARK: - Reviews
+
+    func markReviewsPending(recordingIds: [String]) {
+        perform {
+            for id in recordingIds {
+                guard let rec = try repository.recording(id: id) else { continue }
+                rec.reviewStatus = .pending
+                rec.reviewHighlight = ""
+                rec.reviewFocus = ""
+                rec.reviewNextAction = ""
+                rec.updatedAt = Date()
+                rec.syncState = .local
+            }
+            try repository.save()
+        }
+    }
+
+    func applyReview(recordingId: String, draft: MediaReviewDraft) {
+        perform {
+            if let rec = try repository.recording(id: recordingId) {
+                rec.reviewStatus = .ready
+                rec.reviewHighlight = draft.highlight
+                rec.reviewFocus = draft.focus
+                rec.reviewNextAction = draft.nextAction
+                rec.updatedAt = Date()
+                rec.syncState = .local
+            }
+            try repository.save()
+        }
+    }
+
+    func markReviewsFailed(recordingIds: [String]) {
+        perform {
+            for id in recordingIds {
+                guard let rec = try repository.recording(id: id) else { continue }
+                rec.reviewStatus = .failed
+                rec.reviewHighlight = ""
+                rec.reviewFocus = ""
+                rec.reviewNextAction = ""
+                rec.updatedAt = Date()
+                rec.syncState = .local
+            }
+            try repository.save()
+        }
+    }
+
+    func reviewContext(recordingId: String) -> MediaReviewContext? {
+        guard let recording = try? repository.recording(id: recordingId) else { return nil }
+        let session = recording.session ?? (try? repository.sessions().first { session in
+            session.recordings.contains { $0.id == recordingId && $0.deletedAt == nil }
+        })
+        guard let session else { return nil }
+        return MediaReviewContext(
+            recordingId: recording.id,
+            fileName: recording.fileName,
+            durationSec: recording.durationSec,
+            taskTitle: session.taskTitle,
+            steps: session.steps,
+            bpm: session.bpm,
+            timeSig: session.timeSig,
+            note: session.noteText
+        )
     }
 
     // MARK: - Data
