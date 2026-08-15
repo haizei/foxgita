@@ -21,6 +21,7 @@ struct PracticeDetailView: View {
     @State private var showNote = true
     @State private var toast: String?
     @State private var confirmExit = false
+    @State private var isCompleting = false
 
     init(taskId: String) {
         self.taskId = taskId
@@ -499,9 +500,19 @@ struct PracticeDetailView: View {
     }
 
     private func complete(_ task: TaskItem) {
+        guard !isCompleting else { return }
+        isCompleting = true
+
         if recorder.isRecording { recorder.stop(label: task.title) }
         practiceTimer.pause()
         metronome.stop()
+
+        if !hasUnsavedWork {
+            router.practiceToast = String(localized: "这次没有留下记录")
+            router.returnPracticeToToday = true
+            router.practicePath.removeAll()
+            return
+        }
 
         var clips = recorder.consume()
         clips += video.takeAll().map {
@@ -527,10 +538,13 @@ struct PracticeDetailView: View {
             bpm: metronome.bpm,
             recordings: clips
         )
-        guard saved else { return }
+        guard saved else {
+            isCompleting = false
+            return
+        }
         Haptics.success()
+        router.returnPracticeToToday = true
         router.practicePath.removeAll()
-        router.selectedTab = .record
     }
 
     private func show(_ message: String) {
