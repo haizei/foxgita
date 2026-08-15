@@ -180,7 +180,7 @@ struct SettingsView: View {
                                 .foregroundStyle(
                                     llmMissingFields.isEmpty ? GitaTheme.statusSuccess : GitaTheme.statusError
                                 )
-                            Text("图片会发送到你填写的接口地址，费用由该服务商向你收取。Gita 不托管密钥。")
+                            Text("图片、波形图和录像帧会发送到你填写的接口地址，费用由该服务商向你收取。Gita 不托管密钥。")
                                 .font(.system(size: 11))
                                 .foregroundStyle(GitaTheme.textSecondary)
                         }

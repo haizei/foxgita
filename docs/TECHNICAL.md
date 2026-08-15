@@ -1,6 +1,6 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V3 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V4 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
 > 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频
@@ -63,7 +63,7 @@ foxgita/
 │   └── Settings/             # 提醒 / 外观 / 清数据
 ├── Components/SharedUI.swift # StreakCard / TaskRowCard / DaySessionCard 等
 ├── Models/
-│   ├── Models.swift          # Schema V3 + MigrationPlan
+│   ├── Models.swift          # Schema V4 + MigrationPlan（V3 保留供迁移）
 │   └── SchemaV2.swift        # 仅供迁移与测试
 ├── Services/                 # 业务与基础设施（见 §5、§6）
 │   ├── PracticeStore.swift
@@ -252,9 +252,9 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 | `Documents/Recordings/` | m4a / mov（及兼容 mp4）二进制 |
 | UserDefaults | 外观、提醒开关与时间、seed 版本键 |
 
-### 6.2 数据库设计（Schema V3）
+### 6.2 数据库设计（Schema V4）
 
-定义位置：`foxgita/Models/Models.swift`（`GitaSchemaV3`）。  
+定义位置：`foxgita/Models/Models.swift`（`GitaSchemaV4`；`GitaSchemaV3` 同文件保留供迁移）。  
 容器创建：`foxgitaApp` → `ModelContainer(for:schema, migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
 媒体文件：`Documents/Recordings/`（见 `RecordingStore`）；库内只存 `fileName`。
 
@@ -325,20 +325,24 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `createdAt` | Date | 创建时间 |
 | `label` | String | 标签 |
 | `session` | PracticeSession? | 反向关系 |
+| `reviewStatusRaw` | String | 复盘状态；计算属性 `reviewStatus`：`none` / `pending` / `ready` / `failed` |
+| `reviewHighlight` | String | 亮点 |
+| `reviewFocus` | String | 优先改善 |
+| `reviewNextAction` | String | 下次练法 |
 | + 统一元数据 | | `updatedAt` / `deletedAt` / `syncStateRaw`（`createdAt` 见上） |
 
-计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
+计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
 `stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON。
 
 #### 迁移与别名
 
-- 迁移：`GitaSchemaV2` → `GitaSchemaV3` 轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`
+- 迁移：`GitaSchemaV2` → `GitaSchemaV3`、`GitaSchemaV3` → `GitaSchemaV4` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3 保留在 `Models.swift`
 - **禁止**「检测到旧 seed 键就 `delete(model:)` 整库清空」——上架后等同抹用户数据
 
 ```swift
-typealias TaskItem = GitaSchemaV3.TaskItem
-typealias PracticeSession = GitaSchemaV3.PracticeSession
-typealias RecordingRef = GitaSchemaV3.RecordingRef
+typealias TaskItem = GitaSchemaV4.TaskItem
+typealias PracticeSession = GitaSchemaV4.PracticeSession
+typealias RecordingRef = GitaSchemaV4.RecordingRef
 ```
 
 ### 6.3 业务逻辑：PracticeStore 命令
@@ -364,6 +368,10 @@ typealias RecordingRef = GitaSchemaV3.RecordingRef
 ### 6.3.1 图片生成练习（Vision）
 
 `RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。
+
+### 6.3.2 练后媒体复盘
+
+`PracticeStore.finishSession` 先落库。有新媒体且 AI 已配齐时，相关 `RecordingRef` 标 `pending`，`ReviewJobRunner`（App 级）按片段顺序调用 `MediaReviewGenerator` → `MediaReviewClient`；结果经 `MediaReviewDraft.normalize` 写回该条（`ready` / `failed`）。只上传 JPEG：录音 1 张波形图，录像最多 3 帧；不传完整音视频。记录详情第四栏「复盘」按条展示 / 生成 / 重试。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。
 
 ### 6.4 统计：StatsAggregator
 
@@ -436,7 +444,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按日分钟、时长进位 |
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
 | `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
-| `MigrationTests` | 磁盘上的 V2 store 迁到 V3，任务 / session / 录音与笔记保留 |
+| `MigrationTests` | 磁盘上的 V2 / V3 store 迁到 V4，任务 / session / 录音与笔记保留；旧录音 `reviewStatus == .none` |
 | `PracticeFlowUITests` | 启动见今日练习、创建练习进详情、空完成留在练习 Tab、推荐 Sheet、设置外观分段 |
 
 ### 8.3 手测 / 回归清单

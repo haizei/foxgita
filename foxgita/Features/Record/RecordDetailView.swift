@@ -10,10 +10,16 @@ import SwiftUI
 struct RecordDetailView: View {
     let taskId: String
     @Environment(AppRouter.self) private var router
+    @Environment(PracticeStore.self) private var store
+    @Environment(ReviewJobRunner.self) private var reviewRunner
     @Query private var tasks: [TaskItem]
     @Query private var sessions: [PracticeSession]
+    @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
+    @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    private let llmCredentials = LLMCredentialsStore()
     @State private var tab = 0
     @State private var player = AudioPlayerService()
+    @State private var toast: String?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -112,18 +118,26 @@ struct RecordDetailView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 20))
                         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
 
-                        SegmentedPills(titles: ["数据", "录音", "笔记"], selection: $tab)
+                        SegmentedPills(titles: ["数据", "录音", "笔记", "复盘"], selection: $tab)
 
                         Group {
                             switch tab {
                             case 1: audioPane
                             case 2: notePane
+                            case 3: reviewPane
                             default: dataPane
                             }
                         }
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 32)
+                }
+            }
+
+            if let toast {
+                VStack {
+                    Spacer()
+                    ToastBanner(text: toast).padding(.bottom, 40)
                 }
             }
         }
@@ -187,6 +201,111 @@ struct RecordDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    private var reviewPane: some View {
+        Group {
+            if recordings.isEmpty {
+                empty(
+                    String(localized: "还没有录音或录像"),
+                    String(localized: "练完录音或录像后可以生成复盘")
+                )
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(recordings, id: \.id) { r in
+                        reviewCard(r)
+                    }
+                }
+            }
+        }
+    }
+
+    private func reviewCard(_ r: RecordingRef) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(reviewHeader(r))
+                .font(.system(size: 13, weight: .semibold))
+            reviewBody(r)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func reviewHeader(_ r: RecordingRef) -> String {
+        let kind = r.fileName.lowercased().hasSuffix(".mov")
+            ? String(localized: "视频")
+            : String(localized: "录音")
+        return "\(kind) \(r.durationLabel) · \(timeLabel(r.createdAt))"
+    }
+
+    @ViewBuilder
+    private func reviewBody(_ r: RecordingRef) -> some View {
+        switch r.reviewStatus {
+        case .none:
+            statusRow(String(localized: "未分析"), action: String(localized: "生成复盘")) {
+                requestReview(r)
+            }
+        case .pending:
+            if reviewRunner.isRunning(r.id) {
+                Text(String(localized: "分析中"))
+                    .font(.system(size: 13))
+                    .foregroundStyle(GitaTheme.textSecondary)
+            } else {
+                statusRow(String(localized: "未完成"), action: String(localized: "重试")) {
+                    requestReview(r)
+                }
+            }
+        case .ready:
+            reviewField(String(localized: "亮点"), r.reviewHighlight)
+            reviewField(String(localized: "优先改善"), r.reviewFocus)
+            reviewField(String(localized: "下次练法"), r.reviewNextAction)
+        case .failed:
+            statusRow(String(localized: "生成失败，可重试"), action: String(localized: "重试")) {
+                requestReview(r)
+            }
+        }
+    }
+
+    private func statusRow(_ status: String, action: String, onTap: @escaping () -> Void) -> some View {
+        HStack {
+            Text(status)
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            Spacer()
+            Button(action: onTap) {
+                Text(action)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func reviewField(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(GitaTheme.textSecondary)
+            Text(value).font(.system(size: 14))
+        }
+    }
+
+    private func requestReview(_ r: RecordingRef) {
+        if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
+            store.markReviewsPending(recordingIds: [r.id])
+            reviewRunner.enqueue([r.id], baseURL: llmBaseURL, model: llmModel)
+        } else {
+            show(String(localized: "先去设置里填写 AI 接口"))
+        }
+    }
+
+    private func show(_ message: String) {
+        toast = message
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            if toast == message { toast = nil }
         }
     }
 
