@@ -246,6 +246,7 @@ struct PracticeStoreTests {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let clip = try writeClip(id: "c1")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let sid = store.beginOpenSession(
             taskId: "warm", steps: ["a"], note: "",
@@ -280,12 +281,18 @@ struct PracticeStoreTests {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let now = Date()
+        let clipA = try writeClip(id: "a")
+        let clipB = try writeClip(id: "b")
+        defer {
+            RecordingStore.delete(fileName: clipA.fileName)
+            RecordingStore.delete(fileName: clipB.fileName)
+        }
         let sid = try #require(store.beginOpenSession(
             taskId: "warm", steps: [], note: "",
             startedAt: now, endedAt: now, durationSec: 0, bpm: 80,
-            clip: try writeClip(id: "a")
+            clip: clipA
         ))
-        #expect(store.appendRecording(sessionId: sid, clip: try writeClip(id: "b")))
+        #expect(store.appendRecording(sessionId: sid, clip: clipB))
         #expect(try repo.session(id: sid)?.recordings.map(\.id).sorted() == ["a", "b"])
         #expect(try repo.sessions().count == 1)
     }
@@ -294,10 +301,12 @@ struct PracticeStoreTests {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clip = try writeClip(id: "a")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
         let sid = try #require(store.beginOpenSession(
             taskId: "warm", steps: ["旧"], note: "",
             startedAt: start, endedAt: start, durationSec: 0, bpm: 80,
-            clip: try writeClip(id: "a")
+            clip: clip
         ))
         let end = start.addingTimeInterval(90)
         #expect(store.updateOpenSession(
@@ -316,10 +325,12 @@ struct PracticeStoreTests {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let now = Date()
+        let clip = try writeClip(id: "a")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
         let sid = try #require(store.beginOpenSession(
             taskId: "warm", steps: [], note: "",
             startedAt: now, endedAt: now, durationSec: 0, bpm: 80,
-            clip: try writeClip(id: "a")
+            clip: clip
         ))
         #expect(store.updateOpenSession(
             sessionId: sid, steps: [], note: "",

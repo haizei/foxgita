@@ -89,15 +89,18 @@ struct PracticeDetailView: View {
             AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
                 metronome.stop()
                 practiceTimer.pause()
-                if recorder.isRecording { recorder.stop() }
+                if recorder.isRecording { recorder.stop(label: task.title) }
             }
         }
         .onDisappear {
             AudioSessionCoordinator.shared.onInterruption = nil
             practiceTimer.pause()
             metronome.stop()
-            if recorder.isRecording { recorder.stop() }
-            if !abandoning, let task { persistPending(task: task) }
+            if recorder.isRecording { recorder.stop(label: task?.title ?? "") }
+            if !abandoning, let task {
+                persistPending(task: task)
+                saveOpenSession(task: task)
+            }
             // Takes never attached to a session would otherwise linger on disk.
             recorder.discardPending()
             for clip in video.takeAll() {
@@ -490,6 +493,9 @@ struct PracticeDetailView: View {
     }
 
     private func relativeTime(_ date: Date) -> String {
+        if Date().timeIntervalSince(date) < 60 {
+            return String(localized: "刚刚")
+        }
         let f = RelativeDateTimeFormatter()
         f.locale = Locale(identifier: "zh-Hans")
         f.unitsStyle = .short
@@ -631,8 +637,8 @@ struct PracticeDetailView: View {
     private func requestExit() {
         practiceTimer.pause()
         metronome.stop()
-        if let task, recorder.isRecording {
-            recorder.stop(label: task.title)
+        if let task {
+            if recorder.isRecording { recorder.stop(label: task.title) }
             persistPending(task: task)
         }
         if openSessionId != nil {
