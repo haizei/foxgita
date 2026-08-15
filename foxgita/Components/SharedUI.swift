@@ -201,6 +201,10 @@ struct SwipeRevealRow<Content: View>: View {
 
     private let actionWidth: CGFloat = 72
     private var revealWidth: CGFloat { actionWidth * 2 }
+    /// Stationary parent space. Measuring translation on the offset card (even
+    /// `.global`) feeds the card's own displacement back into the gesture.
+    private let swipeSpace = "swipe-reveal"
+    private let settleSpring = Animation.spring(response: 0.28, dampingFraction: 1)
     /// Figma swipe edit fill ≈ `#b2b2bd`
     private let editFill = Color(red: 178 / 255, green: 178 / 255, blue: 189 / 255)
 
@@ -251,28 +255,33 @@ struct SwipeRevealRow<Content: View>: View {
                 }
                 .gesture(dragGesture)
         }
+        .coordinateSpace(.named(swipeSpace))
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
         .accessibilityHint(Text("左滑可编辑或删除"))
     }
 
     private var dragGesture: some Gesture {
-        // Measured globally: a `.local` space rides along with `offset`, feeding the
-        // row's own displacement back into `translation` and shaking it at the limit.
-        DragGesture(minimumDistance: 16, coordinateSpace: .global)
+        DragGesture(minimumDistance: 16, coordinateSpace: .named(swipeSpace))
             .onChanged { value in
                 let horizontal = value.translation.width
                 let vertical = value.translation.height
                 // Prefer horizontal so ScrollView vertical scroll still works.
                 guard abs(horizontal) > abs(vertical) || dragTranslation != 0 else { return }
-                dragTranslation = horizontal
+                var transaction = Transaction()
+                transaction.disablesAnimations = true
+                withTransaction(transaction) {
+                    dragTranslation = horizontal
+                }
             }
             .onEnded { value in
                 let horizontal = value.translation.width
                 let projected = settledOffset + value.predictedEndTranslation.width
                 let shouldOpen = projected < -revealWidth * 0.35 || horizontal < -revealWidth * 0.35
-                dragTranslation = 0
-                withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                // Reset translation in the same animation as open/close. Zeroing it
+                // first snaps the card to `settledOffset` (a rightward jerk on left-swipe).
+                withAnimation(settleSpring) {
+                    dragTranslation = 0
                     if shouldOpen {
                         openRowId = id
                     } else if openRowId == id {
@@ -283,8 +292,8 @@ struct SwipeRevealRow<Content: View>: View {
     }
 
     private func close() {
-        dragTranslation = 0
-        withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+        withAnimation(settleSpring) {
+            dragTranslation = 0
             if openRowId == id { openRowId = nil }
         }
     }
