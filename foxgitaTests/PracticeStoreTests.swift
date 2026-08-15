@@ -228,6 +228,106 @@ struct PracticeStoreTests {
         #expect(try repo.sessions()[0].noteText == "只记一句")
     }
 
+    private func writeClip(
+        id: String = UUID().uuidString,
+        fileName: String? = nil,
+        durationSec: Int = 8
+    ) throws -> AudioRecorderService.Clip {
+        let name = fileName ?? "open-\(UUID().uuidString).m4a"
+        let url = RecordingStore.url(for: name)
+        try Data([0x00]).write(to: url)
+        return AudioRecorderService.Clip(
+            id: id, fileName: name, bytes: 1,
+            durationSec: durationSec, createdAt: Date(), label: ""
+        )
+    }
+
+    @Test func beginOpenSessionWritesSessionAndClipId() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let clip = try writeClip(id: "c1")
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let sid = store.beginOpenSession(
+            taskId: "warm", steps: ["a"], note: "",
+            startedAt: start, endedAt: start, durationSec: 0, bpm: 80,
+            clip: clip
+        )
+        #expect(sid != nil)
+        let session = try #require(try repo.session(id: sid!))
+        #expect(session.recordings.count == 1)
+        #expect(session.recordings[0].id == "c1")
+        #expect(session.durationSec == 0)
+        #expect(try repo.task(id: "warm")?.steps == ["a"])
+    }
+
+    @Test func beginOpenSessionMissingFileWritesNothing() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let clip = AudioRecorderService.Clip(
+            id: "ghost", fileName: "missing-\(UUID().uuidString).m4a",
+            bytes: 1, durationSec: 3, createdAt: Date(), label: ""
+        )
+        let now = Date()
+        #expect(store.beginOpenSession(
+            taskId: "warm", steps: [], note: "",
+            startedAt: now, endedAt: now, durationSec: 0, bpm: 80, clip: clip
+        ) == nil)
+        #expect(store.lastError == .fileMissing)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func appendRecordingAddsSecondClip() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        let sid = try #require(store.beginOpenSession(
+            taskId: "warm", steps: [], note: "",
+            startedAt: now, endedAt: now, durationSec: 0, bpm: 80,
+            clip: try writeClip(id: "a")
+        ))
+        #expect(store.appendRecording(sessionId: sid, clip: try writeClip(id: "b")))
+        #expect(try repo.session(id: sid)?.recordings.map(\.id).sorted() == ["a", "b"])
+        #expect(try repo.sessions().count == 1)
+    }
+
+    @Test func updateOpenSessionWritesNoteAndDuration() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let sid = try #require(store.beginOpenSession(
+            taskId: "warm", steps: ["旧"], note: "",
+            startedAt: start, endedAt: start, durationSec: 0, bpm: 80,
+            clip: try writeClip(id: "a")
+        ))
+        let end = start.addingTimeInterval(90)
+        #expect(store.updateOpenSession(
+            sessionId: sid, steps: ["新"], note: "记",
+            endedAt: end, durationSec: 90, bpm: 88
+        ))
+        let session = try #require(try repo.session(id: sid))
+        #expect(session.noteText == "记")
+        #expect(session.durationSec == 90)
+        #expect(session.bpm == 88)
+        #expect(session.steps == ["新"])
+        #expect(try repo.task(id: "warm")?.steps == ["新"])
+    }
+
+    @Test func updateOpenSessionAllowsZeroDurationWhenClipsExist() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        let sid = try #require(store.beginOpenSession(
+            taskId: "warm", steps: [], note: "",
+            startedAt: now, endedAt: now, durationSec: 0, bpm: 80,
+            clip: try writeClip(id: "a")
+        ))
+        #expect(store.updateOpenSession(
+            sessionId: sid, steps: [], note: "",
+            endedAt: now, durationSec: 0, bpm: 80
+        ))
+        #expect(try repo.session(id: sid)?.durationSec == 0)
+    }
+
     @Test func seedIfNeededWritesOnlyTemplates() throws {
         let (store, repo, defaults) = makeStore(seeded: false)
         store.seedIfNeeded()

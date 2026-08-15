@@ -262,6 +262,108 @@ final class PracticeStore {
         } ?? false
     }
 
+    func beginOpenSession(
+        taskId: String,
+        steps: [String],
+        note: String,
+        startedAt: Date,
+        endedAt: Date,
+        durationSec: Int,
+        bpm: Int,
+        clip: AudioRecorderService.Clip
+    ) -> String? {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return nil
+        }
+        guard endedAt >= startedAt, durationSec >= 0 else {
+            lastError = .invalidInput
+            return nil
+        }
+        guard FileManager.default.fileExists(atPath: clip.url.path) else {
+            lastError = .fileMissing
+            return nil
+        }
+        let session = PracticeSession(
+            taskId: task.id,
+            taskTitle: task.title,
+            category: task.category,
+            startedAt: startedAt,
+            endedAt: endedAt,
+            durationSec: durationSec,
+            bpm: bpm,
+            timeSig: task.timeSig,
+            steps: steps,
+            noteText: note
+        )
+        session.recordings.append(Self.ref(from: clip))
+        return produce {
+            task.steps = steps
+            task.touch()
+            try repository.add(session)
+            try repository.save()
+            return session.id
+        }
+    }
+
+    func appendRecording(sessionId: String, clip: AudioRecorderService.Clip) -> Bool {
+        guard let session = try? repository.session(id: sessionId) else {
+            lastError = .notFound
+            return false
+        }
+        guard FileManager.default.fileExists(atPath: clip.url.path) else {
+            lastError = .fileMissing
+            return false
+        }
+        return produce {
+            session.recordings.append(Self.ref(from: clip))
+            session.updatedAt = Date()
+            try repository.save()
+            return true
+        } ?? false
+    }
+
+    func updateOpenSession(
+        sessionId: String,
+        steps: [String],
+        note: String,
+        endedAt: Date,
+        durationSec: Int,
+        bpm: Int
+    ) -> Bool {
+        guard let session = try? repository.session(id: sessionId) else {
+            lastError = .notFound
+            return false
+        }
+        guard let task = try? repository.task(id: session.taskId) else {
+            lastError = .notFound
+            return false
+        }
+        guard endedAt >= session.startedAt, durationSec >= 0 else {
+            lastError = .invalidInput
+            return false
+        }
+        return produce {
+            session.stepsSnapshotRaw = StepCoding.encode(steps)
+            session.noteText = note
+            session.endedAt = endedAt
+            session.durationSec = durationSec
+            session.bpm = bpm
+            session.updatedAt = Date()
+            task.steps = steps
+            task.touch()
+            try repository.save()
+            return true
+        } ?? false
+    }
+
+    private static func ref(from clip: AudioRecorderService.Clip) -> RecordingRef {
+        RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes,
+            durationSec: clip.durationSec, createdAt: clip.createdAt, label: clip.label
+        )
+    }
+
     // MARK: - Reviews
 
     func markReviewsPending(recordingIds: [String]) {

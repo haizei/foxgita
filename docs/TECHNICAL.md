@@ -360,6 +360,9 @@ typealias RecordingRef = GitaSchemaV4.RecordingRef
 | `updateTask(id:title:subtitle:minutes:)` | 编辑标题/备注；分钟钳制 1…60；空标题保留原值 |
 | `softDeleteTask(id)` | 写 `deletedAt` 并 `touch()`（tombstone，供未来同步） |
 | `finishSession(...)` | `endedAt >= startedAt`、`durationSec >= 0`；无效记录（0 秒且无笔记/录音）返回 `false` 并设 `.invalidInput`；媒体文件存在才建 `RecordingRef`（音频+视频）；一次 save 成功或整体 rollback |
+| `beginOpenSession(...)` | 文件在磁盘才建 session + 第一条 `RecordingRef`（id=clip.id）；否则 `.fileMissing` |
+| `appendRecording(sessionId:clip:)` | 挂到已有 session；缺文件 / 缺 session 失败 |
+| `updateOpenSession(...)` | 更新时长/笔记/步骤/`endedAt`/BPM；已有录音时允许 0 秒 |
 | `resetAll()` | 清库 + 清录音文件；只写入模板，不写入 `todayTasks()` |
 | `gcOrphanRecordings()` | 删除无引用的 m4a/mov/mp4 |
 
