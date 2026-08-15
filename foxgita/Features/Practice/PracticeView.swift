@@ -21,7 +21,6 @@ struct PracticeView: View {
     private var sessions: [PracticeSession]
 
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
-    @State private var weekAnchor = StatsAggregator.week().start
     @State private var toast: String?
     @State private var showSheet = false
     @State private var pendingTaskId: String?
@@ -63,7 +62,7 @@ struct PracticeView: View {
 
     private var streak: Int { StatsAggregator.streakDays(from: sessions) }
     private var weekDays: [StatsAggregator.WeekDay] {
-        StatsAggregator.weekDays(from: sessions, containing: weekAnchor)
+        StatsAggregator.weekDays(from: sessions)
     }
     private var weekDone: Int { weekDays.filter(\.practiced).count }
     private var totalTarget: Int { activeTasks.reduce(0) { $0 + $1.targetMin } }
@@ -84,7 +83,7 @@ struct PracticeView: View {
         if isSelectedFuture {
             return String(localized: "先练今天")
         }
-        return String(localized: "\(dayGroups.count) 次记录")
+        return String(localized: "\(dayGroups.count) 项")
     }
 
     private var greeting: String {
@@ -184,6 +183,7 @@ struct PracticeView: View {
                         Spacer()
                         ToastBanner(text: toast).padding(.bottom, 40)
                     }
+                    .frame(maxWidth: .infinity)
                 }
             }
             .navigationBarHidden(true)
@@ -276,7 +276,6 @@ struct PracticeView: View {
                 guard requested else { return }
                 router.returnPracticeToToday = false
                 selectedDay = calendar.startOfDay(for: Date())
-                weekAnchor = StatsAggregator.week().start
             }
             .onChange(of: router.practiceToast) { _, message in
                 guard let message else { return }

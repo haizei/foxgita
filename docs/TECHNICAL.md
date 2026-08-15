@@ -114,7 +114,7 @@ flowchart TD
 | 计时中返回 | `confirmationDialog` 二次确认，避免误丢本次记录 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 打开系统相机；片段进 pending，完成时与音频一并入库 |
-| 完成练习 | 成功触感 + 跳转记录 Tab |
+| 完成练习 | 成功触感 + 回到今天的练习列表 |
 | 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 复位到今天并打开今日第一项 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
 
@@ -437,7 +437,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
 | `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
 | `MigrationTests` | 磁盘上的 V2 store 迁到 V3，任务 / session / 录音与笔记保留 |
-| `PracticeFlowUITests` | 启动见今日练习、开始进详情、推荐 Sheet、设置外观分段 |
+| `PracticeFlowUITests` | 启动见今日练习、创建练习进详情、空完成留在练习 Tab、推荐 Sheet、设置外观分段 |
 
 ### 8.3 手测 / 回归清单
 
@@ -501,7 +501,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
   -destination 'platform=iOS Simulator,name=iPhone 17' test
 ```
 
-首次启动会 seed 今日练习与推荐模板；设置页可「清除本地数据」回到初始状态。
+首次启动只 seed 推荐模板，不写入今日练习；设置页可「清除本地数据」回到初始状态。
 
 设计参考（仓库外）：
 
