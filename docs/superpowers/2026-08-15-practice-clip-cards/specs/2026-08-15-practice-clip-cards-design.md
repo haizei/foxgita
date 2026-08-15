@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-15  
-**状态：** Draft — awaiting user review of this file  
+**状态：** Approved — implementation plan in `../plans/2026-08-15-practice-clip-cards.md`  
 **Figma：** [05_Product Flow](https://www.figma.com/design/smeuuUaTOYE1URHhIGbzyd/%E5%90%89%E4%BB%96%E8%AE%AD%E8%AE%B0app?node-id=58-2) 录音 / 录视频按钮下方的摘要卡  
 **范围：** 练习详情展示本次已录片段；停录即写入 `PracticeSession` / `RecordingRef` 并入队复盘；「查看复盘」在卡片内展开  
 **修订：** 覆盖 [练后媒体复盘](../../2026-08-15-media-review/specs/2026-08-15-media-review-design.md) 中「完成即分析 / 处理 Sheet / 返回丢掉录音 / 结果只在记录详情」四条。Runner、Client、Generator、复盘字段、记录详情「复盘」栏仍按原文。
