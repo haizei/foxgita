@@ -52,15 +52,28 @@ enum StatsAggregator {
         let practiced: Bool
     }
 
+    struct DayTaskGroup: Identifiable, Equatable {
+        var id: String { taskId }
+        let taskId: String
+        let title: String
+        let totalMinutes: Int
+        let category: PracticeCategory
+    }
+
     static func weekDays(
-        from sessions: [PracticeSession], now: Date = .now, calendar: Calendar = .current
+        from sessions: [PracticeSession],
+        containing dateInWeek: Date? = nil,
+        now: Date = .now,
+        calendar: Calendar = .current
     ) -> [WeekDay] {
         let labels = weekdaySymbols
-        let start = week(containing: now, calendar: calendar).start
+        let start = week(containing: dateInWeek ?? now, calendar: calendar).start
         let today = calendar.startOfDay(for: now)
         return (0..<7).map { offset in
             let date = calendar.date(byAdding: .day, value: offset, to: start) ?? today
-            let practiced = sessions.contains { calendar.isDate($0.endedAt, inSameDayAs: date) }
+            let practiced = sessions.contains {
+                $0.isEffective && calendar.isDate($0.endedAt, inSameDayAs: date)
+            }
             return WeekDay(
                 date: date,
                 weekdayLabel: labels[offset],
@@ -69,6 +82,31 @@ enum StatsAggregator {
                 isFuture: date > today,
                 practiced: practiced
             )
+        }
+    }
+
+    static func dayTaskGroups(
+        sessions: [PracticeSession],
+        on day: Date,
+        calendar: Calendar = .current
+    ) -> [DayTaskGroup] {
+        let effective = sessions.filter {
+            $0.isEffective && calendar.isDate($0.endedAt, inSameDayAs: day)
+        }
+        let grouped = Dictionary(grouping: effective, by: \.taskId)
+        return grouped.map { taskId, items in
+            let latest = items.max(by: { $0.endedAt < $1.endedAt })!
+            return DayTaskGroup(
+                taskId: taskId,
+                title: latest.taskTitle,
+                totalMinutes: items.reduce(0) { $0 + $1.durationMinutes },
+                category: latest.category
+            )
+        }
+        .sorted { lhs, rhs in
+            let left = grouped[lhs.taskId]!.map(\.endedAt).max()!
+            let right = grouped[rhs.taskId]!.map(\.endedAt).max()!
+            return left > right
         }
     }
 
@@ -92,7 +130,9 @@ enum StatsAggregator {
 
     static func streakDays(from sessions: [PracticeSession], now: Date = .now) -> Int {
         let cal = Calendar.current
-        let days = Set(sessions.map { cal.startOfDay(for: $0.endedAt) })
+        let days = Set(
+            sessions.filter(\.isEffective).map { cal.startOfDay(for: $0.endedAt) }
+        )
         var cursor = cal.startOfDay(for: now)
         if !days.contains(cursor) {
             guard let y = cal.date(byAdding: .day, value: -1, to: cursor) else { return 0 }
@@ -118,7 +158,9 @@ enum StatsAggregator {
         let today = cal.startOfDay(for: now)
         return (0..<7).map { i in
             let day = cal.date(byAdding: .day, value: i, to: start) ?? today
-            let practiced = sessions.contains { cal.isDate($0.endedAt, inSameDayAs: day) }
+            let practiced = sessions.contains {
+                $0.isEffective && cal.isDate($0.endedAt, inSameDayAs: day)
+            }
             let label = labels[i]
             if cal.isDate(day, inSameDayAs: today) { return (label, practiced ? .done : .today) }
             if day > today { return (label, .future) }

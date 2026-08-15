@@ -27,19 +27,22 @@ struct StatsAggregatorTests {
         endedAt: Date,
         minutes: Int,
         taskId: String = "task",
+        taskTitle: String = "练习",
+        note: String = "",
         category: PracticeCategory = .chord,
         into context: ModelContext
     ) -> PracticeSession {
         let session = PracticeSession(
             taskId: taskId,
-            taskTitle: "练习",
+            taskTitle: taskTitle,
             category: category,
             startedAt: endedAt.addingTimeInterval(-Double(minutes) * 60),
             endedAt: endedAt,
             durationSec: minutes * 60,
             bpm: 80,
             timeSig: "4/4",
-            steps: []
+            steps: [],
+            noteText: note
         )
         context.insert(session)
         return session
@@ -83,6 +86,30 @@ struct StatsAggregatorTests {
 
     @Test func streakOfNothingIsZero() throws {
         #expect(StatsAggregator.streakDays(from: [], now: Self.anchor) == 0)
+    }
+
+    @Test func weekDaysIgnoresIneffectiveSessions() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let context = try makeContext()
+        let tuesday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 14, hour: 12))!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        insertSession(endedAt: tuesday, minutes: 0, into: context)
+
+        let days = StatsAggregator.weekDays(
+            from: sessions(in: context),
+            containing: tuesday,
+            now: friday,
+            calendar: calendar
+        )
+        #expect(days.filter(\.practiced).isEmpty)
+    }
+
+    @Test func streakIgnoresADayWithOnlyEmptySessions() throws {
+        let context = try makeContext()
+        insertSession(endedAt: day(0), minutes: 0, into: context)
+        insertSession(endedAt: day(-1), minutes: 10, into: context)
+        #expect(StatsAggregator.streakDays(from: sessions(in: context), now: Self.anchor) == 1)
     }
 
     // MARK: - week dots
@@ -209,6 +236,49 @@ struct StatsAggregatorTests {
         )
         context.insert(session)
         #expect(session.durationMinutes == expected)
+    }
+
+    @Test func dayTaskGroupsMergesEffectiveSessionsAndDropsEmpty() throws {
+        let context = try makeContext()
+        let dayStart = Calendar.current.startOfDay(for: Self.anchor)
+        insertSession(
+            endedAt: dayStart.addingTimeInterval(3600), minutes: 1,
+            taskId: "song", taskTitle: "知足", into: context
+        )
+        insertSession(
+            endedAt: dayStart.addingTimeInterval(7200), minutes: 1,
+            taskId: "song", taskTitle: "知足", into: context
+        )
+        for offset in 3...6 {
+            insertSession(
+                endedAt: dayStart.addingTimeInterval(Double(offset) * 3600),
+                minutes: 0, taskId: "song", taskTitle: "知足", into: context
+            )
+        }
+        insertSession(
+            endedAt: dayStart.addingTimeInterval(100), minutes: 10,
+            taskId: "other", taskTitle: "音阶", into: context
+        )
+
+        let groups = StatsAggregator.dayTaskGroups(sessions: sessions(in: context), on: dayStart)
+        #expect(groups.count == 2)
+        let song = try #require(groups.first { $0.taskId == "song" })
+        #expect(song.title == "知足")
+        #expect(song.totalMinutes == 2)
+        #expect(groups.contains { $0.taskId == "other" && $0.totalMinutes == 10 })
+    }
+
+    @Test func dayTaskGroupsKeepsZeroMinuteNoteOnlySession() throws {
+        let context = try makeContext()
+        let dayStart = Calendar.current.startOfDay(for: Self.anchor)
+        insertSession(
+            endedAt: dayStart.addingTimeInterval(60), minutes: 0,
+            taskId: "song", taskTitle: "知足", note: "只写了笔记", into: context
+        )
+        let groups = StatsAggregator.dayTaskGroups(sessions: sessions(in: context), on: dayStart)
+        #expect(groups.count == 1)
+        #expect(groups[0].totalMinutes == 0)
+        #expect(groups[0].title == "知足")
     }
 
     private func sessions(in context: ModelContext) -> [PracticeSession] {
