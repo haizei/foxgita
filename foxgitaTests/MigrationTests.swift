@@ -9,9 +9,9 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V3 migration plan and
-/// checks that user rows survive — the exact failure mode of the old
-/// "delete everything on seed bump" path.
+/// Boots a V2 store on disk, then reopens it under the V4 migration plan
+/// (V2→V3→V4) and checks that user rows survive — the exact failure mode
+/// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
     @Test func v2StoreMigratesToV3WithoutLosingRows() throws {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V3 + migration plan --------------------
-        let v3Schema = Schema(versionedSchema: GitaSchemaV3.self)
-        let config = ModelConfiguration(schema: v3Schema, url: url)
+        // --- Phase 2: reopen under V4 + migration plan --------------------
+        let v4Schema = Schema(versionedSchema: GitaSchemaV4.self)
+        let config = ModelConfiguration(schema: v4Schema, url: url)
         let container = try ModelContainer(
-            for: v3Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v4Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -83,5 +83,44 @@ struct MigrationTests {
         #expect(recordings[0].fileName == "legacy.m4a")
         #expect(recordings[0].durationSec == 0) // new field, defaulted
         #expect(recordings[0].label == "片段")
+        #expect(recordings[0].reviewStatus == .none)
+        #expect(recordings[0].reviewHighlight.isEmpty)
+    }
+
+    @Test func v3StoreMigratesToV4WithEmptyReview() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v3-v4-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v3Schema = Schema(versionedSchema: GitaSchemaV3.self)
+            let config = ModelConfiguration(schema: v3Schema, url: url)
+            let container = try ModelContainer(for: v3Schema, configurations: [config])
+            let context = ModelContext(container)
+            let session = GitaSchemaV3.PracticeSession(
+                id: "s1", taskId: "warm", taskTitle: "指尖热身",
+                category: .left, startedAt: Date(), endedAt: Date(),
+                durationSec: 60, bpm: 80, timeSig: "4/4",
+                steps: ["开放弦"], noteText: ""
+            )
+            session.recordings.append(
+                GitaSchemaV3.RecordingRef(
+                    id: "r1", fileName: "clip.m4a", bytes: 100, durationSec: 12,
+                    createdAt: Date(), label: "录音"
+                )
+            )
+            context.insert(session)
+            try context.save()
+        }
+
+        let v4Schema = Schema(versionedSchema: GitaSchemaV4.self)
+        let config = ModelConfiguration(schema: v4Schema, url: url)
+        let container = try ModelContainer(
+            for: v4Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
+        #expect(recordings.count == 1)
+        #expect(recordings[0].id == "r1")
+        #expect(recordings[0].reviewStatus == .none)
     }
 }
