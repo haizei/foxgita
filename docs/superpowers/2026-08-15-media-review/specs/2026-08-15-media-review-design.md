@@ -3,9 +3,9 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-15  
-**状态：** Approved in conversation — awaiting implementation plan  
+**状态：** Implemented；触发与完成路径见修订规格 [练习详情片段卡](../../2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md)  
 **Figma：** [05_Product Flow](https://www.figma.com/design/smeuuUaTOYE1URHhIGbzyd/%E5%90%89%E4%BB%96%E8%AE%AD%E8%AE%B0app?node-id=58-2) 中 `Flow / AI Recording & Video Coaching`（节点 `264:267`）与主流程第 8–10 屏  
-**范围：** 完成练习后对**每条**录音/录像做一次大模型分析，结果写在记录详情「复盘」栏  
+**范围：** 每条录音/录像一次大模型分析，结果写在 `RecordingRef` 与记录详情「复盘」栏。**完成即分析 / 处理 Sheet / 返回丢掉录音** 已由片段卡规格覆盖。  
 **方案：** 方案 2 — 复盘挂在 `RecordingRef`；走现有 Vision 通道（波形图 / 关键帧 + 文本），不传完整音视频
 
 ---
@@ -26,6 +26,8 @@ Figma 画了完整 AI 陪练（选媒介、实时轻反馈、时间线打点）�
 ---
 
 ## 2. 产品决策
+
+> 触发、完成 Sheet、返回是否丢掉录音：以 [练习详情片段卡](../../2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md) 为准。下表保留当时决策。
 
 | 项 | 选择 |
 |---|---|
