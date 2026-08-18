@@ -34,6 +34,8 @@ struct PracticeDetailView: View {
     @State private var abandoning = false
     @State private var isCompleting = false
     @State private var openSessionId: String?
+    @State private var analysisRoute: VideoRoute?
+    @State private var diagnosisRoute: VideoRoute?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -132,6 +134,18 @@ struct PracticeDetailView: View {
                 onCancel: { video.dismiss() }
             )
             .ignoresSafeArea()
+        }
+        .fullScreenCover(item: $analysisRoute) { route in
+            VideoAnalysisView(
+                recordingId: route.id,
+                taskTitle: task?.title ?? "",
+                durationSec: route.durationSec,
+                onDismiss: { analysisRoute = nil },
+                onReady: {
+                    analysisRoute = nil
+                    diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
+                }
+            )
         }
         .confirmationDialog(
             "这次练习还没保存", isPresented: $confirmExit, titleVisibility: .visible
@@ -689,6 +703,9 @@ struct PracticeDetailView: View {
         if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
             store.markReviewsPending(recordingIds: [clip.id])
             reviewRunner.enqueue([clip.id], baseURL: llmBaseURL, model: llmModel)
+            if MediaReviewMedia.isVideo(fileName: clip.fileName) {
+                analysisRoute = VideoRoute(id: clip.id, durationSec: clip.durationSec)
+            }
         }
     }
 
@@ -758,4 +775,9 @@ struct PracticeDetailView: View {
             if toast == message { toast = nil }
         }
     }
+}
+
+private struct VideoRoute: Identifiable {
+    var id: String
+    var durationSec: Int
 }
