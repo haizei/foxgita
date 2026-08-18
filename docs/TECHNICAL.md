@@ -3,7 +3,7 @@
 > 版本：与当前主干一致（Schema V5 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
-> 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断
+> 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
 
 ---
 
@@ -69,6 +69,8 @@ foxgita/
 │   ├── PracticeStore.swift
 │   ├── AudioRecorderService.swift
 │   ├── VideoRecorderService.swift   # 系统相机录视频
+│   ├── AlbumDurationGate.swift      # 相册时长门 [30, 600] 秒
+│   ├── AlbumVideoImporter.swift     # 相册拷进 Recordings
 │   ├── RecordingStore.swift         # m4a / mov 文件与孤儿 GC
 │   └── …
 ├── Theme/                    # 颜色 / 字体 / 外观 / 触感
@@ -113,7 +115,7 @@ flowchart TD
 | 推荐 Sheet 选任务 | 只回传 `taskId`；用 `pendingTaskId` + `.sheet(onDismiss:)` 导航，避免 dismiss 时序 hack |
 | 计时中返回 | `confirmationDialog` 二次确认，避免误丢本次记录 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
-| 录视频 | 打开系统相机；片段进 pending，完成时与音频一并入库 |
+| 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
 | 完成练习 | 成功触感 + 回到今天的练习列表 |
 | 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 复位到今天并打开今日第一项 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
@@ -136,7 +138,7 @@ flowchart TD
 |---|---|---|
 | 录音 | `mic` / `mic.fill` | 切换录制；录制中展示 ActivePanel（`elapsedDisplay`、暂停/继续、停止） |
 | 写笔记 | `square.and.pencil` | 展开笔记输入 |
-| 录视频 | `video.fill` | `VideoRecorderService.presentCamera()`；模拟器无相机时 Toast |
+| 录视频 | `video.fill` | 第 1 次切视频模式；第 2 次打开 `VideoSourceView`。现场录像仍 `presentCamera()`；相册预览确认后 `AlbumVideoImporter` 拷贝再 `persist`。模拟器无相机时 Toast |
 
 完成时：`recorder.consume()` + `video.takeAll()` 合并为 `[AudioRecorderService.Clip]` 交给 `finishSession`。离开详情未完成则丢弃 audio/video pending 并删文件。
 
@@ -399,7 +401,7 @@ flowchart LR
     G --> H[C2/05 VideoDiagnosisView]
 ```
 
-1. **入库与入队**：系统相机录完 → `ingest` 复制到 `Recordings/rec-*.mov` → `persist` / `beginOpenSession` 建 `RecordingRef`。AI 已配置则 `markReviewsPending` + `ReviewJobRunner.enqueue`，并弹出 **C2/04 `VideoAnalysisView`**（S2 阶段进度；「返回」仅 dismiss，不等于完成练习）。
+1. **入库与入队**：系统相机录完 → `ingest` 复制到 `Recordings/rec-*.mov` → `persist` / `beginOpenSession` 建 `RecordingRef`。AI 已配置则 `markReviewsPending` + `ReviewJobRunner.enqueue`，并弹出 **C2/04 `VideoAnalysisView`**（S2 阶段进度；「返回」仅 dismiss，不等于完成练习）。相册：`PhotosPicker` → `AlbumPreviewView` 时长门 `[30, 600]` 秒 → `AlbumVideoImporter` 按原扩展名拷贝 → 同一 `persist` / C2/04。系统相册原片不删。`RecordingStore.mediaExtensions` 含 `m4v`。
 2. **C2/04 分析页**：监听 `reviewStatus`；`.ready` 时 `onReady` → dismiss 后链式打开 C2/05；`.failed` 时按 `ReviewJobRunner.lastFailureKind` 展示 prepare / parse / network 文案。
 3. **Runner 视频分支**：`MediaReviewMedia.isVideo` → `VideoDiagnosisGenerator.diagnose`（`VideoFrameSampler.sampleSeconds` 密抽帧 + 可选波形 JPEG，经 `VideoDiagnosisClient.generateDiagnosis` 调 Vision；`VideoDiagnosisDraft.normalize` 钳制窗口 / 去空白 / 最多 5 段）→ `PracticeStore.applyVideoDiagnosis`。
 4. **C2/05 诊断页**：`VideoDiagnosisView` 提供时间线 / 总结、`AVPlayer` 完整回放与纠正片段卡；训练页与记录详情「查看诊断」入口。空 `findings` 时仍展示 summary 三段。

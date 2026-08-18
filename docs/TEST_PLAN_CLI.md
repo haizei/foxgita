@@ -65,6 +65,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `VideoFrameSamplerTests` | 短片段三锚点、长片段上限 10、零时长通过 |
 | `VideoDiagnosisGeneratorTests` | 未配置、prepare 失败、401 映射通过 |
 | `ReviewJobRunnerTests` | 顺序写回、401 停后续、单条失败继续；`.mov` 写 `videoFindings` 通过 |
+| `AlbumDurationGateTests` | 29/0 拒绝、30/600 通过、601 拒绝 |
+| `AlbumVideoImporterTests` | 保留扩展名、缺文件、非法扩展名不写盘、`.m4v` 孤儿清理 |
 
 **通过**：日志出现 `TEST SUCCEEDED`，无 `✘` / `error:`（业务测试失败）。
 
