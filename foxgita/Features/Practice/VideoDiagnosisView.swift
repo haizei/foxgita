@@ -318,19 +318,26 @@ private final class DiagnosisClipPlayer {
     }
 
     func play(from start: Int, to end: Int) {
-        pauseAtSec = Double(end)
-        seek(Double(start))
-        player.play()
+        seek(Double(start)) { [weak self] finished in
+            guard let self, finished else { return }
+            self.pauseAtSec = Double(end)
+            self.player.play()
+        }
     }
 
-    func seek(_ seconds: Double) {
+    func seek(_ seconds: Double, completion: (@MainActor (Bool) -> Void)? = nil) {
+        pauseAtSec = nil
         let target = max(0, seconds)
         currentSec = Int(target.rounded())
         player.seek(
             to: CMTime(seconds: target, preferredTimescale: 600),
             toleranceBefore: .zero,
             toleranceAfter: .zero
-        )
+        ) { finished in
+            Task { @MainActor in
+                completion?(finished)
+            }
+        }
     }
 
     func stop() {

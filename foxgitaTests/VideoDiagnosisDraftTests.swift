@@ -2,6 +2,25 @@ import Testing
 @testable import foxgita
 
 struct VideoDiagnosisDraftTests {
+    @Test func normalizeMidVideoInvertedTimestamps() throws {
+        let draft = try VideoDiagnosisDraft.normalize(
+            .init(
+                highlight: "稳", focus: "F", nextAction: "慢练",
+                findings: [
+                    .init(
+                        startSec: 40, endSec: 20,
+                        title: "按弦", evidence: "杂音",
+                        cause: "离品丝", action: "靠近"
+                    ),
+                ]
+            ),
+            durationSec: 180
+        )
+        #expect(draft.findings.count == 1)
+        #expect(draft.findings[0].startSec == 40)
+        #expect(draft.findings[0].endSec == 60)
+    }
+
     @Test func normalizeHappyPathClampsAndSorts() throws {
         let draft = try VideoDiagnosisDraft.normalize(
             .init(

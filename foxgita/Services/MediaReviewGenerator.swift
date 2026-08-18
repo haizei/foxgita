@@ -126,7 +126,10 @@ struct FileMediaImagePreparer: MediaImagePreparing {
         let asset = AVURLAsset(url: url)
         let seconds = durationSeconds(asset)
         let sample = VideoFrameSampler.sampleSeconds(duration: seconds)
-        let times = sample.map { CMTime(seconds: $0, preferredTimescale: 600) }
+        let cap = max(seconds - 0.1, 0)
+        let times = sample.map {
+            CMTime(seconds: min($0, cap), preferredTimescale: 600)
+        }
 
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true

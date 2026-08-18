@@ -5,7 +5,7 @@ enum VideoFrameSampler {
         guard duration > 0, duration.isFinite else { return [0] }
         var set: Set<Int> = [0]
         set.insert(Int((duration * 0.5).rounded()))
-        set.insert(Int((duration * 0.98).rounded()))
+        set.insert(Int((duration * 0.98).rounded(.down)))
         var t = interval
         while t < duration, set.count < maxCount {
             set.insert(Int(t.rounded()))

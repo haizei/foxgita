@@ -163,6 +163,7 @@ struct MigrationTests {
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
         #expect(recordings[0].reviewHighlight == "稳")
+        #expect(recordings[0].reviewStatus == .ready)
         #expect(recordings[0].videoFindings.isEmpty)
     }
 }

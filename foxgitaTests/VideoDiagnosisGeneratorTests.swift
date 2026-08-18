@@ -79,4 +79,57 @@ struct VideoDiagnosisGeneratorTests {
             try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
         }
     }
+
+    @Test func fileMissingMaps() async throws {
+        struct StubClient: VideoDiagnosing {
+            func generateDiagnosis(
+                baseURL: String, model: String, apiKey: String,
+                imageJPEGData: [Data], contextText: String, durationSec: Int
+            ) async throws -> VideoDiagnosisDraft {
+                Issue.record("should not be called")
+                throw VisionPracticeError.transport
+            }
+        }
+        struct Missing: MediaImagePreparing {
+            func jpegImages(fileName: String) throws -> [Data] {
+                throw MediaReviewGeneratorError.fileMissing
+            }
+        }
+        let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
+        try credentials.saveAPIKey("sk")
+        let gen = VideoDiagnosisGenerator(
+            client: StubClient(), credentials: credentials, images: Missing()
+        )
+        await #expect(throws: MediaReviewGeneratorError.fileMissing) {
+            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+        }
+    }
+
+    @Test func successReturnsDraft() async throws {
+        struct StubClient: VideoDiagnosing {
+            func generateDiagnosis(
+                baseURL: String, model: String, apiKey: String,
+                imageJPEGData: [Data], contextText: String, durationSec: Int
+            ) async throws -> VideoDiagnosisDraft {
+                VideoDiagnosisDraft(
+                    highlight: "稳", focus: "F", nextAction: "慢练", findings: []
+                )
+            }
+        }
+        struct StubImages: MediaImagePreparing {
+            func jpegImages(fileName: String) throws -> [Data] { [Data([1, 2, 3])] }
+        }
+        let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
+        try credentials.saveAPIKey("sk")
+        let gen = VideoDiagnosisGenerator(
+            client: StubClient(), credentials: credentials, images: StubImages()
+        )
+        let draft = try await gen.diagnose(
+            context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o"
+        )
+        #expect(draft.highlight == "稳")
+        #expect(draft.focus == "F")
+        #expect(draft.nextAction == "慢练")
+        #expect(draft.findings.isEmpty)
+    }
 }

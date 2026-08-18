@@ -100,4 +100,35 @@ struct VideoDiagnosisClientTests {
             )
         }
     }
+
+    @Test func generateDiagnosisRetriesWithoutResponseFormat() async throws {
+        let ok: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"highlight":"稳","focus":"F","nextAction":"慢练","findings":[]}"#
+                ]
+            ]]
+        ]
+        let okData = try JSONSerialization.data(withJSONObject: ok)
+        var calls = 0
+        DiagnosisMockURLProtocol.handler = { request in
+            calls += 1
+            if calls == 1 {
+                return (400, Data("unknown response_format".utf8))
+            }
+            return (200, okData)
+        }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+
+        let draft = try await makeClient().generateDiagnosis(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk",
+            imageJPEGData: [Data([0xFF])],
+            contextText: "x",
+            durationSec: 10
+        )
+        #expect(draft.highlight == "稳")
+        #expect(calls == 2)
+    }
 }
