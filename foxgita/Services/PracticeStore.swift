@@ -374,6 +374,7 @@ final class PracticeStore {
                 rec.reviewHighlight = ""
                 rec.reviewFocus = ""
                 rec.reviewNextAction = ""
+                rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
             }
@@ -388,6 +389,22 @@ final class PracticeStore {
                 rec.reviewHighlight = draft.highlight
                 rec.reviewFocus = draft.focus
                 rec.reviewNextAction = draft.nextAction
+                rec.videoFindings = []
+                rec.updatedAt = Date()
+                rec.syncState = .local
+            }
+            try repository.save()
+        }
+    }
+
+    func applyVideoDiagnosis(recordingId: String, draft: VideoDiagnosisDraft) {
+        perform {
+            if let rec = try repository.recording(id: recordingId) {
+                rec.reviewStatus = .ready
+                rec.reviewHighlight = draft.highlight
+                rec.reviewFocus = draft.focus
+                rec.reviewNextAction = draft.nextAction
+                rec.videoFindings = draft.findings
                 rec.updatedAt = Date()
                 rec.syncState = .local
             }
@@ -403,6 +420,7 @@ final class PracticeStore {
                 rec.reviewHighlight = ""
                 rec.reviewFocus = ""
                 rec.reviewNextAction = ""
+                rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
             }

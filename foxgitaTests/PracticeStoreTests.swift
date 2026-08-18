@@ -433,4 +433,58 @@ struct PracticeStoreTests {
         store.markReviewsFailed(recordingIds: ["clip-3", "missing"])
         #expect(try repo.recording(id: "clip-3")?.reviewStatus == .failed)
     }
+
+    @Test func applyVideoDiagnosisWritesFindingsAndSummary() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: ["慢速"], note: "笔记",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
+        ))
+        let session = try repo.sessions()[0]
+        session.recordings.append(RecordingRef(id: "clip-v", fileName: "y.mov", bytes: 2, durationSec: 40))
+        try repo.save()
+
+        store.applyVideoDiagnosis(
+            recordingId: "clip-v",
+            draft: VideoDiagnosisDraft(
+                highlight: "稳", focus: "F", nextAction: "70",
+                findings: [
+                    VideoFinding(
+                        startSec: 8, endSec: 28, title: "按弦",
+                        evidence: "杂音", cause: "离品丝", action: "靠近"
+                    )
+                ]
+            )
+        )
+        let rec = try #require(try repo.recording(id: "clip-v"))
+        #expect(rec.reviewStatus == .ready)
+        #expect(rec.reviewFocus == "F")
+        #expect(rec.videoFindings.count == 1)
+        #expect(rec.videoFindings[0].startSec == 8)
+    }
+
+    @Test func markPendingClearsFindingsJSON() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: ["a"], note: "n",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 72, recordings: []
+        ))
+        let session = try repo.sessions()[0]
+        let rec = RecordingRef(id: "clip-p", fileName: "x.mov", bytes: 1, durationSec: 8)
+        rec.reviewStatus = .ready
+        rec.videoFindings = [
+            VideoFinding(startSec: 0, endSec: 10, title: "t", evidence: "e", cause: "c", action: "a")
+        ]
+        session.recordings.append(rec)
+        try repo.save()
+
+        store.markReviewsPending(recordingIds: ["clip-p"])
+        let after = try #require(try repo.recording(id: "clip-p"))
+        #expect(after.reviewStatus == .pending)
+        #expect(after.videoFindings.isEmpty)
+    }
 }
