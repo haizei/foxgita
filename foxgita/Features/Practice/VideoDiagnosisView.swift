@@ -294,10 +294,15 @@ private final class DiagnosisClipPlayer {
 
     @ObservationIgnored private var pauseAtSec: Double?
     @ObservationIgnored private var observer: Any?
+    /// True only after a successful `acquire` in `load`, so `stop` can run safely when load never ran.
+    @ObservationIgnored private var didAcquirePlayback = false
 
     func load(url: URL) {
         guard player.currentItem == nil else { return }
-        try? AudioSessionCoordinator.shared.acquire(.playback)
+        do {
+            try AudioSessionCoordinator.shared.acquire(.playback)
+            didAcquirePlayback = true
+        } catch {}
         player.replaceCurrentItem(with: AVPlayerItem(url: url))
         observer = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.2, preferredTimescale: 600), queue: .main
@@ -334,7 +339,10 @@ private final class DiagnosisClipPlayer {
         pauseAtSec = nil
         player.pause()
         player.replaceCurrentItem(with: nil)
-        AudioSessionCoordinator.shared.release(.playback)
+        if didAcquirePlayback {
+            AudioSessionCoordinator.shared.release(.playback)
+            didAcquirePlayback = false
+        }
     }
 
     private func tick(_ seconds: Double) {

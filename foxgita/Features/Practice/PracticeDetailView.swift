@@ -36,6 +36,8 @@ struct PracticeDetailView: View {
     @State private var openSessionId: String?
     @State private var analysisRoute: VideoRoute?
     @State private var diagnosisRoute: VideoRoute?
+    /// Set only by analysis `onReady`; presented from the analysis cover's `onDismiss`.
+    @State private var pendingDiagnosisRoute: VideoRoute?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -256,17 +258,20 @@ struct PracticeDetailView: View {
                 )
             }
         }
-        .fullScreenCover(item: $analysisRoute) { route in
+        .fullScreenCover(item: $analysisRoute, onDismiss: {
+            if let pending = pendingDiagnosisRoute {
+                diagnosisRoute = pending
+                pendingDiagnosisRoute = nil
+            }
+        }) { route in
             VideoAnalysisView(
                 recordingId: route.id,
                 taskTitle: task.title,
                 durationSec: route.durationSec,
                 onDismiss: { analysisRoute = nil },
                 onReady: {
+                    pendingDiagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
                     analysisRoute = nil
-                    DispatchQueue.main.async {
-                        diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
-                    }
                 }
             )
         }

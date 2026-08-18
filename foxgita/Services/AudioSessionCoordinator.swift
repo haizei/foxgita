@@ -19,7 +19,9 @@ final class AudioSessionCoordinator {
         case record
     }
 
-    private var needs: Set<Need> = []
+    /// Refcount per need so overlapping clients (e.g. metronome + diagnosis clip)
+    /// do not deactivate the session when only one of them releases.
+    private var needCounts: [Need: Int] = [:]
     private var observer: NSObjectProtocol?
 
     /// Invoked when the system interrupts audio (call, alarm) so engines can
@@ -41,13 +43,18 @@ final class AudioSessionCoordinator {
     }
 
     func acquire(_ need: Need) throws {
-        needs.insert(need)
+        needCounts[need, default: 0] += 1
         try applyCategory()
     }
 
     func release(_ need: Need) {
-        needs.remove(need)
-        guard needs.isEmpty else {
+        guard let count = needCounts[need], count > 0 else { return }
+        if count == 1 {
+            needCounts.removeValue(forKey: need)
+        } else {
+            needCounts[need] = count - 1
+        }
+        guard needCounts.isEmpty else {
             try? applyCategory()
             return
         }
@@ -56,7 +63,7 @@ final class AudioSessionCoordinator {
 
     private func applyCategory() throws {
         let session = AVAudioSession.sharedInstance()
-        if needs.contains(.record) {
+        if needCounts[.record, default: 0] > 0 {
             try session.setCategory(
                 .playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers]
             )
@@ -70,7 +77,7 @@ final class AudioSessionCoordinator {
         guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
         guard type == .began else { return }
-        needs.removeAll()
+        needCounts.removeAll()
         onInterruption?()
     }
 }
