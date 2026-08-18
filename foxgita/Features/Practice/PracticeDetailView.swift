@@ -246,6 +246,15 @@ struct PracticeDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }
+            // Two covers on the same view would leave only the last one live, so
+            // the diagnosis cover hangs off the scroll view instead.
+            .fullScreenCover(item: $diagnosisRoute) { route in
+                VideoDiagnosisView(
+                    recordingId: route.id,
+                    taskTitle: task.title,
+                    onClose: { diagnosisRoute = nil }
+                )
+            }
         }
         .fullScreenCover(item: $analysisRoute) { route in
             VideoAnalysisView(
@@ -450,7 +459,7 @@ struct PracticeDetailView: View {
             if configured {
                 aiRow(rec)
             }
-            if expandedReviewId == rec.id, rec.reviewStatus == .ready {
+            if expandedReviewId == rec.id, rec.reviewStatus == .ready, !hasDiagnosis(rec) {
                 reviewFields(rec)
             }
         }
@@ -465,20 +474,31 @@ struct PracticeDetailView: View {
         let running = reviewRunner.isRunning(rec.id)
         switch rec.reviewStatus {
         case .ready:
-            HStack {
+            HStack(spacing: 12) {
                 Text(String(localized: "AI 复盘已生成"))
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(GitaTheme.brand500)
                 Spacer()
-                Button(
-                    expandedReviewId == rec.id
-                        ? String(localized: "收起")
-                        : String(localized: "查看复盘")
-                ) {
-                    expandedReviewId = expandedReviewId == rec.id ? nil : rec.id
+                // A diagnosis page already shows the three fields under 总结, so the
+                // inline expander stays only where the page is summary-only.
+                if !hasDiagnosis(rec) {
+                    Button(
+                        expandedReviewId == rec.id
+                            ? String(localized: "收起")
+                            : String(localized: "查看复盘")
+                    ) {
+                        expandedReviewId = expandedReviewId == rec.id ? nil : rec.id
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
                 }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(GitaTheme.brand500)
+                if MediaReviewMedia.isVideo(fileName: rec.fileName) {
+                    Button(String(localized: "查看诊断")) {
+                        diagnosisRoute = VideoRoute(id: rec.id, durationSec: rec.durationSec)
+                    }
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                }
             }
         case .pending where running:
             Text(String(localized: "分析中")).font(.system(size: 12, weight: .semibold))
@@ -489,6 +509,12 @@ struct PracticeDetailView: View {
         case .none:
             EmptyView()
         }
+    }
+
+    /// A video with findings reads its summary on the diagnosis page instead of
+    /// expanding the card in place.
+    private func hasDiagnosis(_ rec: RecordingRef) -> Bool {
+        MediaReviewMedia.isVideo(fileName: rec.fileName) && !rec.videoFindings.isEmpty
     }
 
     private func reviewFields(_ rec: RecordingRef) -> some View {

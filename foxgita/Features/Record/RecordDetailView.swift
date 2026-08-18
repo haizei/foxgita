@@ -20,6 +20,7 @@ struct RecordDetailView: View {
     @State private var tab = 0
     @State private var player = AudioPlayerService()
     @State private var toast: String?
+    @State private var diagnosisId: String?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -144,6 +145,18 @@ struct RecordDetailView: View {
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .onDisappear { player.stop() }
+        .fullScreenCover(isPresented: Binding(
+            get: { diagnosisId != nil },
+            set: { if !$0 { diagnosisId = nil } }
+        )) {
+            if let diagnosisId {
+                VideoDiagnosisView(
+                    recordingId: diagnosisId,
+                    taskTitle: task?.title ?? "",
+                    onClose: { self.diagnosisId = nil }
+                )
+            }
+        }
     }
 
     private var dataPane: some View {
@@ -258,13 +271,51 @@ struct RecordDetailView: View {
                 }
             }
         case .ready:
-            reviewField(String(localized: "亮点"), r.reviewHighlight)
-            reviewField(String(localized: "优先改善"), r.reviewFocus)
-            reviewField(String(localized: "下次练法"), r.reviewNextAction)
+            if MediaReviewMedia.isVideo(fileName: r.fileName) {
+                videoReviewBody(r)
+            } else {
+                summaryFields(r)
+            }
         case .failed:
             statusRow(String(localized: "生成失败，可重试"), action: String(localized: "重试")) {
                 requestReview(r)
             }
+        }
+    }
+
+    /// Findings turn the card into a teaser for the diagnosis page; without them
+    /// there is nothing to time-stamp, so the old three fields stay.
+    @ViewBuilder
+    private func videoReviewBody(_ r: RecordingRef) -> some View {
+        if r.videoFindings.isEmpty {
+            summaryFields(r)
+            actionRow(String(localized: "重新分析")) { requestReview(r) }
+        } else {
+            reviewField(String(localized: "优先改善"), r.reviewFocus)
+            reviewField(String(localized: "下次练法"), r.reviewNextAction)
+            actionRow(String(localized: "查看诊断")) {
+                player.stop()
+                diagnosisId = r.id
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func summaryFields(_ r: RecordingRef) -> some View {
+        reviewField(String(localized: "亮点"), r.reviewHighlight)
+        reviewField(String(localized: "优先改善"), r.reviewFocus)
+        reviewField(String(localized: "下次练法"), r.reviewNextAction)
+    }
+
+    private func actionRow(_ title: String, onTap: @escaping () -> Void) -> some View {
+        HStack {
+            Spacer()
+            Button(action: onTap) {
+                Text(title)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+            }
+            .buttonStyle(.plain)
         }
     }
 
