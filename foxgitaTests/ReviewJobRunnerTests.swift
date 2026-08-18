@@ -4,7 +4,9 @@ import Testing
 
 @MainActor
 struct ReviewJobRunnerTests {
-    private func harness() throws -> (ReviewJobRunner, PracticeStore, InMemoryPracticeRepository, RecordingSpy) {
+    private func harness() throws -> (
+        ReviewJobRunner, PracticeStore, InMemoryPracticeRepository, RecordingSpy, VideoSpy
+    ) {
         let repo = InMemoryPracticeRepository()
         let defaults = UserDefaults(suiteName: "runner.\(UUID().uuidString)")!
         defaults.set(true, forKey: SeedData.seededKey)
@@ -23,12 +25,13 @@ struct ReviewJobRunnerTests {
         }
         try repo.save()
         let spy = RecordingSpy()
-        let runner = ReviewJobRunner(store: store, generator: spy)
-        return (runner, store, repo, spy)
+        let videoSpy = VideoSpy()
+        let runner = ReviewJobRunner(store: store, generator: spy, videoGenerator: videoSpy)
+        return (runner, store, repo, spy, videoSpy)
     }
 
     @Test func runsSequentiallyAndWritesReady() async throws {
-        let (runner, _, repo, spy) = try harness()
+        let (runner, _, repo, spy, _) = try harness()
         spy.drafts = [
             "a": .success(.init(highlight: "ha", focus: "fa", nextAction: "na")),
             "b": .success(.init(highlight: "hb", focus: "fb", nextAction: "nb")),
@@ -43,7 +46,7 @@ struct ReviewJobRunnerTests {
     }
 
     @Test func unauthorizedFailsRestOfBatch() async throws {
-        let (runner, _, repo, spy) = try harness()
+        let (runner, _, repo, spy, _) = try harness()
         spy.drafts = [
             "a": .failure(.failed(.unauthorized)),
             "b": .success(.init(highlight: "h", focus: "f", nextAction: "n")),
@@ -58,7 +61,7 @@ struct ReviewJobRunnerTests {
     }
 
     @Test func retryOnlyTouchesOneClip() async throws {
-        let (runner, store, repo, spy) = try harness()
+        let (runner, store, repo, spy, _) = try harness()
         store.markReviewsFailed(recordingIds: ["a", "b"])
         spy.drafts = [
             "a": .success(.init(highlight: "h", focus: "f", nextAction: "n")),
@@ -70,6 +73,32 @@ struct ReviewJobRunnerTests {
         #expect(try repo.recording(id: "b")?.reviewStatus == .failed)
         #expect(spy.order == ["a"])
     }
+
+    @Test func videoClipWritesFindings() async throws {
+        let (runner, _, repo, _, videoSpy) = try harness()
+        let session = try repo.sessions()[0]
+        session.recordings.append(RecordingRef(id: "v1", fileName: "v1.mov", bytes: 1, durationSec: 20))
+        try repo.save()
+        videoSpy.drafts = [
+            "v1": .success(
+                .init(
+                    highlight: "h", focus: "f", nextAction: "n",
+                    findings: [
+                        VideoFinding(
+                            startSec: 2, endSec: 18, title: "t",
+                            evidence: "e", cause: "c", action: "a"
+                        )
+                    ]
+                )
+            )
+        ]
+        runner.enqueue(["v1"], baseURL: "https://x", model: "m")
+        try await waitUntil {
+            (try? repo.recording(id: "v1")?.reviewStatus) == .ready
+        }
+        #expect(try repo.recording(id: "v1")?.videoFindings.count == 1)
+        #expect(videoSpy.order == ["v1"])
+    }
 }
 
 @MainActor
@@ -80,6 +109,23 @@ final class RecordingSpy: MediaReviewGenerating {
     func review(
         _ context: MediaReviewContext, baseURL: String, model: String
     ) async throws -> MediaReviewDraft {
+        order.append(context.recordingId)
+        switch drafts[context.recordingId] {
+        case .success(let draft): return draft
+        case .failure(let error): throw error
+        case nil: throw MediaReviewGeneratorError.prepareFailed
+        }
+    }
+}
+
+@MainActor
+final class VideoSpy: VideoDiagnosisGenerating {
+    var drafts: [String: Result<VideoDiagnosisDraft, MediaReviewGeneratorError>] = [:]
+    private(set) var order: [String] = []
+
+    func diagnose(
+        _ context: MediaReviewContext, baseURL: String, model: String
+    ) async throws -> VideoDiagnosisDraft {
         order.append(context.recordingId)
         switch drafts[context.recordingId] {
         case .success(let draft): return draft

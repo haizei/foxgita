@@ -30,7 +30,8 @@ struct foxgitaApp: App {
             _reviewRunner = State(
                 initialValue: ReviewJobRunner(
                     store: store,
-                    generator: MediaReviewGenerator(client: MediaReviewClient())
+                    generator: MediaReviewGenerator(client: MediaReviewClient()),
+                    videoGenerator: VideoDiagnosisGenerator(client: VideoDiagnosisClient())
                 )
             )
         } catch {

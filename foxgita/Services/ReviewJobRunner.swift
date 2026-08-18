@@ -1,12 +1,18 @@
 import Foundation
 
+enum ReviewFailureKind: Equatable, Sendable {
+    case prepare, network, parse, unauthorized
+}
+
 @Observable
 @MainActor
 final class ReviewJobRunner {
     private(set) var activeRecordingId: String?
+    private(set) var lastFailureKind: ReviewFailureKind?
 
     private let store: PracticeStore
     private let generator: any MediaReviewGenerating
+    private let videoGenerator: any VideoDiagnosisGenerating
 
     private struct Job {
         var ids: [String]
@@ -20,9 +26,14 @@ final class ReviewJobRunner {
     private var queued: [Job] = []
     private var loopRunning = false
 
-    init(store: PracticeStore, generator: any MediaReviewGenerating) {
+    init(
+        store: PracticeStore,
+        generator: any MediaReviewGenerating,
+        videoGenerator: any VideoDiagnosisGenerating
+    ) {
         self.store = store
         self.generator = generator
+        self.videoGenerator = videoGenerator
     }
 
     func isRunning(_ id: String) -> Bool {
@@ -69,17 +80,26 @@ final class ReviewJobRunner {
             store.markReviewsPending(recordingIds: [id])
 
             guard let context = store.reviewContext(recordingId: id) else {
+                lastFailureKind = .prepare
                 store.markReviewsFailed(recordingIds: [id])
                 activeRecordingId = nil
                 continue
             }
 
             do {
-                let draft = try await generator.review(
-                    context, baseURL: currentBaseURL, model: currentModel
-                )
-                store.applyReview(recordingId: id, draft: draft)
+                if MediaReviewMedia.isVideo(fileName: context.fileName) {
+                    let draft = try await videoGenerator.diagnose(
+                        context, baseURL: currentBaseURL, model: currentModel
+                    )
+                    store.applyVideoDiagnosis(recordingId: id, draft: draft)
+                } else {
+                    let draft = try await generator.review(
+                        context, baseURL: currentBaseURL, model: currentModel
+                    )
+                    store.applyReview(recordingId: id, draft: draft)
+                }
             } catch let error as MediaReviewGeneratorError {
+                lastFailureKind = failureKind(for: error)
                 if case .failed(.unauthorized) = error {
                     store.markReviewsFailed(recordingIds: [id] + currentRemaining)
                     currentRemaining = []
@@ -87,9 +107,23 @@ final class ReviewJobRunner {
                     store.markReviewsFailed(recordingIds: [id])
                 }
             } catch {
+                lastFailureKind = .network
                 store.markReviewsFailed(recordingIds: [id])
             }
             activeRecordingId = nil
+        }
+    }
+
+    private func failureKind(for error: MediaReviewGeneratorError) -> ReviewFailureKind {
+        switch error {
+        case .fileMissing, .prepareFailed:
+            return .prepare
+        case .failed(.unauthorized):
+            return .unauthorized
+        case .failed(.invalidJSON):
+            return .parse
+        case .failed, .notConfigured:
+            return .network
         }
     }
 }
