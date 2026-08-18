@@ -125,14 +125,8 @@ struct FileMediaImagePreparer: MediaImagePreparing {
     private static func videoFrames(url: URL) throws -> [Data] {
         let asset = AVURLAsset(url: url)
         let seconds = durationSeconds(asset)
-        let times: [CMTime]
-        if seconds <= 0 {
-            times = [.zero]
-        } else {
-            times = [0.0, 0.5, 0.98].map { fraction in
-                CMTime(seconds: seconds * fraction, preferredTimescale: 600)
-            }
-        }
+        let sample = VideoFrameSampler.sampleSeconds(duration: seconds)
+        let times = sample.map { CMTime(seconds: $0, preferredTimescale: 600) }
 
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
@@ -146,6 +140,9 @@ struct FileMediaImagePreparer: MediaImagePreparing {
         }
         guard !jpegs.isEmpty else {
             throw MediaReviewGeneratorError.prepareFailed
+        }
+        if let wave = try? waveformJPEG(url: url) {
+            jpegs.append(wave)
         }
         return jpegs
     }
