@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V4 migration plan
-/// (V2→V3→V4) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V5 migration plan
+/// (V2→V3→V4→V5) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V4 + migration plan --------------------
-        let v4Schema = Schema(versionedSchema: GitaSchemaV4.self)
-        let config = ModelConfiguration(schema: v4Schema, url: url)
+        // --- Phase 2: reopen under V5 + migration plan --------------------
+        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
+        let config = ModelConfiguration(schema: v5Schema, url: url)
         let container = try ModelContainer(
-            for: v4Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -85,6 +85,7 @@ struct MigrationTests {
         #expect(recordings[0].label == "片段")
         #expect(recordings[0].reviewStatus == .none)
         #expect(recordings[0].reviewHighlight.isEmpty)
+        #expect(recordings[0].videoFindings.isEmpty)
     }
 
     @Test func v3StoreMigratesToV4WithEmptyReview() throws {
@@ -113,14 +114,55 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v4Schema = Schema(versionedSchema: GitaSchemaV4.self)
-        let config = ModelConfiguration(schema: v4Schema, url: url)
+        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
+        let config = ModelConfiguration(schema: v5Schema, url: url)
         let container = try ModelContainer(
-            for: v4Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
         #expect(recordings[0].id == "r1")
         #expect(recordings[0].reviewStatus == .none)
+        #expect(recordings[0].videoFindings.isEmpty)
+    }
+
+    @Test func v4StoreMigratesToV5WithEmptyFindings() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v4-v5-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v4Schema = Schema(versionedSchema: GitaSchemaV4.self)
+            let config = ModelConfiguration(schema: v4Schema, url: url)
+            let container = try ModelContainer(for: v4Schema, configurations: [config])
+            let context = ModelContext(container)
+            let session = GitaSchemaV4.PracticeSession(
+                id: "s1", taskId: "warm", taskTitle: "指尖热身",
+                category: .left, startedAt: Date(), endedAt: Date(),
+                durationSec: 60, bpm: 80, timeSig: "4/4",
+                steps: ["开放弦"], noteText: ""
+            )
+            let rec = GitaSchemaV4.RecordingRef(
+                id: "r1", fileName: "clip.mov", bytes: 100, durationSec: 12,
+                createdAt: Date(), label: "录像"
+            )
+            rec.reviewStatus = .ready
+            rec.reviewHighlight = "稳"
+            rec.reviewFocus = "F"
+            rec.reviewNextAction = "慢练"
+            session.recordings.append(rec)
+            context.insert(session)
+            try context.save()
+        }
+
+        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
+        let config = ModelConfiguration(schema: v5Schema, url: url)
+        let container = try ModelContainer(
+            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
+        #expect(recordings.count == 1)
+        #expect(recordings[0].reviewHighlight == "稳")
+        #expect(recordings[0].videoFindings.isEmpty)
     }
 }

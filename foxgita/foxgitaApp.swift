@@ -16,7 +16,7 @@ struct foxgitaApp: App {
     private let container: ModelContainer
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV4.self)
+        let schema = Schema(versionedSchema: GitaSchemaV5.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(
