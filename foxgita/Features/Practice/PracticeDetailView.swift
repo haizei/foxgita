@@ -135,18 +135,6 @@ struct PracticeDetailView: View {
             )
             .ignoresSafeArea()
         }
-        .fullScreenCover(item: $analysisRoute) { route in
-            VideoAnalysisView(
-                recordingId: route.id,
-                taskTitle: task?.title ?? "",
-                durationSec: route.durationSec,
-                onDismiss: { analysisRoute = nil },
-                onReady: {
-                    analysisRoute = nil
-                    diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
-                }
-            )
-        }
         .confirmationDialog(
             "这次练习还没保存", isPresented: $confirmExit, titleVisibility: .visible
         ) {
@@ -258,6 +246,18 @@ struct PracticeDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }
+        }
+        .fullScreenCover(item: $analysisRoute) { route in
+            VideoAnalysisView(
+                recordingId: route.id,
+                taskTitle: task.title,
+                durationSec: route.durationSec,
+                onDismiss: { analysisRoute = nil },
+                onReady: {
+                    analysisRoute = nil
+                    diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
+                }
+            )
         }
     }
 
