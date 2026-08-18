@@ -264,7 +264,9 @@ struct PracticeDetailView: View {
                 onDismiss: { analysisRoute = nil },
                 onReady: {
                     analysisRoute = nil
-                    diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
+                    DispatchQueue.main.async {
+                        diagnosisRoute = VideoRoute(id: route.id, durationSec: route.durationSec)
+                    }
                 }
             )
         }
