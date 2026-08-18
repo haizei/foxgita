@@ -47,7 +47,7 @@ enum RecordingStore {
         try? FileManager.default.removeItem(at: url(for: fileName))
     }
 
-    private static let mediaExtensions: Set<String> = ["m4a", "mov", "mp4"]
+    private static let mediaExtensions: Set<String> = ["m4a", "mov", "mp4", "m4v"]
 
     /// Builds before the Recordings subfolder existed wrote clips into the
     /// Documents root. Move them so there is a single place to sweep.
