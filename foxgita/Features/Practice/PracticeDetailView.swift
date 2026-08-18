@@ -38,6 +38,8 @@ struct PracticeDetailView: View {
     @State private var diagnosisRoute: VideoRoute?
     /// Set only by analysis `onReady`; presented from the analysis cover's `onDismiss`.
     @State private var pendingDiagnosisRoute: VideoRoute?
+    @State private var isSourcePresented = false
+    @State private var pendingCamera = false
 
     init(taskId: String) {
         self.taskId = taskId
@@ -169,6 +171,26 @@ struct PracticeDetailView: View {
             }
             .frame(minHeight: 56)
             .padding(.horizontal, 16)
+            .fullScreenCover(isPresented: $isSourcePresented, onDismiss: {
+                if pendingCamera {
+                    pendingCamera = false
+                    video.presentCamera()
+                }
+            }) {
+                VideoSourceView(
+                    taskTitle: task.title,
+                    onDismiss: { isSourcePresented = false },
+                    onStartCamera: {
+                        pendingCamera = true
+                        isSourcePresented = false
+                    },
+                    onImported: { clip in
+                        persist(audioClip(clip), task: task)
+                        isSourcePresented = false
+                    },
+                    onToast: { show($0) }
+                )
+            }
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -429,7 +451,7 @@ struct PracticeDetailView: View {
                     toolMode = .video
                     return
                 }
-                video.presentCamera()
+                isSourcePresented = true
             }
         }
     }
