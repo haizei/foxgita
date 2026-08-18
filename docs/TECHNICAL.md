@@ -1,9 +1,9 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V4 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V5 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
-> 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频
+> 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断
 
 ---
 
@@ -63,7 +63,7 @@ foxgita/
 │   └── Settings/             # 提醒 / 外观 / 清数据
 ├── Components/SharedUI.swift # StreakCard / TaskRowCard / DaySessionCard 等
 ├── Models/
-│   ├── Models.swift          # Schema V4 + MigrationPlan（V3 保留供迁移）
+│   ├── Models.swift          # Schema V5 + MigrationPlan（V2–V4 保留供迁移）
 │   └── SchemaV2.swift        # 仅供迁移与测试
 ├── Services/                 # 业务与基础设施（见 §5、§6）
 │   ├── PracticeStore.swift
@@ -252,9 +252,9 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 | `Documents/Recordings/` | m4a / mov（及兼容 mp4）二进制 |
 | UserDefaults | 外观、提醒开关与时间、seed 版本键 |
 
-### 6.2 数据库设计（Schema V4）
+### 6.2 数据库设计（Schema V5）
 
-定义位置：`foxgita/Models/Models.swift`（`GitaSchemaV4`；`GitaSchemaV3` 同文件保留供迁移）。  
+定义位置：`foxgita/Models/Models.swift`（`GitaSchemaV5`；`GitaSchemaV2`–`V4` 同文件或 `SchemaV2.swift` 保留供迁移）。  
 容器创建：`foxgitaApp` → `ModelContainer(for:schema, migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
 媒体文件：`Documents/Recordings/`（见 `RecordingStore`）；库内只存 `fileName`。
 
@@ -326,23 +326,24 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `label` | String | 标签 |
 | `session` | PracticeSession? | 反向关系 |
 | `reviewStatusRaw` | String | 复盘状态；计算属性 `reviewStatus`：`none` / `pending` / `ready` / `failed` |
-| `reviewHighlight` | String | 亮点 |
+| `reviewHighlight` | String | 亮点（音频 / 视频 summary 共用） |
 | `reviewFocus` | String | 优先改善 |
 | `reviewNextAction` | String | 下次练法 |
+| `reviewFindingsJSON` | String | 录像分段诊断 JSON 数组；默认 `"[]"` |
 | + 统一元数据 | | `updatedAt` / `deletedAt` / `syncStateRaw`（`createdAt` 见上） |
 
-计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
-`stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON。
+计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `videoFindings` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
+`stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON；`videoFindings` ↔ `reviewFindingsJSON` 编解码 `[VideoFinding]`。
 
 #### 迁移与别名
 
-- 迁移：`GitaSchemaV2` → `GitaSchemaV3`、`GitaSchemaV3` → `GitaSchemaV4` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3 保留在 `Models.swift`
+- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V4 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）
 - **禁止**「检测到旧 seed 键就 `delete(model:)` 整库清空」——上架后等同抹用户数据
 
 ```swift
-typealias TaskItem = GitaSchemaV4.TaskItem
-typealias PracticeSession = GitaSchemaV4.PracticeSession
-typealias RecordingRef = GitaSchemaV4.RecordingRef
+typealias TaskItem = GitaSchemaV5.TaskItem
+typealias PracticeSession = GitaSchemaV5.PracticeSession
+typealias RecordingRef = GitaSchemaV5.RecordingRef
 ```
 
 ### 6.3 业务逻辑：PracticeStore 命令
@@ -374,7 +375,36 @@ typealias RecordingRef = GitaSchemaV4.RecordingRef
 
 ### 6.3.2 练后媒体复盘
 
-停录即 `beginOpenSession` / `appendRecording` 并入队；完成与返回走 `updateOpenSession`，不再出处理 Sheet。有新媒体且 AI 已配齐时，相关 `RecordingRef` 标 `pending`，`ReviewJobRunner`（App 级）按片段顺序调用 `MediaReviewGenerator` → `MediaReviewClient`；结果经 `MediaReviewDraft.normalize` 写回该条（`ready` / `failed`）。只上传 JPEG：录音 1 张波形图，录像最多 3 帧；不传完整音视频。记录详情第四栏「复盘」按条展示 / 生成 / 重试。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。片段卡规格：`docs/superpowers/2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md`。
+停录即 `beginOpenSession` / `appendRecording` 并入队；完成与返回走 `updateOpenSession`，不再出处理 Sheet。有新媒体且 AI 已配齐时，相关 `RecordingRef` 标 `pending`，`ReviewJobRunner`（App 级）按片段顺序处理；401 停批，其它错误单条 `failed` 并继续。只上传 JPEG，不传完整音视频。记录详情第四栏「复盘」按条展示 / 生成 / 重试。
+
+| 媒体 | Runner 分支 | 生成器 | 写回 |
+|---|---|---|---|
+| 音频（m4a） | `generator.review` | `MediaReviewGenerator` → `MediaReviewClient` | `applyReview` → 三段摘要；清空 `videoFindings` |
+| 录像（mov/mp4） | `videoGenerator.diagnose` | `VideoDiagnosisGenerator` → `VideoDiagnosisClient` | `applyVideoDiagnosis` → 三段摘要 + `videoFindings` |
+
+**音频三段摘要路径未变**：仍为 1 张波形 JPEG + `MediaReviewDraft.normalize` + `applyReview`。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。片段卡规格：`docs/superpowers/2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md`。
+
+### 6.3.3 录像分段诊断
+
+录像在 §6.3.2 入队后走独立 Vision 路径；UI 为 C2/04 分析页 → C2/05 诊断页。
+
+```mermaid
+flowchart LR
+    A[VideoRecorderService.ingest] --> B[PracticeDetailView persist]
+    B --> C[markReviewsPending + enqueue]
+    C --> D[C2/04 VideoAnalysisView]
+    D --> E[ReviewJobRunner mov 分支]
+    E --> F[VideoDiagnosisGenerator]
+    F --> G[applyVideoDiagnosis]
+    G --> H[C2/05 VideoDiagnosisView]
+```
+
+1. **入库与入队**：系统相机录完 → `ingest` 复制到 `Recordings/rec-*.mov` → `persist` / `beginOpenSession` 建 `RecordingRef`。AI 已配置则 `markReviewsPending` + `ReviewJobRunner.enqueue`，并弹出 **C2/04 `VideoAnalysisView`**（S2 阶段进度；「返回」仅 dismiss，不等于完成练习）。
+2. **C2/04 分析页**：监听 `reviewStatus`；`.ready` 时 `onReady` → dismiss 后链式打开 C2/05；`.failed` 时按 `ReviewJobRunner.lastFailureKind` 展示 prepare / parse / network 文案。
+3. **Runner 视频分支**：`MediaReviewMedia.isVideo` → `VideoDiagnosisGenerator.diagnose`（`VideoFrameSampler.sampleSeconds` 密抽帧 + 可选波形 JPEG，经 `VideoDiagnosisClient.generateDiagnosis` 调 Vision；`VideoDiagnosisDraft.normalize` 钳制窗口 / 去空白 / 最多 5 段）→ `PracticeStore.applyVideoDiagnosis`。
+4. **C2/05 诊断页**：`VideoDiagnosisView` 提供时间线 / 总结、`AVPlayer` 完整回放与纠正片段卡；训练页与记录详情「查看诊断」入口。空 `findings` 时仍展示 summary 三段。
+
+Store 命令补充：`applyVideoDiagnosis(recordingId:draft:)` 写 summary + `videoFindings`；`markReviewsPending` / `applyReview` / `markReviewsFailed` 均清空 `videoFindings`。
 
 ### 6.4 统计：StatsAggregator
 
@@ -447,7 +477,19 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按日分钟、时长进位 |
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
 | `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
-| `MigrationTests` | 磁盘上的 V2 / V3 store 迁到 V4，任务 / session / 录音与笔记保留；旧录音 `reviewStatus == .none` |
+| `MigrationTests` | 磁盘 V2 store 经 V3/V4 迁到 V5；V3→V5、V4→V5 轻量迁移保留 review 字段；新库 `videoFindings` 默认空 |
+| `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
+| `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
+| `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
+| `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验 |
+| `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断 |
+| `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试 |
+| `MediaReviewGeneratorTests` | 波形/抽帧 JPEG、未配置、文件缺失校验 |
+| `VideoDiagnosisDraftTests` | normalize 窗口钳制、去空白、最多 5 段、空 summary 失败 |
+| `VideoDiagnosisClientTests` | 成功解析、401、非法 JSON |
+| `VideoFrameSamplerTests` | 短片段三锚点、长片段上限 10、零时长 |
+| `VideoDiagnosisGeneratorTests` | 未配置、prepare 失败、401 映射 |
+| `ReviewJobRunnerTests` | 顺序写回、401 停批、单条重试；`.mov` 走 `applyVideoDiagnosis` 写 `videoFindings` |
 | `PracticeFlowUITests` | 启动见今日练习、创建练习进详情、空完成留在练习 Tab、推荐 Sheet、设置外观分段 |
 
 ### 8.3 手测 / 回归清单
