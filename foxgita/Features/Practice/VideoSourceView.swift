@@ -65,13 +65,13 @@ struct VideoSourceView: View {
         .fullScreenCover(item: $preview) { item in
             AlbumPreviewView(
                 item: item,
-                onBack: { preview = nil },
-                onReselect: {
-                    preview = nil
-                    pickerItem = nil
-                },
+                onBack: { closePreview(discard: true) },
+                onReselect: { closePreview(discard: true) },
                 onConfirm: { confirm(item) }
             )
+        }
+        .onDisappear {
+            if let url = preview?.url { discardStaged(url) }
         }
         .onChange(of: pickerItem) { _, item in
             guard let item else { return }
@@ -153,8 +153,8 @@ struct VideoSourceView: View {
                 onToast(String(localized: "无法读取该视频"))
                 return
             }
-            let duration = RecordingStore.duration(of: movie.url)
-            let name = movie.url.lastPathComponent
+            let duration = await RecordingStore.loadDuration(of: movie.url)
+            let name = movie.displayName
             preview = AlbumPreviewItem(
                 url: movie.url,
                 displayName: name.isEmpty ? String(localized: "相册视频") : name,
@@ -167,23 +167,42 @@ struct VideoSourceView: View {
 
     private func confirm(_ item: AlbumPreviewItem) {
         do {
-            let clip = try AlbumVideoImporter.importClip(from: item.url, label: taskTitle)
+            let clip = try AlbumVideoImporter.importClip(
+                from: item.url,
+                label: taskTitle,
+                durationSec: item.durationSec
+            )
+            discardStaged(item.url)
             preview = nil
             onImported(clip)
         } catch {
             onToast(String(localized: "无法保存视频"))
         }
     }
+
+    private func discardStaged(_ url: URL) {
+        try? FileManager.default.removeItem(at: url)
+    }
+
+    private func closePreview(discard: Bool) {
+        if discard, let url = preview?.url {
+            discardStaged(url)
+        }
+        preview = nil
+        pickerItem = nil
+    }
 }
 
 struct ImportedMovie: Transferable {
     let url: URL
+    let displayName: String
 
     static var transferRepresentation: some TransferRepresentation {
         FileRepresentation(contentType: .movie) { movie in
             SentTransferredFile(movie.url)
-        } importing: { received in
-            Self(url: received.file)
+        }         importing: { received in
+            let staged = try AlbumVideoImporter.stagePreview(from: received.file)
+            return Self(url: staged, displayName: received.file.lastPathComponent)
         }
     }
 }

@@ -21,6 +21,8 @@ struct AlbumPreviewView: View {
     var onReselect: () -> Void
     var onConfirm: () -> Void
 
+    @State private var player: AVPlayer?
+
     private var verdict: AlbumDurationVerdict {
         AlbumDurationGate.verdict(durationSec: item.durationSec)
     }
@@ -65,9 +67,15 @@ struct AlbumPreviewView: View {
                         Text(durationLabel)
                             .font(GitaFont.caption())
                             .foregroundStyle(GitaTheme.textSecondary)
-                        VideoPlayer(player: AVPlayer(url: item.url))
-                            .frame(height: 220)
-                            .clipShape(RoundedRectangle(cornerRadius: 16))
+                        if let player {
+                            VideoPlayer(player: player)
+                                .frame(height: 220)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                        } else {
+                            Color.black
+                                .frame(height: 220)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
                         if let gateMessage {
                             Text(gateMessage)
                                 .font(.system(size: 13))
@@ -96,6 +104,14 @@ struct AlbumPreviewView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
             }
+        }
+        .onAppear {
+            if player == nil {
+                player = AVPlayer(url: item.url)
+            }
+        }
+        .onDisappear {
+            player?.pause()
         }
     }
 }

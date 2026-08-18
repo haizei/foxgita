@@ -53,4 +53,29 @@ struct AlbumVideoImporterTests {
         #expect(removed >= 1)
         #expect(!FileManager.default.fileExists(atPath: RecordingStore.url(for: name).path))
     }
+
+    @Test func stagePreviewCopiesOutOfInboxAndKeepsExtension() throws {
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("dji_mimo_\(UUID().uuidString).mov")
+        try Data([0x00, 0x01, 0x02]).write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+
+        let staged = try AlbumVideoImporter.stagePreview(from: source)
+        defer { try? FileManager.default.removeItem(at: staged) }
+
+        #expect(staged.lastPathComponent.hasPrefix("album-preview-"))
+        #expect(staged.pathExtension.lowercased() == "mov")
+        #expect(RecordingStore.byteSize(of: staged) == 3)
+        #expect(FileManager.default.fileExists(atPath: source.path))
+        #expect(staged.path != source.path)
+    }
+
+    @Test func loadDurationReturnsZeroForJunkBytes() async {
+        let source = FileManager.default.temporaryDirectory
+            .appendingPathComponent("junk-\(UUID().uuidString).mov")
+        try? Data([0x00]).write(to: source)
+        defer { try? FileManager.default.removeItem(at: source) }
+        let seconds = await RecordingStore.loadDuration(of: source)
+        #expect(seconds == 0)
+    }
 }

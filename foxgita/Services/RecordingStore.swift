@@ -43,6 +43,23 @@ enum RecordingStore {
         return Int(seconds.rounded())
     }
 
+    /// Photos / HEVC files often report `.invalid` from the sync `duration`
+    /// property. Load the key the way AVFoundation requires on iOS 18+.
+    static func loadDuration(of url: URL) async -> Int {
+        if let player = try? AVAudioPlayer(contentsOf: url), player.duration > 0 {
+            return Int(player.duration.rounded())
+        }
+        let asset = AVURLAsset(url: url)
+        do {
+            let time = try await asset.load(.duration)
+            let seconds = CMTimeGetSeconds(time)
+            guard seconds.isFinite, seconds > 0 else { return 0 }
+            return Int(seconds.rounded())
+        } catch {
+            return 0
+        }
+    }
+
     static func delete(fileName: String) {
         try? FileManager.default.removeItem(at: url(for: fileName))
     }
