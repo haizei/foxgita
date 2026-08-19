@@ -5,6 +5,13 @@
 
 import AVFoundation
 import Foundation
+import os
+
+enum MetronomeError: Error, Equatable {
+    case engineNotRunning
+}
+
+private let metronomeLog = Logger(subsystem: "com.haizei.foxgita", category: "metronome")
 
 /// Sample-accurate metronome. Clicks are scheduled onto exact audio frames a
 /// short distance ahead of the audio clock, so beat spacing comes from the
@@ -14,8 +21,6 @@ final class MetronomeEngine {
     private(set) var isPlaying = false
     private(set) var bpm = 80
 
-    /// How much audio is queued in advance. Also the worst-case latency of a
-    /// tempo change, so it is kept short enough to feel immediate.
     private static let lead = 0.15
     private static let pumpInterval = 0.05
 
@@ -24,16 +29,23 @@ final class MetronomeEngine {
     @ObservationIgnored private let format = AVAudioFormat(
         standardFormatWithSampleRate: 44_100, channels: 1
     )!
+    @ObservationIgnored private let session: AudioSessionCoordinator
     @ObservationIgnored private var accentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
     @ObservationIgnored private var nextBeatFrame: AVAudioFramePosition = 0
     @ObservationIgnored private var beatIndex = 0
-    @ObservationIgnored private var engineStarted = false
-    /// Bumped on every stop so haptics queued for future downbeats fizzle out.
+    @ObservationIgnored private var graphConfigured = false
     @ObservationIgnored private var runToken = 0
 
     var hapticsEnabled = true
+
+    var isEngineRunning: Bool { engine.isRunning }
+    var hasPump: Bool { pump != nil }
+
+    init(session: AudioSessionCoordinator = .shared) {
+        self.session = session
+    }
 
     func setBpm(_ value: Int) {
         let clamped = min(200, max(40, value))
@@ -43,20 +55,39 @@ final class MetronomeEngine {
 
     func bump(_ delta: Int) { setBpm(bpm + delta) }
 
-    func start() {
+    func start() throws {
         guard !isPlaying else { return }
-        try? AudioSessionCoordinator.shared.acquire(.playback)
-        prepareEngine()
-        isPlaying = true
-        beatIndex = 0
-        runToken += 1
-        player.play()
-        nextBeatFrame = currentFrame() + frames(0.1)
-        fill()
-        pump = Timer.scheduledTimer(withTimeInterval: Self.pumpInterval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.fill() }
+        var acquired = false
+        do {
+            try session.acquire(.playback)
+            acquired = true
+            configureGraphIfNeeded()
+            if !engine.isRunning {
+                try engine.start()
+            }
+            guard engine.isRunning else { throw MetronomeError.engineNotRunning }
+            player.stop()
+            beatIndex = 0
+            runToken += 1
+            player.play()
+            nextBeatFrame = currentFrame() + frames(0.1)
+            isPlaying = true
+            fill()
+            pump = Timer.scheduledTimer(withTimeInterval: Self.pumpInterval, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.fill() }
+            }
+            if let pump { RunLoop.main.add(pump, forMode: .common) }
+            metronomeLog.debug(
+                "start bpm=\(self.bpm, privacy: .public) running=\(self.engine.isRunning, privacy: .public)"
+            )
+        } catch {
+            isPlaying = false
+            pump?.invalidate()
+            pump = nil
+            if acquired { session.release(.playback) }
+            metronomeLog.error("start failed: \(String(describing: error), privacy: .public)")
+            throw error
         }
-        if let pump { RunLoop.main.add(pump, forMode: .common) }
     }
 
     func stop() {
@@ -67,27 +98,28 @@ final class MetronomeEngine {
         isPlaying = false
         beatIndex = 0
         runToken += 1
-        AudioSessionCoordinator.shared.release(.playback)
+        session.release(.playback)
+        metronomeLog.debug(
+            "stop running=\(self.engine.isRunning, privacy: .public) other=\(AVAudioSession.sharedInstance().isOtherAudioPlaying, privacy: .public)"
+        )
     }
 
-    func toggle() { isPlaying ? stop() : start() }
+    func toggle() {
+        if isPlaying { stop() } else { try? start() }
+    }
 
-    private func prepareEngine() {
-        guard !engineStarted else { return }
+    private func configureGraphIfNeeded() {
+        guard !graphConfigured else { return }
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
         accentClick = Self.makeClick(format: format, frequency: 1_000, amplitude: 0.9)
         beatClick = Self.makeClick(format: format, frequency: 800, amplitude: 0.5)
-        try? engine.start()
-        engineStarted = true
+        graphConfigured = true
     }
 
-    /// Queues every beat that falls inside the lead window at its exact frame.
     private func fill() {
         guard isPlaying, let accent = accentClick, let beat = beatClick else { return }
         let now = currentFrame()
-        // A suspended app can leave the next beat far in the past; re-anchor
-        // instead of firing a burst of overdue clicks.
         if nextBeatFrame < now {
             nextBeatFrame = now + frames(0.05)
             beatIndex = 0
@@ -109,8 +141,6 @@ final class MetronomeEngine {
         if !player.isPlaying { player.play() }
     }
 
-    /// Haptics do not need sample accuracy, so they ride a plain main-queue
-    /// delay keyed to the same beat frame the click was scheduled on.
     private func scheduleDownbeatHaptic(at frame: AVAudioFramePosition, now: AVAudioFramePosition) {
         guard hapticsEnabled else { return }
         let token = runToken
@@ -124,9 +154,14 @@ final class MetronomeEngine {
     }
 
     private func currentFrame() -> AVAudioFramePosition {
-        guard let render = player.lastRenderTime,
-              let time = player.playerTime(forNodeTime: render) else { return 0 }
-        return time.sampleTime
+        if let render = player.lastRenderTime,
+           let time = player.playerTime(forNodeTime: render) {
+            return time.sampleTime
+        }
+        if let render = engine.outputNode.lastRenderTime {
+            return render.sampleTime
+        }
+        return 0
     }
 
     private func frames(_ seconds: Double) -> AVAudioFramePosition {

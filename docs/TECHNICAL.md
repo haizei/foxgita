@@ -144,6 +144,8 @@ flowchart TD
 
 完成时：`recorder.consume()` + `video.takeAll()` 合并为 `[AudioRecorderService.Clip]` 交给 `finishSession`。离开详情未完成则丢弃 audio/video pending 并删文件。
 
+列表展示该 `taskId` 下全部未删除 recording；`openSessionId` 只用于写入。
+
 ### 4.2 数据交互（读 / 写分工）
 
 **读路径（保留 `@Query`）**
@@ -214,6 +216,8 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 3. 约每 50ms 补排一次；后台恢复时若下一拍已过期则重新锚定，避免连发补拍
 4. 强拍另触发 `Haptics.downbeat`
 
+暂停会 `player.stop()` 并 `release(.playback)`（可能 `setActive(false)`）。再次 `start()` 不得只看自维护标志；必须在 acquire 之后确认 `engine.isRunning`，否则 `try engine.start()`。Graph（attach / connect / click buffer）只建一次，stop 不 `engine.stop()`、不拆节点。`start()` 失败时 `isPlaying` 保持 false，并 release 本次 playback need。
+
 ### 5.3 PracticeTimer
 
 墙钟计时：`startedAt` + 已累计区间；Timer 只刷新 UI。时钟可注入（`init(now:)`），便于单测推进时间。锁屏或切后台回来，时长仍正确。
@@ -223,7 +227,7 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 | 职责 | 位置 |
 |---|---|
 | 麦克风权限、录制、暂停/继续、elapsed、pending | `AudioRecorderService` |
-| 文件目录、命名、时长、孤儿 GC、旧路径迁移 | `RecordingStore` |
+| 文件目录、命名、时长、`fileExists(fileName:)`、孤儿 GC、旧路径迁移 | `RecordingStore` |
 
 公开状态（供训练页 UI）：`isRecording` / `isPaused` / `elapsedSec` / `elapsedDisplay` / `pending` / `lastError`。
 

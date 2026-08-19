@@ -195,7 +195,9 @@ struct RecordDetailView: View {
                             }
                             Spacer()
                             Button {
-                                player.toggle(url: r.fileURL, id: r.id)
+                                presentIfFileExists(r) {
+                                    player.toggle(url: r.fileURL, id: r.id)
+                                }
                             } label: {
                                 Image(systemName: player.playingId == r.id ? "pause.fill" : "play.fill")
                                     .foregroundStyle(GitaTheme.brand500)
@@ -294,8 +296,10 @@ struct RecordDetailView: View {
             reviewField(String(localized: "优先改善"), r.reviewFocus)
             reviewField(String(localized: "下次练法"), r.reviewNextAction)
             actionRow(String(localized: "查看诊断")) {
-                player.stop()
-                diagnosisId = r.id
+                presentIfFileExists(r) {
+                    player.stop()
+                    diagnosisId = r.id
+                }
             }
         }
     }
@@ -350,6 +354,14 @@ struct RecordDetailView: View {
         } else {
             show(String(localized: "先去设置里填写 AI 接口"))
         }
+    }
+
+    private func presentIfFileExists(_ rec: RecordingRef, present: () -> Void) {
+        guard RecordingStore.fileExists(fileName: rec.fileName) else {
+            show(String(localized: "文件不存在或已被移除"))
+            return
+        }
+        present()
     }
 
     private func show(_ message: String) {
