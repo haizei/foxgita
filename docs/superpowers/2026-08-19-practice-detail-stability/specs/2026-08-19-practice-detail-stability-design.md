@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-19  
-**状态：** Draft — awaiting user review  
+**状态：** Approved — implementation plan in `../plans/2026-08-19-practice-detail-stability.md`  
 **Sprint：** 2026-08-27 — 2026-09-02  
 **产品来源：** `design-boards/产品PRD/练习/2026-08-19-Sprint计划-练习详情稳定性修复.md`  
 **升级对象：** [练习详情片段卡](../../2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md) 的列表口径与时间展示；节拍器与音频会话见 `docs/TECHNICAL.md` §5  
