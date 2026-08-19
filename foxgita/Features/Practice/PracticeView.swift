@@ -9,6 +9,7 @@ import SwiftUI
 struct PracticeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @Query(
         filter: #Predicate<TaskItem> { !$0.isTemplate && $0.deletedAt == nil },
         sort: \TaskItem.sortOrder
@@ -30,6 +31,7 @@ struct PracticeView: View {
     @State private var deleteTaskId: String?
     @State private var deleteSessionId: String?
     @State private var openSwipeRowId: String?
+    @State private var lastSeenTodayStart: Date?
 
     private var editingTask: TaskItem? {
         editingTaskId.flatMap { id in tasks.first { $0.id == id } }
@@ -54,7 +56,10 @@ struct PracticeView: View {
     }
 
     private var activeTasks: [TaskItem] {
-        tasks.filter { $0.status == .active && $0.isUserAdded }
+        let now = Date()
+        return tasks.filter {
+            PracticeTaskRules.isVisibleToday(task: $0, on: now, calendar: calendar)
+        }
     }
 
     private var dayGroups: [StatsAggregator.DayTaskGroup] {
@@ -69,9 +74,6 @@ struct PracticeView: View {
     private var totalTarget: Int { activeTasks.reduce(0) { $0 + $1.targetMin } }
     private var isVisibleWeekCurrent: Bool {
         calendar.isDate(weekAnchor, inSameDayAs: StatsAggregator.week().start)
-    }
-    private var weekMinutes: Int {
-        StatsAggregator.totalMinutes(sessions, in: StatsAggregator.week(containing: weekAnchor))
     }
 
     private var sectionTitle: String {
@@ -133,34 +135,6 @@ struct PracticeView: View {
                         }
 
                         taskList
-
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(isVisibleWeekCurrent ? "本周节奏" : "当周节奏")
-                                    .font(.system(size: 16, weight: .bold))
-                                Text("已练 \(weekDone) 天 · 累计 \(weekMinutes) 分钟")
-                                    .font(.system(size: 12))
-                                    .foregroundStyle(GitaTheme.textSecondary)
-                            }
-                            Spacer()
-                            Button {
-                                router.selectedTab = .record
-                            } label: {
-                                Text("查看记录")
-                                    .font(.system(size: 12, weight: .medium))
-                                    .foregroundStyle(GitaTheme.textPrimary)
-                                    .padding(.horizontal, 10)
-                                    .padding(.vertical, 6)
-                                    .background(GitaTheme.bgSurface)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 14)
-                        .frame(minHeight: 72)
-                        .background(GitaTheme.bgSubtle)
-                        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
                     }
                     .padding(.horizontal, GitaTheme.pagePadding)
                     .padding(.bottom, 120)
@@ -191,6 +165,10 @@ struct PracticeView: View {
                     }
                     .frame(maxWidth: .infinity)
                 }
+            }
+            .onAppear { applyTodaySnap() }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { applyTodaySnap() }
             }
             .navigationBarHidden(true)
             .navigationDestination(for: PracticeRoute.self) { route in
@@ -278,6 +256,7 @@ struct PracticeView: View {
                 guard requested else { return }
                 router.openTodayFirstPractice = false
                 selectedDay = calendar.startOfDay(for: Date())
+                lastSeenTodayStart = calendar.startOfDay(for: Date())
                 weekAnchor = StatsAggregator.week().start
                 guard let first = activeTasks.first else { return }
                 router.selectedTab = .practice
@@ -287,6 +266,7 @@ struct PracticeView: View {
                 guard requested else { return }
                 router.returnPracticeToToday = false
                 selectedDay = calendar.startOfDay(for: Date())
+                lastSeenTodayStart = calendar.startOfDay(for: Date())
                 weekAnchor = StatsAggregator.week().start
             }
             .onChange(of: router.practiceToast) { _, message in
@@ -307,7 +287,7 @@ struct PracticeView: View {
         } else if isSelectedToday {
             if activeTasks.isEmpty {
                 lockedEmpty(
-                    title: String(localized: "还没有练习"),
+                    title: String(localized: "今天还没加练习"),
                     subtitle: String(localized: "点右下角加号，挑一项开始")
                 )
             } else {
@@ -345,6 +325,17 @@ struct PracticeView: View {
                 }
             }
         }
+    }
+
+    private func applyTodaySnap() {
+        let result = PracticeTaskRules.snapSelectedDayIfItWasToday(
+            selectedDay: selectedDay,
+            lastSeenTodayStart: lastSeenTodayStart,
+            now: Date(),
+            calendar: calendar
+        )
+        selectedDay = result.selectedDay
+        lastSeenTodayStart = result.lastSeenTodayStart
     }
 
     private func openPastGroup(_ group: StatsAggregator.DayTaskGroup) {
