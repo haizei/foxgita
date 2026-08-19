@@ -117,7 +117,7 @@ flowchart TD
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
 | 完成练习 | 成功触感 + 回到今天的练习列表 |
-| 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 复位到今天并打开今日第一项 |
+| 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 切到练习 Tab、清空导航栈并复位到今天；今日有任务则打开第一项，空则停留空 inbox，不打开昨日任务 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
 
 #### 4.1.1 首页按日锁定（PracticeView）
@@ -506,7 +506,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 - [ ] 录音中开启节拍器，录音不被打断
 - [ ] 练到一半锁屏 ≥ 1 分钟，回来时长正确
 - [ ] 计时中点返回 → 二次确认（含未保存视频）
-- [ ] 提醒通知点击 → 打开今日第一项
+- [ ] 提醒通知点击 → 切到练习 Tab 今日 inbox；有任务打开第一项，空则停留空态（不打开昨日任务）
 - [ ] 麦克风 / 相机拒绝 → Toast；通知拒绝 → 开关回弹
 - [ ] 浅色 / 深色 / 跟随系统
 - [ ] SE / 标准 / Pro Max 无文字截断

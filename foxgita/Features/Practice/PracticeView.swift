@@ -258,8 +258,9 @@ struct PracticeView: View {
                 selectedDay = calendar.startOfDay(for: Date())
                 lastSeenTodayStart = calendar.startOfDay(for: Date())
                 weekAnchor = StatsAggregator.week().start
-                guard let first = activeTasks.first else { return }
                 router.selectedTab = .practice
+                router.practicePath = []
+                guard let first = activeTasks.first else { return }
                 router.practicePath = [.detail(taskId: first.id)]
             }
             .onChange(of: router.returnPracticeToToday) { _, requested in
