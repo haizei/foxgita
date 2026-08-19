@@ -24,6 +24,10 @@ enum RecordingStore {
         directory.appendingPathComponent(fileName)
     }
 
+    static func fileExists(fileName: String) -> Bool {
+        FileManager.default.fileExists(atPath: url(for: fileName).path)
+    }
+
     static func newFileName(extension ext: String = "m4a") -> String {
         "rec-\(UUID().uuidString).\(ext)"
     }
