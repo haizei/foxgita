@@ -13,6 +13,7 @@ import SwiftData
 protocol PracticeRepository: AnyObject {
     func tasks() throws -> [TaskItem]
     func task(id: String) throws -> TaskItem?
+    func taskIncludingDeleted(id: String) throws -> TaskItem?
     func sessions() throws -> [PracticeSession]
     func session(id: String) throws -> PracticeSession?
     func recording(id: String) throws -> RecordingRef?
@@ -81,6 +82,12 @@ final class SwiftDataPracticeRepository: PracticeRepository {
         ).first
     }
 
+    func taskIncludingDeleted(id: String) throws -> TaskItem? {
+        try context.fetch(
+            FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+        ).first
+    }
+
     func sessions() throws -> [PracticeSession] {
         try context.fetch(
             FetchDescriptor<PracticeSession>(
@@ -142,6 +149,10 @@ final class InMemoryPracticeRepository: PracticeRepository {
 
     func task(id: String) throws -> TaskItem? {
         try tasks().first { $0.id == id }
+    }
+
+    func taskIncludingDeleted(id: String) throws -> TaskItem? {
+        storedTasks.first { $0.id == id }
     }
 
     func sessions() throws -> [PracticeSession] {
