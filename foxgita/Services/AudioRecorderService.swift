@@ -165,6 +165,10 @@ final class AudioPlayerService {
             return
         }
         stop()
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            playingId = nil
+            return
+        }
         let ext = url.pathExtension.lowercased()
         if ext == "mov" || ext == "mp4" {
             do {

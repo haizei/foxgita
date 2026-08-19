@@ -298,6 +298,7 @@ private final class DiagnosisClipPlayer {
     @ObservationIgnored private var didAcquirePlayback = false
 
     func load(url: URL) {
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         guard player.currentItem == nil else { return }
         do {
             try AudioSessionCoordinator.shared.acquire(.playback)
