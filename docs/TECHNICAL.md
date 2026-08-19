@@ -124,9 +124,11 @@ flowchart TD
 
 | 选中日 | 列表内容 | FAB 添加 | 左滑编辑/删除 | 进入详情 |
 |---|---|---|---|---|
-| **今天** | `status == .active` 且 id 为 `custom-*` / `active-*` 的任务 | 显示 | 有 | 「开始」→ 详情 |
+| **今天** | `isVisibleToday`：`startedOn` 与设备当前自然日相同，且 `status == .active`、用户加入的 `custom-*` / `active-*`、非模板、未删除 | 显示 | 有 | 「开始」→ 详情 |
 | **过去** | 当天有效 session 按 `taskId` 聚合（`DayTaskGroup`） | 隐藏 | 无 | 「查看」→ 练习详情（新记录记今天） |
 | **未来** | 空态「这一天还没到」 | 隐藏 | 无 | 不可练 |
+
+今日列表按读时过滤，不在午夜或启动时删除昨日任务。空态文案：「今天还没加练习」。首页无「本周节奏 / 当周节奏」卡；连续练习卡与记录 Tab 仍在。跨午夜仅当选中日本来是「当时的今天」时拨到新的今天。
 
 有效记录：`durationSec > 0`，或笔记非空，或至少一条录音/视频。空完成不落库、不点亮周历。
 
@@ -356,7 +358,7 @@ typealias RecordingRef = GitaSchemaV5.RecordingRef
 |---|---|
 | `prepare()` | 迁移旧录音路径 → seed → GC 孤儿文件 |
 | `seedIfNeeded()` | 只写入模板，不写入 `todayTasks()` |
-| `activateTemplate(id)` | 模板 → `active-{id}` 活跃副本；幂等 |
+| `activateTemplate(id, now, calendar)` | 模板 → `active-{id}-{yyyy-MM-dd}`（本地日键）当日幂等；旧 `active-{id}` 仅当 `startedOn` 是今天时复用；同日软删后恢复 |
 | `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」 |
 | `createFromAIDraft(_:)` | 由 `AIPracticeDraft` 写入活跃任务（含完整 `steps`）；副标题 `AI · N 分钟` |
 | `setTaskStatus(id:to:)` | 改状态并 `touch()` |
@@ -492,7 +494,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `VideoFrameSamplerTests` | 短片段三锚点、长片段上限 10、零时长 |
 | `VideoDiagnosisGeneratorTests` | 未配置、prepare 失败、401 映射 |
 | `ReviewJobRunnerTests` | 顺序写回、401 停批、单条重试；`.mov` 走 `applyVideoDiagnosis` 写 `videoFindings` |
-| `PracticeFlowUITests` | 启动见今日练习、创建练习进详情、空完成留在练习 Tab、推荐 Sheet、设置外观分段 |
+| `PracticeFlowUITests` | 启动见今日练习或空态「今天还没加练习」且不见节奏卡、创建练习进详情、空完成留在练习 Tab、推荐 Sheet、设置外观分段 |
 
 ### 8.3 手测 / 回归清单
 
@@ -534,7 +536,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | 云同步 | 仅有 `syncState` / 软删字段；UI 已接软删 | 实现 `RemoteSyncRepository` 装饰器 + 冲突策略 |
 | 账号 / 多端 | 无 | 选定 BaaS 或自建后再扩 Repository |
 | 录视频 | 系统相机 + mov 入库；模拟器无相机 | 自定义 `AVCapture`、预览回放 UI、压缩策略 |
-| 按日任务规划 | 选日锁定列表；任务本身不按 `startedOn` 日切 | 若产品要「每日独立清单」，再引入日维度任务或归档规则 |
+| 按日任务规划 | 「今日练习」按 `startedOn` 当地自然日过滤；模板每日新实例 | 昨日未练不结转；「最近录入」入口如需要再开 |
 | 聚合缓存 | 全量 session 上算统计 | 数据量上来后再在 Store 侧缓存 |
 | 英文 locale | Catalog 已就绪，暂无 en 译文 | 在 `Localizable.xcstrings` 填 `en` |
 | 无障碍 | FAB / BPM / 工具按钮 / 录音面板有 label | 持续扫 VoiceOver 路径 |
