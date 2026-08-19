@@ -50,15 +50,20 @@ struct PracticeDetailView: View {
 
     private var task: TaskItem? { tasks.first }
 
-    private var openRecordings: [RecordingRef] {
-        sessions.first(where: { $0.id == openSessionId })?
-            .recordings.filter { $0.deletedAt == nil } ?? []
-    }
-
     private var visibleClips: [RecordingRef] {
-        openRecordings
-            .filter { MediaReviewMedia.isVideo(fileName: $0.fileName) == (toolMode == .video) }
-            .sorted { $0.createdAt > $1.createdAt }
+        let descriptors = sessions.flatMap(\.recordings).map {
+            PracticeClipDescriptor(
+                id: $0.id, fileName: $0.fileName, createdAt: $0.createdAt, deletedAt: $0.deletedAt
+            )
+        }
+        let visible = PracticeClipQuery.visible(
+            clips: descriptors, videoMode: toolMode == .video
+        )
+        let byId = Dictionary(
+            sessions.flatMap(\.recordings).map { ($0.id, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        return visible.compactMap { byId[$0.id] }
     }
 
     /// Anything worth losing a confirmation tap over.
@@ -458,8 +463,28 @@ struct PracticeDetailView: View {
 
     private func clipList(_ task: TaskItem) -> some View {
         VStack(spacing: 10) {
-            ForEach(visibleClips, id: \.id) { rec in
-                clipCard(rec, taskTitle: task.title)
+            if visibleClips.isEmpty {
+                VStack(spacing: 8) {
+                    Text(
+                        toolMode == .video
+                            ? String(localized: "还没有视频")
+                            : String(localized: "还没有录音")
+                    )
+                    .font(.system(size: 14, weight: .semibold))
+                    Text(
+                        toolMode == .video
+                            ? String(localized: "点上方「录视频」即可拍摄或从相册导入")
+                            : String(localized: "点上方「录音」即可留下片段")
+                    )
+                    .font(.system(size: 13))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ForEach(visibleClips, id: \.id) { rec in
+                    clipCard(rec, taskTitle: task.title)
+                }
             }
         }
     }
@@ -475,7 +500,7 @@ struct PracticeDetailView: View {
                 Text(video ? String(localized: "视频记录") : String(localized: "录音记录"))
                     .font(.system(size: 12, weight: .semibold))
                 Text("·")
-                Text(relativeTime(rec.createdAt))
+                Text(PracticeClipQuery.timestamp(rec.createdAt))
                     .font(.system(size: 12))
                     .foregroundStyle(GitaTheme.textSecondary)
                 Spacer()
@@ -485,6 +510,11 @@ struct PracticeDetailView: View {
             Text(video ? String(localized: "姿势、指法与节奏分析") : String(localized: "节奏与和弦切换分析"))
                 .font(.system(size: 13))
                 .foregroundStyle(GitaTheme.textSecondary)
+            if !RecordingStore.fileExists(fileName: rec.fileName) {
+                Text(String(localized: "文件缺失"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.statusError)
+            }
             if configured {
                 aiRow(rec)
             }
@@ -523,7 +553,9 @@ struct PracticeDetailView: View {
                 }
                 if MediaReviewMedia.isVideo(fileName: rec.fileName) {
                     Button(String(localized: "查看诊断")) {
-                        diagnosisRoute = VideoRoute(id: rec.id, durationSec: rec.durationSec)
+                        presentIfFileExists(rec) {
+                            diagnosisRoute = VideoRoute(id: rec.id, durationSec: rec.durationSec)
+                        }
                     }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(GitaTheme.brand500)
@@ -561,14 +593,12 @@ struct PracticeDetailView: View {
         }
     }
 
-    private func relativeTime(_ date: Date) -> String {
-        if Date().timeIntervalSince(date) < 60 {
-            return String(localized: "刚刚")
+    private func presentIfFileExists(_ rec: RecordingRef, present: () -> Void) {
+        guard RecordingStore.fileExists(fileName: rec.fileName) else {
+            show(String(localized: "文件不存在或已被移除"))
+            return
         }
-        let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "zh-Hans")
-        f.unitsStyle = .short
-        return f.localizedString(for: date, relativeTo: Date())
+        present()
     }
 
     private func recordingActivePanel(_ task: TaskItem) -> some View {
