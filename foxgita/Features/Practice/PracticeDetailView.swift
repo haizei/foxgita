@@ -309,7 +309,7 @@ struct PracticeDetailView: View {
                     .foregroundStyle(GitaTheme.textSecondary)
             }
             HStack {
-                circleBtn("－", label: String(localized: "降低 5 BPM")) { metronome.bump(-5) }
+                circleBtn("－", label: String(localized: "降低 1 BPM")) { metronome.bump(-1) }
                 VStack(spacing: 0) {
                     Text("\(metronome.bpm)")
                         .font(GitaFont.timer())
@@ -320,8 +320,8 @@ struct PracticeDetailView: View {
                 .frame(maxWidth: .infinity)
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text("当前速度 \(metronome.bpm) BPM"))
-                circleBtn("＋", label: String(localized: "提高 5 BPM"), accent: true) {
-                    metronome.bump(5)
+                circleBtn("＋", label: String(localized: "提高 1 BPM"), accent: true) {
+                    metronome.bump(1)
                 }
             }
         }
@@ -697,9 +697,13 @@ struct PracticeDetailView: View {
         if practiceTimer.isRunning {
             practiceTimer.pause()
             metronome.stop()
-        } else {
+            return
+        }
+        do {
+            try metronome.start()
             practiceTimer.start()
-            try? metronome.start()
+        } catch {
+            show(String(localized: "节拍器无法启动"))
         }
     }
 
