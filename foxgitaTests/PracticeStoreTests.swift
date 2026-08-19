@@ -35,6 +35,22 @@ struct PracticeStoreTests {
         try repo.save()
     }
 
+    private func shanghai() -> Calendar {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        return cal
+    }
+
+    private func date(
+        _ year: Int, _ month: Int, _ day: Int, _ hour: Int = 10,
+        calendar: Calendar? = nil
+    ) -> Date {
+        let cal = calendar ?? shanghai()
+        return cal.date(from: DateComponents(
+            year: year, month: month, day: day, hour: hour
+        ))!
+    }
+
     // MARK: - Seed
 
     @Test func seedOnlyRunsOnce() {
@@ -53,21 +69,96 @@ struct PracticeStoreTests {
     @Test func activateTemplateCreatesActiveCopy() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedTemplate(into: repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
 
-        let id = store.activateTemplate("tpl-chord")
-        #expect(id == "active-tpl-chord")
-        let active = try #require(try repo.task(id: "active-tpl-chord"))
+        let id = store.activateTemplate("tpl-chord", now: now, calendar: cal)
+        #expect(id == "active-tpl-chord-2026-08-19")
+        let active = try #require(try repo.task(id: "active-tpl-chord-2026-08-19"))
         #expect(active.isTemplate == false)
         #expect(active.title == "和弦模板")
         #expect(active.status == .active)
+        #expect(cal.isDate(active.startedOn ?? .distantPast, inSameDayAs: now))
     }
 
     @Test func activateTemplateIsIdempotent() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedTemplate(into: repo)
-        #expect(store.activateTemplate("tpl-chord") == "active-tpl-chord")
-        #expect(store.activateTemplate("tpl-chord") == "active-tpl-chord")
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
+        #expect(store.activateTemplate("tpl-chord", now: now, calendar: cal) == "active-tpl-chord-2026-08-19")
+        #expect(store.activateTemplate("tpl-chord", now: now, calendar: cal) == "active-tpl-chord-2026-08-19")
         #expect(try repo.tasks().filter { $0.id.hasPrefix("active-") }.count == 1)
+    }
+
+    @Test func activateTemplateCreatesNewInstanceNextDay() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let day1 = date(2026, 8, 19, calendar: cal)
+        let day2 = date(2026, 8, 20, calendar: cal)
+        #expect(store.activateTemplate("tpl-chord", now: day1, calendar: cal) == "active-tpl-chord-2026-08-19")
+        #expect(store.activateTemplate("tpl-chord", now: day2, calendar: cal) == "active-tpl-chord-2026-08-20")
+        let old = try #require(try repo.task(id: "active-tpl-chord-2026-08-19"))
+        #expect(cal.isDate(old.startedOn ?? .distantPast, inSameDayAs: day1))
+        #expect(try repo.tasks().filter { $0.id.hasPrefix("active-") }.count == 2)
+    }
+
+    @Test func activateTemplateReusesLegacyIdWhenStartedToday() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
+        let legacy = TaskItem(
+            id: "active-tpl-chord", title: "和弦模板", subtitle: "8 分钟",
+            category: .chord, targetMin: 8, startedOn: now, sortOrder: 10
+        )
+        try repo.add(legacy)
+        try repo.save()
+        #expect(store.activateTemplate("tpl-chord", now: now, calendar: cal) == "active-tpl-chord")
+        #expect(try repo.task(id: "active-tpl-chord-2026-08-19") == nil)
+    }
+
+    @Test func activateTemplateSkipsLegacyIdFromYesterday() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let yesterday = date(2026, 8, 18, calendar: cal)
+        let today = date(2026, 8, 19, calendar: cal)
+        let legacy = TaskItem(
+            id: "active-tpl-chord", title: "和弦模板", subtitle: "8 分钟",
+            category: .chord, targetMin: 8, startedOn: yesterday, sortOrder: 10
+        )
+        try repo.add(legacy)
+        try repo.save()
+        #expect(store.activateTemplate("tpl-chord", now: today, calendar: cal) == "active-tpl-chord-2026-08-19")
+        #expect(try repo.task(id: "active-tpl-chord") != nil)
+    }
+
+    @Test func activateTemplateRestoresSameDayDeletedInstance() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
+        let id = try #require(store.activateTemplate("tpl-chord", now: now, calendar: cal))
+        store.softDeleteTask(id)
+        #expect(try repo.task(id: id) == nil)
+        #expect(store.activateTemplate("tpl-chord", now: now, calendar: cal) == id)
+        let restored = try #require(try repo.task(id: id))
+        #expect(restored.deletedAt == nil)
+        #expect(restored.status == .active)
+        #expect(try repo.tasks().filter { $0.id.hasPrefix("active-") }.count == 1)
+    }
+
+    @Test func activateTemplateReactivatesDoneInstanceSameDay() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
+        let id = try #require(store.activateTemplate("tpl-chord", now: now, calendar: cal))
+        store.setTaskStatus(id, to: .done)
+        #expect(store.activateTemplate("tpl-chord", now: now, calendar: cal) == id)
+        #expect(try repo.task(id: id)?.status == .active)
     }
 
     @Test func activateMissingTemplateSetsNotFound() {

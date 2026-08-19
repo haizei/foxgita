@@ -5,6 +5,7 @@ struct PracticeRecordRulesTests {
     @Test func userAddedAcceptsCustomAndActivePrefixes() {
         #expect(PracticeRecordRules.isUserAddedTask(id: "custom-abc"))
         #expect(PracticeRecordRules.isUserAddedTask(id: "active-tpl-chord"))
+        #expect(PracticeRecordRules.isUserAddedTask(id: "active-tpl-chord-2026-08-19"))
         #expect(PracticeRecordRules.isUserAddedTask(id: "warm") == false)
         #expect(PracticeRecordRules.isUserAddedTask(id: "chord") == false)
         #expect(PracticeRecordRules.isUserAddedTask(id: "song") == false)

@@ -63,21 +63,39 @@ final class PracticeStore {
     // MARK: - Tasks
 
     @discardableResult
-    func activateTemplate(_ templateId: String) -> String? {
+    func activateTemplate(
+        _ templateId: String,
+        now: Date = Date(),
+        calendar: Calendar = .current
+    ) -> String? {
         guard let template = try? repository.task(id: templateId) else {
             lastError = .notFound
             return nil
         }
         guard template.isTemplate else { return template.id }
 
-        let activeId = "active-\(template.id)"
-        if let existing = try? repository.task(id: activeId) { return existing.id }
+        let dayKey = PracticeTaskRules.localDayKey(for: now, calendar: calendar)
+        let dailyId = "active-\(template.id)-\(dayKey)"
+        let legacyId = "active-\(template.id)"
+
+        if let existing = try? repository.task(id: dailyId) {
+            return ensureActive(existing)
+        }
+        if let tombstone = try? repository.taskIncludingDeleted(id: dailyId),
+           tombstone.deletedAt != nil {
+            return ensureActive(tombstone)
+        }
+        if let legacy = try? repository.task(id: legacyId),
+           let started = legacy.startedOn,
+           calendar.isDate(started, inSameDayAs: now) {
+            return ensureActive(legacy)
+        }
 
         let copy = TaskItem(
-            id: activeId, title: template.title, subtitle: template.subtitle,
+            id: dailyId, title: template.title, subtitle: template.subtitle,
             category: template.category, targetMin: template.targetMin,
             defaultBpm: template.defaultBpm, timeSig: template.timeSig,
-            steps: template.steps, status: .active, startedOn: Date(),
+            steps: template.steps, status: .active, startedOn: now,
             sortOrder: template.sortOrder, isTemplate: false
         )
         return produce {
@@ -459,6 +477,17 @@ final class PracticeStore {
     }
 
     // MARK: - Error plumbing
+
+    private func ensureActive(_ task: TaskItem) -> String? {
+        if task.status == .active && task.deletedAt == nil { return task.id }
+        return produce {
+            task.deletedAt = nil
+            task.status = .active
+            task.touch()
+            try repository.save()
+            return task.id
+        }
+    }
 
     private func perform(_ work: () throws -> Void) {
         _ = produce(work)

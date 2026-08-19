@@ -28,9 +28,16 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
+        XCTAssertTrue(app.staticTexts["今天还没加练习"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["还没有练习"].exists)
+        XCTAssertFalse(app.staticTexts["本周节奏"].exists)
+        XCTAssertFalse(app.staticTexts["当周节奏"].exists)
     }
 
     func testCreateCustomTaskOpensDetail() {
+        addTeardownBlock { [weak self] in
+            self?.deleteCreatedTask(named: "知足前奏")
+        }
         let add = app.buttons["添加练习"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
@@ -47,6 +54,9 @@ final class PracticeFlowUITests: XCTestCase {
     }
 
     func testEmptyCompleteStaysOnPracticeTab() {
+        addTeardownBlock { [weak self] in
+            self?.deleteCreatedTask(named: "空完成")
+        }
         let add = app.buttons["添加练习"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
@@ -86,5 +96,20 @@ final class PracticeFlowUITests: XCTestCase {
         app.tabBars.buttons["设置"].tap()
         XCTAssertTrue(app.staticTexts["主题外观"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["跟随系统"].exists || app.staticTexts["跟随系统"].exists)
+    }
+
+    private func deleteCreatedTask(named name: String) {
+        if app.buttons["返回"].waitForExistence(timeout: 1) {
+            app.buttons["返回"].tap()
+        }
+        let row = app.descendants(matching: .any)["\(name)，10 分钟，开始"].firstMatch
+        guard row.waitForExistence(timeout: 2) else { return }
+        row.swipeLeft()
+        let swipeDelete = app.buttons["删除"].firstMatch
+        guard swipeDelete.waitForExistence(timeout: 2) else { return }
+        swipeDelete.tap()
+        let confirmDelete = app.sheets["删除练习"].buttons["删除"].firstMatch
+        guard confirmDelete.waitForExistence(timeout: 2) else { return }
+        confirmDelete.tap()
     }
 }
