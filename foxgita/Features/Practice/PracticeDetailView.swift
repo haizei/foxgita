@@ -699,7 +699,7 @@ struct PracticeDetailView: View {
             metronome.stop()
         } else {
             practiceTimer.start()
-            metronome.start()
+            try? metronome.start()
         }
     }
 
