@@ -1,15 +1,6 @@
-//
-//  AudioSessionCoordinator.swift
-//  foxgita
-//
-
 import AVFoundation
 import Foundation
 
-/// Single owner of `AVAudioSession`. The metronome and the recorder used to set
-/// the category independently, so starting the metronome mid-take downgraded
-/// the session from `.playAndRecord` to `.playback` and killed the recording.
-/// Everything now declares a need and the coordinator picks the widest one.
 @MainActor
 final class AudioSessionCoordinator {
     static let shared = AudioSessionCoordinator()
@@ -19,16 +10,17 @@ final class AudioSessionCoordinator {
         case record
     }
 
-    /// Refcount per need so overlapping clients (e.g. metronome + diagnosis clip)
-    /// do not deactivate the session when only one of them releases.
     private var needCounts: [Need: Int] = [:]
     private var observer: NSObjectProtocol?
+    private let applyOverride: (@MainActor () throws -> Void)?
 
-    /// Invoked when the system interrupts audio (call, alarm) so engines can
-    /// stop instead of sitting in a fake running state.
     var onInterruption: (() -> Void)?
 
-    private init() {
+    var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 }
+
+    init(apply: (@MainActor () throws -> Void)? = nil) {
+        applyOverride = apply
+        guard apply == nil else { return }
         observer = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance(),
@@ -42,9 +34,16 @@ final class AudioSessionCoordinator {
         if let observer { NotificationCenter.default.removeObserver(observer) }
     }
 
+    func count(for need: Need) -> Int { needCounts[need, default: 0] }
+
     func acquire(_ need: Need) throws {
         needCounts[need, default: 0] += 1
-        try applyCategory()
+        do {
+            try applyCategory()
+        } catch {
+            rollback(need)
+            throw error
+        }
     }
 
     func release(_ need: Need) {
@@ -58,10 +57,24 @@ final class AudioSessionCoordinator {
             try? applyCategory()
             return
         }
+        guard applyOverride == nil else { return }
         try? AVAudioSession.sharedInstance().setActive(false, options: [.notifyOthersOnDeactivation])
     }
 
+    private func rollback(_ need: Need) {
+        guard let count = needCounts[need], count > 0 else { return }
+        if count == 1 {
+            needCounts.removeValue(forKey: need)
+        } else {
+            needCounts[need] = count - 1
+        }
+    }
+
     private func applyCategory() throws {
+        if let applyOverride {
+            try applyOverride()
+            return
+        }
         let session = AVAudioSession.sharedInstance()
         if needCounts[.record, default: 0] > 0 {
             try session.setCategory(
