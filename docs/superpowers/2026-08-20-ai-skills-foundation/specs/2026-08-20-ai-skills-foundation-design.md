@@ -4,7 +4,7 @@
 > 本文为 **Spec 1** 工程设计。Spec 2（Schema V6 / 只读记忆）与 Spec 3（管理 UI / 受控写入）另开文档。
 
 **日期：** 2026-08-20  
-**状态：** Draft — awaiting user review  
+**状态：** Approved — implementation plan ready  
 **方案：** 方案 1 — 共享 `AITransport` + 编译期 `SkillRegistry`，三个现有 Client 改为薄适配；Generator / View / 协议签名不变。  
 **成功标准：** 三个现有 AI 功能经 Registry 发起调用；Prompt 与输出 DTO 与当前版本等价；未注册 Skill 零网络；通用鉴权 / HTTP / fence / `response_format` 降级不再三处复制。
 

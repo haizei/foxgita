@@ -56,6 +56,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制通过 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` 通过 |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试通过 |
+| `SkillRegistryTests` | 内置三 id、version 1.0.0、记忆默认拒绝、缺 id 为 nil |
+| `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验通过 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断通过 |
 | `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试通过 |
