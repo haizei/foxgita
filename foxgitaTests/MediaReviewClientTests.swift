@@ -125,4 +125,90 @@ struct MediaReviewClientTests {
         #expect(draft.highlight == "a")
         #expect(calls == 2)
     }
+
+    @Test func generateReviewTimedOut() async {
+        ReviewMockURLProtocol.handler = { _ in throw URLError(.timedOut) }
+        defer { ReviewMockURLProtocol.handler = nil }
+        await #expect(throws: VisionPracticeError.timeout) {
+            try await makeClient().generateReview(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0xFF])],
+                contextText: "x"
+            )
+        }
+    }
+
+    @Test func generateReviewUnregisteredSkillSendsNoRequest() async {
+        var calls = 0
+        ReviewMockURLProtocol.handler = { _ in
+            calls += 1
+            return (200, Data())
+        }
+        defer { ReviewMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ReviewMockURLProtocol.self]
+        let client = MediaReviewClient(
+            session: URLSession(configuration: config),
+            registry: SkillRegistry(skills: [])
+        )
+        await #expect(throws: VisionPracticeError.unregisteredSkill) {
+            try await client.generateReview(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0xFF])],
+                contextText: "任务：和弦转换"
+            )
+        }
+        #expect(calls == 0)
+    }
+
+    @Test func generateReviewUsesFrozenSystemAndRuntimeContext() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": ["content": #"{"highlight":"稳","focus":"F 慢","nextAction":"70 BPM"}"#]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        ReviewMockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { ReviewMockURLProtocol.handler = nil }
+
+        _ = try await makeClient().generateReview(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            imageJPEGData: [Data([0xFF, 0xD8])],
+            contextText: "任务：和弦转换"
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.reviewMedia.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        #expect(user?[0]["text"] as? String == "任务：和弦转换")
+    }
+
+    private static func requestBodyString(_ request: URLRequest) -> String {
+        if let data = request.httpBody {
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        guard let stream = request.httpBodyStream else { return "" }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufferSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufferSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
 }
