@@ -15,5 +15,8 @@ struct ContentView: View {
 #Preview {
     ContentView()
         .environment(AppRouter())
-        .modelContainer(for: [TaskItem.self, PracticeSession.self, RecordingRef.self], inMemory: true)
+        .modelContainer(
+            for: [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self],
+            inMemory: true
+        )
 }

@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V5 migration plan
-/// (V2→V3→V4→V5) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V6 migration plan
+/// (V2→V3→V4→V5→V6) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V5 + migration plan --------------------
-        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
-        let config = ModelConfiguration(schema: v5Schema, url: url)
+        // --- Phase 2: reopen under V6 + migration plan --------------------
+        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let config = ModelConfiguration(schema: v6Schema, url: url)
         let container = try ModelContainer(
-            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -114,10 +114,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
-        let config = ModelConfiguration(schema: v5Schema, url: url)
+        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let config = ModelConfiguration(schema: v6Schema, url: url)
         let container = try ModelContainer(
-            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -155,15 +155,72 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
-        let config = ModelConfiguration(schema: v5Schema, url: url)
+        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let config = ModelConfiguration(schema: v6Schema, url: url)
         let container = try ModelContainer(
-            for: v5Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
         #expect(recordings[0].reviewHighlight == "稳")
         #expect(recordings[0].reviewStatus == .ready)
         #expect(recordings[0].videoFindings.isEmpty)
+    }
+
+    @Test func v5StoreMigratesToV6WithoutLosingRows() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v5-v6-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v5Schema = Schema(versionedSchema: GitaSchemaV5.self)
+            let config = ModelConfiguration(schema: v5Schema, url: url)
+            let container = try ModelContainer(for: v5Schema, configurations: [config])
+            let context = ModelContext(container)
+
+            let task = GitaSchemaV5.TaskItem(
+                id: "warm", title: "指尖热身", subtitle: "开放弦",
+                category: .left, targetMin: 5, steps: ["开放弦"]
+            )
+            context.insert(task)
+
+            let session = GitaSchemaV5.PracticeSession(
+                id: "sess-1", taskId: "warm", taskTitle: "指尖热身",
+                category: .left, startedAt: Date(), endedAt: Date(),
+                durationSec: 300, bpm: 80, timeSig: "4/4",
+                steps: ["开放弦"], noteText: "V5 笔记"
+            )
+            let rec = GitaSchemaV5.RecordingRef(
+                id: "rec-1", fileName: "clip.m4a", bytes: 2048,
+                durationSec: 12, createdAt: Date(), label: "片段"
+            )
+            rec.reviewHighlight = "稳"
+            rec.reviewStatus = .ready
+            session.recordings.append(rec)
+            context.insert(session)
+            try context.save()
+        }
+
+        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let config = ModelConfiguration(schema: v6Schema, url: url)
+        let container = try ModelContainer(
+            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let context = ModelContext(container)
+        let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+        let sessions = try context.fetch(FetchDescriptor<PracticeSession>())
+        let recordings = try context.fetch(FetchDescriptor<RecordingRef>())
+
+        #expect(tasks.count == 1)
+        #expect(tasks[0].id == "warm")
+        #expect(tasks[0].title == "指尖热身")
+        #expect(tasks[0].profileId == "")
+        #expect(sessions.count == 1)
+        #expect(sessions[0].noteText == "V5 笔记")
+        #expect(sessions[0].profileId == "")
+        #expect(recordings.count == 1)
+        #expect(recordings[0].fileName == "clip.m4a")
+        #expect(recordings[0].reviewHighlight == "稳")
+        #expect(recordings[0].reviewStatus == .ready)
     }
 }
