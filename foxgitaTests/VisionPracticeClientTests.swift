@@ -184,4 +184,76 @@ struct VisionPracticeClientTests {
         }
         return String(data: data, encoding: .utf8) ?? ""
     }
+
+    @Test func generateDraftTimedOut() async {
+        MockURLProtocol.handler = { _ in throw URLError(.timedOut) }
+        defer { MockURLProtocol.handler = nil }
+        await #expect(throws: VisionPracticeError.timeout) {
+            try await makeClient().generateDraft(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0x01])],
+                fallbackCategory: .left
+            )
+        }
+    }
+
+    @Test func generateDraftUnregisteredSkillSendsNoRequest() async {
+        var calls = 0
+        MockURLProtocol.handler = { _ in
+            calls += 1
+            return (200, Data())
+        }
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = VisionPracticeClient(
+            session: URLSession(configuration: config),
+            registry: SkillRegistry(skills: [])
+        )
+        await #expect(throws: VisionPracticeError.unregisteredSkill) {
+            try await client.generateDraft(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0x01])],
+                fallbackCategory: .left
+            )
+        }
+        #expect(calls == 0)
+    }
+
+    @Test func generateDraftUsesFrozenPlanSkillPrompt() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"title":"开放弦","category":"left","targetMin":8,"steps":["拨弦"]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        MockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        _ = try await makeClient().generateDraft(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            imageJPEGData: [Data([0xFF, 0xD8, 0xFF])],
+            fallbackCategory: .song
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.planFromImage.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        #expect(user?[0]["text"] as? String == SkillDefinition.planFromImage.userPrompt)
+        let imageURL = user?[1]["image_url"] as? [String: Any]
+        let dataURI = imageURL?["url"] as? String ?? ""
+        #expect(dataURI.hasPrefix("data:image/jpeg;base64,"))
+    }
 }
