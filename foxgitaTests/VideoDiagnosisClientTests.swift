@@ -131,4 +131,123 @@ struct VideoDiagnosisClientTests {
         #expect(draft.highlight == "稳")
         #expect(calls == 2)
     }
+
+    @Test func generateDiagnosisTimedOut() async {
+        DiagnosisMockURLProtocol.handler = { _ in throw URLError(.timedOut) }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+        await #expect(throws: VisionPracticeError.timeout) {
+            try await makeClient().generateDiagnosis(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0xFF])],
+                contextText: "x",
+                durationSec: 10
+            )
+        }
+    }
+
+    @Test func generateDiagnosisSetsLongRequestTimeout() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"highlight":"稳","focus":"F","nextAction":"慢练","findings":[]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var seen: TimeInterval = 0
+        DiagnosisMockURLProtocol.handler = { request in
+            seen = request.timeoutInterval
+            return (200, data)
+        }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+
+        _ = try await makeClient().generateDiagnosis(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk",
+            imageJPEGData: [Data([0xFF])],
+            contextText: "x",
+            durationSec: 10
+        )
+        #expect(seen == VideoDiagnosisClient.requestTimeout)
+        #expect(VideoDiagnosisClient.requestTimeout == 180)
+    }
+
+    @Test func generateDiagnosisUnregisteredSkillSendsNoRequest() async {
+        var calls = 0
+        DiagnosisMockURLProtocol.handler = { _ in
+            calls += 1
+            return (200, Data())
+        }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [DiagnosisMockURLProtocol.self]
+        let client = VideoDiagnosisClient(
+            session: URLSession(configuration: config),
+            registry: SkillRegistry(skills: [])
+        )
+        await #expect(throws: VisionPracticeError.unregisteredSkill) {
+            try await client.generateDiagnosis(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                imageJPEGData: [Data([0xFF])],
+                contextText: "x",
+                durationSec: 10
+            )
+        }
+        #expect(calls == 0)
+    }
+
+    @Test func generateDiagnosisUsesFrozenSystemAndRuntimeContext() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"highlight":"稳","focus":"F","nextAction":"慢练","findings":[]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        DiagnosisMockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+
+        _ = try await makeClient().generateDiagnosis(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            imageJPEGData: [Data([0xFF, 0xD8])],
+            contextText: "任务：和弦转换\n时长：180秒\n媒介：录像",
+            durationSec: 180
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.diagnoseVideo.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        #expect(user?[0]["text"] as? String == "任务：和弦转换\n时长：180秒\n媒介：录像")
+    }
+
+    private static func requestBodyString(_ request: URLRequest) -> String {
+        if let data = request.httpBody {
+            return String(data: data, encoding: .utf8) ?? ""
+        }
+        guard let stream = request.httpBodyStream else { return "" }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        let bufferSize = 1024
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: bufferSize)
+        defer { buffer.deallocate() }
+        while stream.hasBytesAvailable {
+            let read = stream.read(buffer, maxLength: bufferSize)
+            if read <= 0 { break }
+            data.append(buffer, count: read)
+        }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
 }
