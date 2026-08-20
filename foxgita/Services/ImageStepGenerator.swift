@@ -21,9 +21,11 @@ enum ImageStepGeneratorError: Error, Equatable {
                 return String(localized: "API Key 无效或无权限")
             case .invalidJSON, .emptyContent:
                 return String(localized: "模型返回格式不对，可换模型或重试")
+            case .timeout:
+                return String(localized: "请求超时，请重试")
             case .transport:
                 return String(localized: "网络异常，请重试")
-            case .invalidURL, .httpStatus:
+            case .invalidURL, .httpStatus, .unregisteredSkill:
                 return String(localized: "生成失败，请稍后重试")
             }
         }

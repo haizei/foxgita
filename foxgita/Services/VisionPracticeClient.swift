@@ -6,8 +6,12 @@ enum VisionPracticeError: Error, Equatable {
     case httpStatus(Int)
     case emptyContent
     case invalidJSON
+    case timeout
     case transport
+    case unregisteredSkill
 }
+
+typealias AIClientError = VisionPracticeError
 
 protocol VisionGenerating: Sendable {
     func generateDraft(

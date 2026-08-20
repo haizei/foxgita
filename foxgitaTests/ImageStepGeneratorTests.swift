@@ -65,4 +65,9 @@ struct ImageStepGeneratorTests {
             )
         }
     }
+
+    @Test func unregisteredSkillUsesGenericFailureCopy() {
+        let message = ImageStepGeneratorError.failed(.unregisteredSkill).userMessage
+        #expect(message == String(localized: "生成失败，请稍后重试"))
+    }
 }
