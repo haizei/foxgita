@@ -4,7 +4,7 @@
 > 本文为 **Spec 2** 工程设计。Spec 1（Skills 基础）已落地。Spec 3（授权 UI / 受控写入）另开文档。
 
 **日期：** 2026-08-21  
-**状态：** Draft — awaiting user review  
+**状态：** Approved — implementation plan ready  
 **方案：** 方案 1 — 字符串 `profileId` + lightweight V6；三个 Client 在发请求前拼接只读记忆块；正式路径零写入。  
 **成功标准：** V5 样例库升到 V6 后任务 / Session / 录音仍在；默认 Profile 唯一且 `memoryConsent == false`；未授权时三个 Skill 请求体与现在等价；授权 + 种子时 user 文本含 `BACKGROUND_MEMORY` 包装块且 system prompt 未改；双 Profile 记忆零泄漏；Release 不含 seeder。
 
