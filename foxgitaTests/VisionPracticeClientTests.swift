@@ -256,4 +256,25 @@ struct VisionPracticeClientTests {
         let dataURI = imageURL?["url"] as? String ?? ""
         #expect(dataURI.hasPrefix("data:image/jpeg;base64,"))
     }
+
+    @Test func generateDraftStripsFenceAfterEmptyCheck() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": "```json\n{\"title\":\"开放弦\",\"category\":\"left\",\"targetMin\":8,\"steps\":[\"拨弦\"]}\n```"
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        MockURLProtocol.handler = { _ in (200, data) }
+        defer { MockURLProtocol.handler = nil }
+        let draft = try await makeClient().generateDraft(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk",
+            imageJPEGData: [Data([0x01])],
+            fallbackCategory: .song
+        )
+        #expect(draft.title == "开放弦")
+    }
 }
