@@ -34,7 +34,7 @@ final class LiveMemoryContext: MemoryContextProviding {
                     predicate: #Predicate { $0.isActive == true }
                 )
             ).first
-            guard let profile, profile.memoryConsent else { return "" }
+            guard let profile, profile.consent == .enabled else { return "" }
             let items = try repository.fetch(
                 profileId: profile.id,
                 scopes: skill.memoryReadScopes,

@@ -35,14 +35,23 @@ struct MemoryContextTests {
     }
 
     @Test func liveReturnsEmptyWhenConsentOffEvenIfMemoriesExist() async throws {
-        let (live, _, _) = try makeLive()
+        let (live, _, profile) = try makeLive()
+        profile.consent = .disabled
+        let text = await live.block(skill: scopedPlanFromImage(), query: "")
+        #expect(text == "")
+    }
+
+    @Test func liveReturnsEmptyWhenUndecidedEvenIfMemoriesExist() async throws {
+        let (live, _, profile) = try makeLive()
+        profile.memoryConsent = true
+        profile.memoryConsentState = MemoryConsentState.undecided.rawValue
         let text = await live.block(skill: scopedPlanFromImage(), query: "")
         #expect(text == "")
     }
 
     @Test func liveReturnsWrappedGoalWhenConsentOn() async throws {
         let (live, _, profile) = try makeLive()
-        profile.memoryConsent = true
+        profile.consent = .enabled
         let text = await live.block(skill: scopedPlanFromImage(), query: "")
         #expect(text.contains("<<<BACKGROUND_MEMORY>>>"))
         #expect(text.contains("当前目标：《晴天》前奏"))
