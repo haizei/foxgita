@@ -16,6 +16,8 @@ protocol MemoryRepository: AnyObject {
     func softDelete(profileId: String, id: String) throws
     func softDeleteAll(profileId: String) throws
     func setConsent(profileId: String, _ state: MemoryConsentState) throws
+    func upsertTaskGoal(profileId: String, taskId: String, title: String) throws
+    func softDeleteTaskGoal(profileId: String, taskId: String) throws
 }
 
 @MainActor
@@ -127,6 +129,9 @@ final class SwiftDataMemoryRepository: MemoryRepository {
             )
         ).first else { throw StoreError.invalidInput }
         item.summaryText = summary
+        if item.sourceType == "task" {
+            item.sourceType = "user"
+        }
         item.updatedAt = Date()
     }
 
@@ -165,6 +170,57 @@ final class SwiftDataMemoryRepository: MemoryRepository {
             FetchDescriptor<LocalProfile>(predicate: #Predicate { $0.id == pid })
         ).first else { throw StoreError.invalidInput }
         profile.consent = state
+    }
+
+    private func taskGoalKey(_ taskId: String) -> String {
+        "task.\(taskId).title"
+    }
+
+    private func taskGoalRows(profileId: String, taskId: String) throws -> [MemoryItem] {
+        let pid = profileId
+        let key = taskGoalKey(taskId)
+        return try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.key == key }
+            )
+        )
+    }
+
+    func upsertTaskGoal(profileId: String, taskId: String, title: String) throws {
+        guard !profileId.isEmpty, !taskId.isEmpty else { throw StoreError.invalidInput }
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let summary = trimmed.count <= 120 ? trimmed : String(trimmed.prefix(120))
+        let rows = try taskGoalRows(profileId: profileId, taskId: taskId)
+        if rows.contains(where: { $0.deletedAt != nil }) { return }
+        if let live = rows.first(where: { $0.deletedAt == nil }) {
+            guard live.sourceType == "task" else { return }
+            live.summaryText = summary
+            live.updatedAt = Date()
+            return
+        }
+        context.insert(
+            MemoryItem(
+                profileId: profileId,
+                kind: .goal,
+                key: taskGoalKey(taskId),
+                summaryText: summary,
+                sourceType: "task",
+                sourceId: taskId,
+                confidence: 1,
+                importance: 0.6
+            )
+        )
+    }
+
+    func softDeleteTaskGoal(profileId: String, taskId: String) throws {
+        guard !profileId.isEmpty, !taskId.isEmpty else { throw StoreError.invalidInput }
+        let live = try taskGoalRows(profileId: profileId, taskId: taskId)
+            .first { $0.deletedAt == nil && $0.sourceType == "task" }
+        guard let live else { return }
+        let now = Date()
+        live.deletedAt = now
+        live.updatedAt = now
     }
 
     private static func score(item: MemoryItem, tokens: [String]) -> Int {

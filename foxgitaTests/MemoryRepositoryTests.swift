@@ -136,4 +136,83 @@ struct MemoryRepositoryTests {
         #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
         #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["B"])
     }
+
+    @Test func upsertTaskGoalRejectsEmptyIdsAndSkipsBlankTitle() throws {
+        let repo = try makeRepo()
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertTaskGoal(profileId: "", taskId: "custom-1", title: "练晴天")
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertTaskGoal(profileId: "p1", taskId: "", title: "练晴天")
+        }
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "   ")
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func upsertTaskGoalInsertsTruncatesAndUpdatesTaskSourcedRow() throws {
+        let repo = try makeRepo()
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "  练晴天  ")
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].key == "task.custom-1.title")
+        #expect(rows[0].summaryText == "练晴天")
+        #expect(rows[0].sourceType == "task")
+        #expect(rows[0].sourceId == "custom-1")
+        #expect(rows[0].kind == .goal)
+        #expect(rows[0].confidence == 1)
+        #expect(rows[0].importance == 0.6)
+
+        let long = String(repeating: "啊", count: 121)
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: long)
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].summaryText.count == 120)
+        #expect(rows[0].summaryText == String(long.prefix(120)))
+    }
+
+    @Test func upsertTaskGoalDoesNotOverwriteUserEditedOrTombstone() throws {
+        let repo = try makeRepo()
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "旧标题")
+        try repo.save()
+        let id = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())[0].id
+        try repo.updateSummary(profileId: "p1", id: id, summaryText: "我改的")
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows[0].sourceType == "user")
+        #expect(rows[0].key == "task.custom-1.title")
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "任务新名")
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows[0].summaryText == "我改的")
+        #expect(rows[0].sourceType == "user")
+
+        try repo.softDelete(profileId: "p1", id: id)
+        try repo.save()
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "复活？")
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func softDeleteTaskGoalOnlyRemovesLiveTaskSourcedRow() throws {
+        let repo = try makeRepo()
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "A")
+        try repo.upsertTaskGoal(profileId: "p2", taskId: "custom-2", title: "B")
+        try repo.save()
+        try repo.softDeleteTaskGoal(profileId: "p1", taskId: "custom-1")
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+        #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["B"])
+
+        try repo.upsertTaskGoal(profileId: "p2", taskId: "custom-2", title: "B")
+        try repo.save()
+        let id = try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date())[0].id
+        try repo.updateSummary(profileId: "p2", id: id, summaryText: "用户留着")
+        try repo.save()
+        try repo.softDeleteTaskGoal(profileId: "p2", taskId: "custom-2")
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["用户留着"])
+    }
 }
