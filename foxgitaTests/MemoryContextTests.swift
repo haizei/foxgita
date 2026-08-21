@@ -57,4 +57,16 @@ struct MemoryContextTests {
         #expect(text.contains("当前目标：《晴天》前奏"))
         #expect(!text.contains("[ability]"))
     }
+
+    @Test func liveIncludesTaskDerivedGoalWhenConsentEnabled() async throws {
+        let (live, repo, profile) = try makeLive()
+        profile.consent = .enabled
+        try repo.upsertTaskGoal(profileId: "p1", taskId: "custom-1", title: "自定义目标")
+        try repo.save()
+        let text = await live.block(skill: scopedPlanFromImage(), query: "")
+        #expect(text.contains("<<<BACKGROUND_MEMORY>>>"))
+        #expect(text.contains("自定义目标"))
+        #expect(text.contains("[goal]"))
+        #expect(!text.contains("你是吉他练习教练。只输出合法 JSON。"))
+    }
 }

@@ -157,6 +157,7 @@ struct AIMemorySettingsView: View {
     private func sourceLabel(_ raw: String) -> String {
         switch raw {
         case "user": return String(localized: "你添加的")
+        case "task": return String(localized: "来自练习任务")
         case "debug_seed": return String(localized: "调试种子")
         default: return raw
         }

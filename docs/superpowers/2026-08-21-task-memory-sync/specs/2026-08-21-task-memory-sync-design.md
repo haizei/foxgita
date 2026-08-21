@@ -4,7 +4,7 @@
 > 本文为 **Spec 4** 工程设计。Spec 1–3 已落地。Spec 5（AI 候选 / X4）另开文档。
 
 **日期：** 2026-08-21  
-**状态：** Approved — pending implementation  
+**状态：** Approved — implemented  
 **方案：** 方案 1 — 独立 `TaskMemorySync`；仅 `custom-*` 练习项各一条 goal；用户改摘要或删除优先于任务标题。  
 **成功标准：** 记忆开启后，新建或改名自定义任务会在「AI 记忆」出现对应目标，并进入会读 goal 的 Skill 的 `BACKGROUND_MEMORY`；用户改过的摘要不被任务改名盖掉；用户删过的 key 不因改任务或再次启用而复活；关闭记忆时任务照常保存且不新写记忆；模板与每日激活不产生记忆；记忆写入失败不丢任务。
 
