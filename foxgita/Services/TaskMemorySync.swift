@@ -58,6 +58,9 @@ final class TaskMemorySync {
                     )
                 } catch let error as StoreError where error == .invalidInput {
                     continue
+                } catch {
+                    lastError = StoreError.from(error)
+                    continue
                 }
             }
             try repository.save()

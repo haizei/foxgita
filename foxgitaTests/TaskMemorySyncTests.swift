@@ -71,6 +71,71 @@ struct TaskMemorySyncTests {
         #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
     }
 
+    @MainActor
+    private final class BackfillUpsertStub: MemoryRepository {
+        private(set) var upsertedTitles: [String] = []
+        private(set) var saveCallCount = 0
+
+        func fetch(
+            profileId: String,
+            scopes: [MemoryScope],
+            matching query: String,
+            now: Date
+        ) throws -> [MemoryItem] { [] }
+
+        func upsertDebug(_ item: MemoryItem) throws {}
+
+        func save() throws { saveCallCount += 1 }
+
+        func upsertUser(
+            profileId: String, kind: MemoryScope, summaryText: String
+        ) throws -> MemoryItem {
+            MemoryItem(
+                profileId: profileId, kind: kind, key: "stub", summaryText: summaryText,
+                sourceType: "stub", sourceId: "stub", confidence: 1, importance: 0.5
+            )
+        }
+
+        func updateSummary(profileId: String, id: String, summaryText: String) throws {}
+
+        func softDelete(profileId: String, id: String) throws {}
+
+        func softDeleteAll(profileId: String) throws {}
+
+        func setConsent(profileId: String, _ state: MemoryConsentState) throws {}
+
+        func upsertTaskGoal(profileId: String, taskId: String, title: String) throws {
+            if taskId == "custom-a" { throw StoreError.saveFailed }
+            upsertedTitles.append(title)
+        }
+
+        func softDeleteTaskGoal(profileId: String, taskId: String) throws {}
+    }
+
+    @Test func backfillContinuesAfterNonInputUpsertError() throws {
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        let profile = LocalProfile(id: "p1")
+        profile.consent = .enabled
+        context.insert(profile)
+        context.insert(customTask(id: "custom-a", title: "A"))
+        context.insert(customTask(id: "custom-b", title: "B"))
+        context.insert(customTask(id: "custom-c", title: "C"))
+        try context.save()
+
+        let stub = BackfillUpsertStub()
+        let sync = TaskMemorySync(repository: stub, context: context)
+        sync.backfill(profileId: "p1")
+
+        #expect(sync.lastError == .saveFailed)
+        #expect(Set(stub.upsertedTitles) == ["B", "C"])
+        #expect(stub.saveCallCount == 1)
+    }
+
     @Test func backfillFillsGapsAndSkipsTombstonesAndOtherProfiles() throws {
         let (sync, repo, context, profile) = try make()
         let p2 = LocalProfile(id: "p2", isActive: false)
