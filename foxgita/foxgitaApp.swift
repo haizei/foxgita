@@ -34,6 +34,9 @@ struct foxgitaApp: App {
             let taskMemorySync = TaskMemorySync(
                 repository: memoryRepo, context: container.mainContext
             )
+            let aiCandidateSync = AICandidateSync(
+                repository: memoryRepo, context: container.mainContext
+            )
             let memoryStore = MemoryStore(
                 repository: memoryRepo,
                 context: container.mainContext,
@@ -43,7 +46,8 @@ struct foxgitaApp: App {
             self.coordinator = MemoryConsentCoordinator(store: memoryStore)
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
-                taskMemorySync: taskMemorySync
+                taskMemorySync: taskMemorySync,
+                aiCandidateSync: aiCandidateSync
             )
             _store = State(initialValue: store)
             _reviewRunner = State(

@@ -27,15 +27,18 @@ final class PracticeStore {
     @ObservationIgnored private let repository: PracticeRepository
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let taskMemorySync: TaskMemorySync?
+    @ObservationIgnored private let aiCandidateSync: AICandidateSync?
 
     init(
         repository: PracticeRepository,
         defaults: UserDefaults = .standard,
-        taskMemorySync: TaskMemorySync? = nil
+        taskMemorySync: TaskMemorySync? = nil,
+        aiCandidateSync: AICandidateSync? = nil
     ) {
         self.repository = repository
         self.defaults = defaults
         self.taskMemorySync = taskMemorySync
+        self.aiCandidateSync = aiCandidateSync
     }
 
     func clearError() { lastError = nil }
@@ -429,6 +432,7 @@ final class PracticeStore {
     }
 
     func applyReview(recordingId: String, draft: MediaReviewDraft) {
+        var pending: (profileId: String, recordingId: String, focus: String)?
         perform {
             if let rec = try repository.recording(id: recordingId) {
                 rec.reviewStatus = .ready
@@ -438,12 +442,24 @@ final class PracticeStore {
                 rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
+                if let profileId = rec.session?.profileId, !profileId.isEmpty {
+                    pending = (profileId, recordingId, draft.focus)
+                }
             }
             try repository.save()
+        }
+        if lastError == nil, let pending {
+            applyCandidateFocus(
+                profileId: pending.profileId,
+                focus: pending.focus,
+                recordingId: pending.recordingId,
+                skill: .reviewMedia
+            )
         }
     }
 
     func applyVideoDiagnosis(recordingId: String, draft: VideoDiagnosisDraft) {
+        var pending: (profileId: String, recordingId: String, focus: String)?
         perform {
             if let rec = try repository.recording(id: recordingId) {
                 rec.reviewStatus = .ready
@@ -453,8 +469,19 @@ final class PracticeStore {
                 rec.videoFindings = draft.findings
                 rec.updatedAt = Date()
                 rec.syncState = .local
+                if let profileId = rec.session?.profileId, !profileId.isEmpty {
+                    pending = (profileId, recordingId, draft.focus)
+                }
             }
             try repository.save()
+        }
+        if lastError == nil, let pending {
+            applyCandidateFocus(
+                profileId: pending.profileId,
+                focus: pending.focus,
+                recordingId: pending.recordingId,
+                skill: .diagnoseVideo
+            )
         }
     }
 
@@ -535,6 +562,22 @@ final class PracticeStore {
             try repository.save()
             return task.id
         }
+    }
+
+    private func applyCandidateFocus(
+        profileId: String,
+        focus: String,
+        recordingId: String,
+        skill: SkillDefinition
+    ) {
+        guard let sync = aiCandidateSync else { return }
+        sync.syncFocus(
+            profileId: profileId,
+            focus: focus,
+            recordingId: recordingId,
+            skill: skill
+        )
+        if let error = sync.lastError { lastError = error }
     }
 
     private func applySyncUpsert(_ task: TaskItem) {
