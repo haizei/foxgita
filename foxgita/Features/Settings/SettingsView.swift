@@ -24,6 +24,7 @@ struct SettingsView: View {
     private let llmCredentials = LLMCredentialsStore()
 
     var body: some View {
+        NavigationStack {
         ZStack {
             PageBackground()
             ScrollView {
@@ -187,6 +188,28 @@ struct SettingsView: View {
                         .padding(16)
                     }
 
+                    sectionLabel("AI 记忆")
+                    group {
+                        NavigationLink {
+                            AIMemorySettingsView()
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("AI 记忆").font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(GitaTheme.textPrimary)
+                                    Text("Gita 记住的目标和偏好")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(GitaTheme.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.textTertiary)
+                            }
+                            .padding(16)
+                        }
+                    }
+
                     sectionLabel("关于")
                     group {
                         infoRow("Gita", "今天只练一点点")
@@ -213,6 +236,7 @@ struct SettingsView: View {
                 }
             }
         }
+        .navigationBarHidden(true)
         .alert("清除本地数据？", isPresented: $showClearConfirm) {
             Button("取消", role: .cancel) {}
             Button("清除", role: .destructive) {
@@ -240,6 +264,7 @@ struct SettingsView: View {
         }
         .onChange(of: remindMinute) { _, _ in
             Task { await applyReminder(enabled: remindOn) }
+        }
         }
     }
 
