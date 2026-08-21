@@ -16,6 +16,7 @@ struct VideoAnalysisView: View {
 
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var runner
+    @Environment(MemoryConsentCoordinator.self) private var consent
     @Query(filter: #Predicate<RecordingRef> { $0.deletedAt == nil })
     private var recordings: [RecordingRef]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
@@ -111,6 +112,7 @@ struct VideoAnalysisView: View {
         .onReceive(tick) { _ in advance() }
         .onAppear { syncReady() }
         .onChange(of: status) { _, _ in syncReady() }
+        .memoryConsentGate()
     }
 
     private var header: some View {
@@ -254,9 +256,12 @@ struct VideoAnalysisView: View {
     }
 
     private func retry() {
-        displayPercent = 0
-        store.markReviewsPending(recordingIds: [recordingId])
-        runner.enqueue([recordingId], baseURL: llmBaseURL, model: llmModel)
+        Task { @MainActor in
+            guard await consent.ensureDecided() == .proceed else { return }
+            displayPercent = 0
+            store.markReviewsPending(recordingIds: [recordingId])
+            runner.enqueue([recordingId], baseURL: llmBaseURL, model: llmModel)
+        }
     }
 
     private func isBarFilled(_ index: Int) -> Bool {

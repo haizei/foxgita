@@ -12,6 +12,7 @@ struct RecordDetailView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
+    @Environment(MemoryConsentCoordinator.self) private var consent
     @Query private var tasks: [TaskItem]
     @Query private var sessions: [PracticeSession]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
@@ -157,6 +158,7 @@ struct RecordDetailView: View {
                 )
             }
         }
+        .memoryConsentGate()
     }
 
     private var dataPane: some View {
@@ -349,8 +351,11 @@ struct RecordDetailView: View {
 
     private func requestReview(_ r: RecordingRef) {
         if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
-            store.markReviewsPending(recordingIds: [r.id])
-            reviewRunner.enqueue([r.id], baseURL: llmBaseURL, model: llmModel)
+            Task { @MainActor in
+                guard await consent.ensureDecided() == .proceed else { return }
+                store.markReviewsPending(recordingIds: [r.id])
+                reviewRunner.enqueue([r.id], baseURL: llmBaseURL, model: llmModel)
+            }
         } else {
             show(String(localized: "先去设置里填写 AI 接口"))
         }

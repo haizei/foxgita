@@ -17,6 +17,7 @@ struct foxgitaApp: App {
     private let liveMemory: LiveMemoryContext
     private let memoryRepo: SwiftDataMemoryRepository
     private let memoryStore: MemoryStore
+    private let coordinator: MemoryConsentCoordinator
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV7.self)
@@ -32,6 +33,7 @@ struct foxgitaApp: App {
             self.liveMemory = liveMemory
             let memoryStore = MemoryStore(repository: memoryRepo, context: container.mainContext)
             self.memoryStore = memoryStore
+            self.coordinator = MemoryConsentCoordinator(store: memoryStore)
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext)
             )
@@ -56,6 +58,7 @@ struct foxgitaApp: App {
                 .environment(reviewRunner)
                 .environment(\.memoryContext, liveMemory)
                 .environment(memoryStore)
+                .environment(coordinator)
                 .modelContainer(container)
                 .tint(GitaTheme.brand500)
                 .preferredColorScheme(appearance.colorScheme)

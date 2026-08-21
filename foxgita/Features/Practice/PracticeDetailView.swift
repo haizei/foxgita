@@ -11,6 +11,7 @@ struct PracticeDetailView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
+    @Environment(MemoryConsentCoordinator.self) private var consent
     @Query private var tasks: [TaskItem]
     @Query private var sessions: [PracticeSession]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
@@ -155,6 +156,7 @@ struct PracticeDetailView: View {
         } message: {
             Text("返回会丢掉本次计时、录音和笔记。")
         }
+        .memoryConsentGate()
     }
 
     @ViewBuilder
@@ -790,10 +792,15 @@ struct PracticeDetailView: View {
         recorder.detach(clip.id)
         video.detach(clip.id)
         if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
-            store.markReviewsPending(recordingIds: [clip.id])
-            reviewRunner.enqueue([clip.id], baseURL: llmBaseURL, model: llmModel)
-            if MediaReviewMedia.isVideo(fileName: clip.fileName) {
-                analysisRoute = VideoRoute(id: clip.id, durationSec: clip.durationSec)
+            let clipId = clip.id
+            let fileName = clip.fileName
+            Task { @MainActor in
+                guard await consent.ensureDecided() == .proceed else { return }
+                store.markReviewsPending(recordingIds: [clipId])
+                reviewRunner.enqueue([clipId], baseURL: llmBaseURL, model: llmModel)
+                if MediaReviewMedia.isVideo(fileName: fileName) {
+                    analysisRoute = VideoRoute(id: clipId, durationSec: clip.durationSec)
+                }
             }
         }
     }

@@ -17,6 +17,7 @@ struct PhotoPracticeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.memoryContext) private var memoryContext
     @Environment(PracticeStore.self) private var store
+    @Environment(MemoryConsentCoordinator.self) private var consent
     @State private var phase: Phase = .source
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isCameraPresented = false
@@ -85,6 +86,7 @@ struct PhotoPracticeSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+        .memoryConsentGate()
     }
 
     private var sourceContent: some View {
@@ -260,8 +262,10 @@ struct PhotoPracticeSheet: View {
     }
 
     private func beginGeneration(items: [PhotosPickerItem]) {
-        prepareGeneration()
         generateTask = Task {
+            let gate = await consent.ensureDecided()
+            guard gate == .proceed else { return }
+            prepareGeneration()
             do {
                 var blobs: [Data] = []
                 for item in items.prefix(3) {
@@ -281,8 +285,10 @@ struct PhotoPracticeSheet: View {
     }
 
     private func beginGeneration(blobs: [Data]) {
-        prepareGeneration()
         generateTask = Task {
+            let gate = await consent.ensureDecided()
+            guard gate == .proceed else { return }
+            prepareGeneration()
             do {
                 try await generate(blobs: blobs)
             } catch is CancellationError {
