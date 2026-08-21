@@ -27,8 +27,7 @@ enum MemoryDebugSeeder {
         repository: MemoryRepository
     ) throws {
         guard defaults.bool(forKey: defaultsKey) else { return }
-        profile.memoryConsent = true
-        profile.updatedAt = Date()
+        profile.consent = .enabled
         for seed in MemorySeedCatalog.items {
             try repository.upsertDebug(
                 MemoryItem(

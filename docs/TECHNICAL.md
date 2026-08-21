@@ -1,6 +1,6 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V6 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V7 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
 > 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
@@ -60,12 +60,13 @@ foxgita/
 │   ├── Practice/             # 周历练习首页 / 详情 / 推荐 / 编辑 Sheet
 │   ├── Record/               # 练习记录列表与详情
 │   ├── History/              # 月历 + 统计
-│   └── Settings/             # 提醒 / 外观 / 清数据
+│   └── Settings/             # 提醒 / 外观 / 清数据 / AI 记忆 / 首次授权 Sheet
 ├── Components/SharedUI.swift # StreakCard / TaskRowCard / DaySessionCard 等
 ├── Models/
-│   ├── Models.swift          # Schema V3–V5 + MigrationPlan（V2–V6）
+│   ├── Models.swift          # Schema V3–V5 + MigrationPlan（V2–V7）
 │   ├── SchemaV2.swift
-│   └── SchemaV6.swift        # LocalProfile / MemoryItem / profileId
+│   ├── SchemaV6.swift        # LocalProfile / MemoryItem / profileId
+│   └── SchemaV7.swift        # memoryConsentState；当前容器版本
 ├── Services/                 # 业务与基础设施（见 §5、§6）
 │   ├── PracticeStore.swift
 │   ├── AudioRecorderService.swift
@@ -73,8 +74,11 @@ foxgita/
 │   ├── AlbumDurationGate.swift      # 相册时长门 [30, 600] 秒
 │   ├── AlbumVideoImporter.swift     # 相册拷进 Recordings
 │   ├── RecordingStore.swift         # m4a / mov 文件与孤儿 GC
-│   ├── MemoryRepository.swift       # 显式 profileId 的只读 fetch
+│   ├── MemoryRepository.swift       # 显式 profileId 的 fetch；用户 CRUD
 │   ├── MemoryContextProviding.swift # LiveMemoryContext / EmptyMemoryContext
+│   ├── MemoryStore.swift            # 同意状态 + 用户记忆 CRUD
+│   ├── MemoryConsentState.swift     # 三态 + 隐私文案
+│   ├── MemoryConsentCoordinator.swift # 首次生成授权门
 │   ├── MemoryDebugSeeder.swift      # DEBUG 种子；Release 不含
 │   └── …
 ├── Theme/                    # 颜色 / 字体 / 外观 / 触感
@@ -90,7 +94,7 @@ foxgitaUITests/               # 主流程冒烟
 - **View**：只负责展示与意图（按钮、表单）；读用 `@Query`，写只调 `PracticeStore`。
 - **Store**：业务不变量与错误映射。
 - **Repository**：持久化细节；未来可套同步装饰器。
-- **Services**：音频、视频、计时、媒体文件、统计纯函数、提醒调度、只读记忆。
+- **Services**：音频、视频、计时、媒体文件、统计纯函数、提醒调度、记忆 CRUD 与授权。
 - **Theme**：设计 token，不放业务逻辑。
 
 ---
@@ -260,14 +264,14 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 
 | 介质 | 内容 |
 |---|---|
-| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` / `LocalProfile` / `MemoryItem`（`GitaSchemaV6`） |
+| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` / `LocalProfile` / `MemoryItem`（`GitaSchemaV7`） |
 | `Documents/Recordings/` | m4a / mov（及兼容 mp4）二进制 |
 | UserDefaults | 外观、提醒开关与时间、seed 版本键；DEBUG 记忆种子键 `gita.debug.memorySeed` |
 
-### 6.2 数据库设计（Schema V6）
+### 6.2 数据库设计（Schema V7）
 
-定义位置：`foxgita/Models/SchemaV6.swift`（`GitaSchemaV6`）；`GitaSchemaV2`–`V5` 留在 `Models.swift` / `SchemaV2.swift` 供迁移。  
-容器创建：`foxgitaApp` → `Schema(versionedSchema: GitaSchemaV6.self)` + `ModelContainer(..., migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
+定义位置：`foxgita/Models/SchemaV7.swift`（`GitaSchemaV7`）；`GitaSchemaV2`–`V5` 留在 `Models.swift` / `SchemaV2.swift` 供迁移；`SchemaV6.swift` 保留为轻量迁移源。  
+容器创建：`foxgitaApp` → `Schema(versionedSchema: GitaSchemaV7.self)` + `ModelContainer(..., migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
 媒体文件：`Documents/Recordings/`（见 `RecordingStore`）；库内只存 `fileName`。
 
 关系：
@@ -278,7 +282,7 @@ TaskItem 1 ──(逻辑关联 taskId)──> N PracticeSession
 PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 ```
 
-无 SwiftData `@Relationship` 连 Profile。`RecordingRef` 不加 `profileId`，归属跟随 Session。隐藏默认 Profile；无切换 / 授权设置页。
+无 SwiftData `@Relationship` 连 Profile。`RecordingRef` 不加 `profileId`，归属跟随 Session。隐藏默认 Profile；无 Profile 切换。同意与列表在设置 → **AI 记忆**；首次生成四个入口弹同一套说明 Sheet。
 
 #### 统一元数据
 
@@ -349,20 +353,22 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `reviewFindingsJSON` | String | 录像分段诊断 JSON 数组；默认 `"[]"` |
 | + 统一元数据 | | `updatedAt` / `deletedAt` / `syncStateRaw`（`createdAt` 见上） |
 
-V6 不加 `profileId`。
+V7 仍不加 `profileId`。
 
 计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `videoFindings` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
 `stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON；`videoFindings` ↔ `reviewFindingsJSON` 编解码 `[VideoFinding]`。
 
 #### LocalProfile（隐藏默认档案）
 
-本机一条 `isActive == true`。`memoryConsent` 默认 `false`；Release 无入口可改。
+本机一条 `isActive == true`。同意三态存在 `memoryConsentState`；旧 Bool `memoryConsent` 由 `consent` setter 同步（`.enabled` → `true`，其余 → `false`），不再作为注入门闩。
 
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | String (unique) | 主键 |
 | `isActive` | Bool | 本机只允许一条 `true` |
-| `memoryConsent` | Bool | 默认 `false`；关闭时不查 MemoryItem |
+| `memoryConsent` | Bool | 遗留字段；由 `consent` 同步，Live 不再读它 |
+| `memoryConsentState` | String | 持久化三态；空/未知 → `undecided` |
+| `consent` | `MemoryConsentState` | 计算属性：`undecided` / `enabled` / `disabled` |
 | `createdAt` / `updatedAt` | Date | 审计 |
 
 #### MemoryItem（结构化记忆）
@@ -381,29 +387,31 @@ V6 不加 `profileId`。
 | `schemaVersion` | Int | 默认 `1` |
 | `createdAt` / `updatedAt` / `deletedAt` | Date / Date? | 软删 |
 
-同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` 保证）。正式路径不写 MemoryItem；三个 Skill 的 `memoryWritePolicy` 仍为 `.deny`。
+同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` / `upsertUser` 保证）。用户可在设置页对手写 `goal` / `preference` 增删改摘要；三个 Skill 的 `memoryWritePolicy` 仍为 `.deny`。正式路径不写 AI 候选记忆。
 
 #### 迁移与别名
 
-- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` → `V6` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V5 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）；V6 新增 `profileId`（默认空串）、`LocalProfile`、`MemoryItem`
-- 默认 Profile 与空 `profileId` 回填在 `PracticeStore.prepare()`，不进 migration stage
+- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` → `V6` → `V7` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V5 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）；V6 新增 `profileId`（默认空串）、`LocalProfile`、`MemoryItem`；V7 新增 `memoryConsentState`（默认空串）
+- 默认 Profile、空 `profileId` 回填、空 `memoryConsentState` 从遗留 Bool 映射（`true` → `.enabled`，否则 → `.undecided`）在 `PracticeStore.prepare()` / `ensureProfile()`，不进 migration stage
 - **禁止**「检测到旧 seed 键就 `delete(model:)` 整库清空」——上架后等同抹用户数据
 
 ```swift
-typealias TaskItem = GitaSchemaV6.TaskItem
-typealias PracticeSession = GitaSchemaV6.PracticeSession
-typealias RecordingRef = GitaSchemaV6.RecordingRef
-typealias LocalProfile = GitaSchemaV6.LocalProfile
-typealias MemoryItem = GitaSchemaV6.MemoryItem
+typealias TaskItem = GitaSchemaV7.TaskItem
+typealias PracticeSession = GitaSchemaV7.PracticeSession
+typealias RecordingRef = GitaSchemaV7.RecordingRef
+typealias LocalProfile = GitaSchemaV7.LocalProfile
+typealias MemoryItem = GitaSchemaV7.MemoryItem
 ```
 
-#### 只读记忆服务
+#### 记忆服务
 
 | 类型 | 职责 |
 |---|---|
-| `MemoryRepository` / `SwiftDataMemoryRepository` | 显式 `profileId` 的只读 fetch；`upsertDebug` 仅测试 / DEBUG |
-| `MemoryContextProviding` | 授权门闩；`LiveMemoryContext` / `EmptyMemoryContext`；失败返回 `""` |
-| `MemoryDebugSeeder` | `#if DEBUG`；仅 `gita.debug.memorySeed == true` 时写三条种子并打开 consent；Release 不含 |
+| `MemoryRepository` / `SwiftDataMemoryRepository` | 显式 `profileId` 的 fetch；`upsertUser` / `updateSummary` / `softDelete` / `setConsent`；`upsertDebug` 仅测试 / DEBUG |
+| `MemoryStore` | 同意状态与用户 CRUD；未 `.enabled` 不能添加；失败写入 `lastError` |
+| `MemoryContextProviding` | `LiveMemoryContext` 仅在 `consent == .enabled` 时注入；`undecided` / `disabled` / 失败均返回 `""` |
+| `MemoryConsentCoordinator` | `ensureDecided() -> ConsentGateResult`；已决定不弹；未选择启用后 proceed |
+| `MemoryDebugSeeder` | `#if DEBUG`；仅 `gita.debug.memorySeed == true` 时写三条种子并 `profile.consent = .enabled`；Release 不含 |
 
 ### 6.3 业务逻辑：PracticeStore 命令
 
@@ -411,7 +419,7 @@ typealias MemoryItem = GitaSchemaV6.MemoryItem
 
 | 命令 | 不变量 / 行为 |
 |---|---|
-| `prepare()` | 迁移旧录音路径 → seed → GC 孤儿文件 |
+| `prepare()` | 迁移旧录音路径 → seed → ensure Profile（回填空 `profileId` / 空 `memoryConsentState`）→ GC 孤儿文件 |
 | `seedIfNeeded()` | 只写入模板，不写入 `todayTasks()` |
 | `activateTemplate(id, now, calendar)` | 模板 → `active-{id}-{yyyy-MM-dd}`（本地日键）当日幂等；旧 `active-{id}` 仅当 `startedOn` 是今天时复用；同日软删后恢复 |
 | `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」 |
@@ -430,7 +438,7 @@ typealias MemoryItem = GitaSchemaV6.MemoryItem
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 在 `memoryConsent == false`（Release 默认）时不查表，请求体与无记忆时等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。正式路径不写 MemoryItem。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。
+`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`；正式路径不写 AI 候选。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
 
 ### 6.3.2 练后媒体复盘
 
@@ -536,7 +544,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按日分钟、时长进位 |
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
 | `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
-| `MigrationTests` | V2→V6 / V5→V6 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填 |
+| `MigrationTests` | V2→V7 / V5→V7 / V6→V7 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填；V6 false → undecided |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
@@ -544,8 +552,11 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
 | `MemoryContextBuilderTests` | 空块、包装分隔符、goal 先于 ability、预算截断 |
-| `MemoryContextTests` | consent 关闭不注入；打开后图片 Skill 不含 ability |
-| `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并打开 consent |
+| `MemoryContextTests` | consent 非 enabled 不注入；打开后图片 Skill 不含 ability |
+| `MemoryStoreTests` | 未启用不能添加；增删改摘要 |
+| `MemoryConsentCoordinatorTests` | 已决定不弹；未选择启用后 proceed |
+| `MemoryConsentCopyTests` | 四条隐私文案与按钮文案 |
+| `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并 `consent == enabled` |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断 |
 | `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试 |

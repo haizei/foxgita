@@ -33,6 +33,7 @@ struct MemoryDebugSeederTests {
         defaults.set(true, forKey: MemoryDebugSeeder.defaultsKey)
         try MemoryDebugSeeder.seedIfNeeded(defaults: defaults, profile: profile, repository: repo)
         try repo.save()
+        #expect(profile.consent == .enabled)
         #expect(profile.memoryConsent == true)
         let goals = try repo.fetch(profileId: "p1", scopes: [.goal, .preference, .ability], matching: "", now: Date())
         #expect(Set(goals.map(\.key)) == Set(MemorySeedCatalog.items.map(\.key)))

@@ -4,7 +4,7 @@
 > 本文为 **Spec 3** 工程设计。Spec 1（Skills）与 Spec 2（Schema V6 只读注入）已落地。Spec 4（确定性 Task 回填 / AI 候选写入）另开文档。
 
 **日期：** 2026-08-21  
-**状态：** Approved — implementation plan ready  
+**状态：** Approved — implemented  
 **方案：** 方案 1 — 独立「AI 记忆」页 + 生成前授权门；Schema V7 三态同意；用户可手动添加 goal / preference。  
 **成功标准：** 未选择的用户第一次点生成会看到说明，选完后请求发出；暂不之后三个入口都不再弹，请求体无 `BACKGROUND_MEMORY`；启用后用户手写的目标和偏好出现在对应 Skill 的 user 文本包装块中；设置里能开/关、看、改、删、清空；删除后的内容不再进入请求；关闭或读取失败时练习主流程不中断。
 
