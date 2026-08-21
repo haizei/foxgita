@@ -15,6 +15,7 @@ struct foxgitaApp: App {
     @State private var reminderDelegate: ReminderDelegate?
     private let container: ModelContainer
     private let liveMemory: LiveMemoryContext
+    private let memoryRepo: SwiftDataMemoryRepository
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV6.self)
@@ -25,6 +26,7 @@ struct foxgitaApp: App {
             )
             self.container = container
             let memoryRepo = SwiftDataMemoryRepository(context: container.mainContext)
+            self.memoryRepo = memoryRepo
             let liveMemory = LiveMemoryContext(repository: memoryRepo, context: container.mainContext)
             self.liveMemory = liveMemory
             let store = PracticeStore(
@@ -55,6 +57,15 @@ struct foxgitaApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .onAppear {
                     store.prepare()
+                    #if DEBUG
+                    if let profile = try? store.activeProfileForDebug() {
+                        try? MemoryDebugSeeder.seedIfNeeded(
+                            defaults: .standard,
+                            profile: profile,
+                            repository: memoryRepo
+                        )
+                    }
+                    #endif
                     if reminderDelegate == nil {
                         reminderDelegate = ReminderDelegate { router.openTodayFirstPractice = true }
                     }

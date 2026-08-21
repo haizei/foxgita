@@ -43,6 +43,10 @@ final class PracticeStore {
         gcOrphanRecordings()
     }
 
+    func activeProfileForDebug() throws -> LocalProfile? {
+        try repository.activeProfile()
+    }
+
     func seedIfNeeded() {
         guard !defaults.bool(forKey: SeedData.seededKey) else { return }
         perform {
