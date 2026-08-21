@@ -487,6 +487,19 @@ struct PracticeStoreTests {
         #expect(tasks.contains { $0.id == "custom-only" } == false)
     }
 
+    @Test func resetAllStampsTemplatesWithActiveProfileId() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profile = try #require(try repo.activeProfile())
+
+        store.resetAll()
+
+        let tasks = try repo.tasks()
+        #expect(!tasks.isEmpty)
+        #expect(tasks.filter(\.isTemplate).allSatisfy { $0.profileId == profile.id })
+        #expect(try repo.activeProfile()?.id == profile.id)
+    }
+
     // MARK: - Review writes
 
     @Test func markPendingClearsReadyText() throws {

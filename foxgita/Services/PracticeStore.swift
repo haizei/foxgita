@@ -485,6 +485,7 @@ final class PracticeStore {
             defaults.set(true, forKey: SeedData.seededKey)
             RecordingStore.removeAll()
         }
+        ensureProfile()
     }
 
     // MARK: - Error plumbing
