@@ -38,6 +38,10 @@ final class ReviewMockURLProtocol: URLProtocol, @unchecked Sendable {
 
 @Suite(.serialized)
 struct MediaReviewClientTests {
+    private struct StubMemoryContext: MemoryContextProviding {
+        var text: String
+        func block(skill: SkillDefinition, query: String) async -> String { text }
+    }
     private func makeClient() -> MediaReviewClient {
         let config = URLSessionConfiguration.ephemeral
         config.protocolClasses = [ReviewMockURLProtocol.self]
@@ -191,6 +195,39 @@ struct MediaReviewClientTests {
         #expect(messages?[0]["content"] as? String == SkillDefinition.reviewMedia.systemPrompt)
         let user = messages?[1]["content"] as? [[String: Any]]
         #expect(user?[0]["text"] as? String == "任务：和弦转换")
+    }
+
+    @Test func generateReviewAppendsMemoryBlock() async throws {
+        let payload: [String: Any] = [
+            "choices": [["message": ["content": #"{"highlight":"稳","focus":"节奏","nextAction":"慢练"}"#]]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        ReviewMockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { ReviewMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [ReviewMockURLProtocol.self]
+        let client = MediaReviewClient(
+            session: URLSession(configuration: config),
+            memory: StubMemoryContext(text: "<<<BACKGROUND_MEMORY>>>\n- [ability] F 和弦按弦清晰度仍需改善\n<<<END_BACKGROUND_MEMORY>>>")
+        )
+        _ = try await client.generateReview(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk",
+            imageJPEGData: [Data([0xFF])],
+            contextText: "任务：晴天"
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.reviewMedia.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        let userText = user?[0]["text"] as? String ?? ""
+        #expect(userText.contains("任务：晴天"))
+        #expect(userText.contains("[ability]"))
     }
 
     private static func requestBodyString(_ request: URLRequest) -> String {

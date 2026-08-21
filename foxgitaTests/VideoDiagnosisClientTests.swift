@@ -36,6 +36,11 @@ final class DiagnosisMockURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+struct DiagnosisStubMemoryContext: MemoryContextProviding {
+    var text: String
+    func block(skill: SkillDefinition, query: String) async -> String { text }
+}
+
 @Suite(.serialized)
 struct VideoDiagnosisClientTests {
     private func makeClient() -> VideoDiagnosisClient {
@@ -230,6 +235,46 @@ struct VideoDiagnosisClientTests {
         #expect(messages?[0]["content"] as? String == SkillDefinition.diagnoseVideo.systemPrompt)
         let user = messages?[1]["content"] as? [[String: Any]]
         #expect(user?[0]["text"] as? String == "任务：和弦转换\n时长：180秒\n媒介：录像")
+    }
+
+    @Test func generateDiagnosisAppendsMemoryBlock() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"highlight":"稳","focus":"F","nextAction":"慢练","findings":[]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        DiagnosisMockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { DiagnosisMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [DiagnosisMockURLProtocol.self]
+        let client = VideoDiagnosisClient(
+            session: URLSession(configuration: config),
+            memory: DiagnosisStubMemoryContext(
+                text: "<<<BACKGROUND_MEMORY>>>\n- [ability] F 和弦按弦清晰度仍需改善\n<<<END_BACKGROUND_MEMORY>>>"
+            )
+        )
+        _ = try await client.generateDiagnosis(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            imageJPEGData: [Data([0xFF, 0xD8])],
+            contextText: "任务：晴天",
+            durationSec: 180
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.diagnoseVideo.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        let userText = user?[0]["text"] as? String ?? ""
+        #expect(userText.contains("任务：晴天"))
+        #expect(userText.contains("[ability]"))
     }
 
     private static func requestBodyString(_ request: URLRequest) -> String {

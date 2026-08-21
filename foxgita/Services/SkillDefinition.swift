@@ -35,7 +35,7 @@ struct SkillDefinition: Equatable, Sendable {
 extension SkillDefinition {
     static let planFromImage = SkillDefinition(
         id: SkillID.planFromImage,
-        version: "1.0.0",
+        version: "1.1.0",
         title: "图片转练习",
         purpose: "从图片生成练习任务草稿",
         systemPrompt: "你是吉他练习教练。只输出合法 JSON。",
@@ -51,13 +51,13 @@ extension SkillDefinition {
         """,
         timeout: nil,
         allowsFormatRetry: true,
-        memoryReadScopes: [],
+        memoryReadScopes: [.goal, .preference],
         memoryWritePolicy: .deny
     )
 
     static let reviewMedia = SkillDefinition(
         id: SkillID.reviewMedia,
-        version: "1.0.0",
+        version: "1.1.0",
         title: "媒体复盘",
         purpose: "根据波形或练习画面给出三段复盘",
         systemPrompt: """
@@ -68,13 +68,13 @@ extension SkillDefinition {
         userPrompt: nil,
         timeout: nil,
         allowsFormatRetry: true,
-        memoryReadScopes: [],
+        memoryReadScopes: [.goal, .preference, .ability],
         memoryWritePolicy: .deny
     )
 
     static let diagnoseVideo = SkillDefinition(
         id: SkillID.diagnoseVideo,
-        version: "1.0.0",
+        version: "1.1.0",
         title: "录像分段诊断",
         purpose: "根据关键帧给出可定位的分段诊断",
         systemPrompt: """
@@ -86,7 +86,7 @@ extension SkillDefinition {
         userPrompt: nil,
         timeout: 180,
         allowsFormatRetry: true,
-        memoryReadScopes: [],
+        memoryReadScopes: [.goal, .preference, .ability],
         memoryWritePolicy: .deny
     )
 }
