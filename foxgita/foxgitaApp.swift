@@ -18,7 +18,7 @@ struct foxgitaApp: App {
     private let memoryRepo: SwiftDataMemoryRepository
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(

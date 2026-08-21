@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MemoryRepositoryTests {
     private func makeRepo() throws -> SwiftDataMemoryRepository {
-        let schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         return SwiftDataMemoryRepository(context: ModelContext(container))

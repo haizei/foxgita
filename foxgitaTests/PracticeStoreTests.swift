@@ -98,6 +98,24 @@ struct PracticeStoreTests {
         #expect(task.profileId == profile.id)
     }
 
+    @Test func prepareMapsEmptyConsentStateFromLegacyBool() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let denied = try repo.ensureDefaultProfile()
+        denied.memoryConsent = false
+        denied.memoryConsentState = ""
+        try repo.save()
+        store.prepare()
+        #expect(denied.consent == .undecided)
+        #expect(denied.memoryConsent == false)
+
+        denied.memoryConsent = true
+        denied.memoryConsentState = ""
+        try repo.save()
+        store.prepare()
+        #expect(denied.consent == .enabled)
+        #expect(denied.memoryConsent == true)
+    }
+
     // MARK: - Tasks
 
     @Test func activateTemplateCreatesActiveCopy() throws {

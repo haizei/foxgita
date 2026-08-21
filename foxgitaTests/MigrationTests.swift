@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V6 migration plan
-/// (V2→V3→V4→V5→V6) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V7 migration plan
+/// (V2→V3→V4→V5→V6→V7) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V6 + migration plan --------------------
-        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
-        let config = ModelConfiguration(schema: v6Schema, url: url)
+        // --- Phase 2: reopen under V7 + migration plan --------------------
+        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let config = ModelConfiguration(schema: v7Schema, url: url)
         let container = try ModelContainer(
-            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -114,10 +114,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
-        let config = ModelConfiguration(schema: v6Schema, url: url)
+        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let config = ModelConfiguration(schema: v7Schema, url: url)
         let container = try ModelContainer(
-            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -155,10 +155,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
-        let config = ModelConfiguration(schema: v6Schema, url: url)
+        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let config = ModelConfiguration(schema: v7Schema, url: url)
         let container = try ModelContainer(
-            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -201,10 +201,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
-        let config = ModelConfiguration(schema: v6Schema, url: url)
+        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let config = ModelConfiguration(schema: v7Schema, url: url)
         let container = try ModelContainer(
-            for: v6Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -222,5 +222,50 @@ struct MigrationTests {
         #expect(recordings[0].fileName == "clip.m4a")
         #expect(recordings[0].reviewHighlight == "稳")
         #expect(recordings[0].reviewStatus == .ready)
+    }
+
+    @Test func v6StoreMigratesToV7WithoutLosingRowsAndLeavesConsentUndecided() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v6-v7-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v6Schema = Schema(versionedSchema: GitaSchemaV6.self)
+            let config = ModelConfiguration(schema: v6Schema, url: url)
+            let container = try ModelContainer(for: v6Schema, configurations: [config])
+            let context = ModelContext(container)
+            let task = GitaSchemaV6.TaskItem(
+                id: "warm", title: "指尖热身", subtitle: "开放弦",
+                category: .left, targetMin: 5, steps: ["开放弦"], profileId: "p1"
+            )
+            context.insert(task)
+            let profile = GitaSchemaV6.LocalProfile(id: "p1", memoryConsent: false)
+            context.insert(profile)
+            let memory = GitaSchemaV6.MemoryItem(
+                profileId: "p1", kind: .goal, key: "goal.current_song",
+                summaryText: "当前目标：《晴天》前奏",
+                sourceType: "debug_seed", sourceId: "goal.current_song",
+                confidence: 1, importance: 1
+            )
+            context.insert(memory)
+            try context.save()
+        }
+
+        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let config = ModelConfiguration(schema: v7Schema, url: url)
+        let container = try ModelContainer(
+            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let context = ModelContext(container)
+        let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+        let profiles = try context.fetch(FetchDescriptor<LocalProfile>())
+        let memories = try context.fetch(FetchDescriptor<MemoryItem>())
+        #expect(tasks.count == 1)
+        #expect(tasks[0].profileId == "p1")
+        #expect(memories.count == 1)
+        #expect(memories[0].summaryText == "当前目标：《晴天》前奏")
+        #expect(profiles.count == 1)
+        #expect(profiles[0].memoryConsent == false)
+        #expect(profiles[0].memoryConsentState == "")
     }
 }

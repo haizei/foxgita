@@ -497,6 +497,9 @@ final class PracticeStore {
     private func ensureProfile() {
         perform {
             let profile = try repository.ensureDefaultProfile()
+            if profile.memoryConsentState.isEmpty {
+                profile.consent = profile.memoryConsent ? .enabled : .undecided
+            }
             try repository.backfillEmptyProfileIds(profile.id)
             try repository.save()
         }

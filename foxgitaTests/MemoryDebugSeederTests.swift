@@ -14,7 +14,7 @@ struct MemoryDebugSeederTests {
     }
 
     @Test func seedIfNeededNoopsUnlessFlagSet() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV6.self)
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
