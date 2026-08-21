@@ -83,6 +83,9 @@ struct PhotoPracticeSheet: View {
         }
         .onDisappear {
             generateTask?.cancel()
+            if consent.isPresented {
+                consent.chooseDisabled()
+            }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
@@ -263,6 +266,7 @@ struct PhotoPracticeSheet: View {
     private func beginGeneration(items: [PhotosPickerItem]) {
         generateTask = Task {
             let gate = await consent.ensureDecided()
+            guard !Task.isCancelled else { return }
             guard gate == .proceed else { return }
             prepareGeneration()
             do {
@@ -286,6 +290,7 @@ struct PhotoPracticeSheet: View {
     private func beginGeneration(blobs: [Data]) {
         generateTask = Task {
             let gate = await consent.ensureDecided()
+            guard !Task.isCancelled else { return }
             guard gate == .proceed else { return }
             prepareGeneration()
             do {

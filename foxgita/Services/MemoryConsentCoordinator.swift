@@ -46,13 +46,14 @@ struct MemoryConsentGateModifier: ViewModifier {
     func body(content: Content) -> some View {
         @Bindable var coordinator = coordinator
         content
-            .sheet(isPresented: $coordinator.isPresented, onDismiss: {
+            .fullScreenCover(isPresented: $coordinator.isPresented, onDismiss: {
                 coordinator.chooseDisabled()
             }) {
                 MemoryConsentSheet(
                     onEnable: { coordinator.chooseEnabled() },
                     onDecline: { coordinator.chooseDisabled() }
                 )
+                .interactiveDismissDisabled(false)
             }
     }
 }

@@ -9,11 +9,15 @@ struct AIMemorySettingsView: View {
     @State private var editSummary = ""
     @State private var pendingDelete: MemoryItem?
     @State private var showClear = false
+    @State private var toast: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 toggleCard
+                if memoryStore.lastError != nil {
+                    errorCaption
+                }
                 ForEach(MemoryConsentCopy.lines, id: \.self) { line in
                     Text(line)
                         .font(.system(size: 13))
@@ -39,7 +43,19 @@ struct AIMemorySettingsView: View {
         .navigationTitle(MemoryConsentCopy.title)
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarHidden(false)
-        .onAppear { memoryStore.reload() }
+        .overlay {
+            if let toast {
+                VStack {
+                    Spacer()
+                    ToastBanner(text: toast)
+                        .padding(.bottom, 40)
+                }
+            }
+        }
+        .onAppear {
+            memoryStore.reload()
+            presentStoreErrorIfNeeded()
+        }
         .sheet(isPresented: $showAdd) { addSheet }
         .sheet(isPresented: Binding(
             get: { editingId != nil },
@@ -55,11 +71,15 @@ struct AIMemorySettingsView: View {
             Button("删除", role: .destructive) {
                 if let id = pendingDelete?.id { _ = memoryStore.delete(id: id) }
                 pendingDelete = nil
+                presentStoreErrorIfNeeded()
             }
         }
         .alert("清除全部 AI 记忆？", isPresented: $showClear) {
             Button("取消", role: .cancel) {}
-            Button("清除", role: .destructive) { _ = memoryStore.clearAll() }
+            Button("清除", role: .destructive) {
+                _ = memoryStore.clearAll()
+                presentStoreErrorIfNeeded()
+            }
         } message: {
             Text("删除后不会再发给模型。练习记录不会动。")
         }
@@ -68,7 +88,10 @@ struct AIMemorySettingsView: View {
     private var toggleCard: some View {
         Toggle(isOn: Binding(
             get: { memoryStore.consent == .enabled },
-            set: { _ = memoryStore.setConsent($0 ? .enabled : .disabled) }
+            set: {
+                _ = memoryStore.setConsent($0 ? .enabled : .disabled)
+                presentStoreErrorIfNeeded()
+            }
         )) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("允许 AI 使用长期记忆").font(.system(size: 14, weight: .semibold))
@@ -147,6 +170,9 @@ struct AIMemorySettingsView: View {
                     Text("偏好").tag(MemoryScope.preference)
                 }
                 TextField("摘要", text: $addSummary, axis: .vertical)
+                if memoryStore.lastError != nil {
+                    errorCaption
+                }
             }
             .navigationTitle("添加记忆")
             .toolbar {
@@ -158,6 +184,8 @@ struct AIMemorySettingsView: View {
                         if memoryStore.add(kind: addKind, summary: addSummary) {
                             addSummary = ""
                             showAdd = false
+                        } else {
+                            presentStoreErrorIfNeeded()
                         }
                     }
                 }
@@ -169,6 +197,9 @@ struct AIMemorySettingsView: View {
         NavigationStack {
             Form {
                 TextField("摘要", text: $editSummary, axis: .vertical)
+                if memoryStore.lastError != nil {
+                    errorCaption
+                }
             }
             .navigationTitle("编辑记忆")
             .toolbar {
@@ -177,13 +208,38 @@ struct AIMemorySettingsView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("保存") {
-                        if let id = editingId {
-                            _ = memoryStore.updateSummary(id: id, summary: editSummary)
+                        guard let id = editingId else { return }
+                        if memoryStore.updateSummary(id: id, summary: editSummary) {
+                            editingId = nil
+                        } else {
+                            presentStoreErrorIfNeeded()
                         }
-                        editingId = nil
                     }
                 }
             }
         }
+    }
+
+    private var errorCaption: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(memoryStore.lastError?.errorDescription ?? String(localized: "保存失败"))
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            Spacer()
+            Button("重试") { retryReload() }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(GitaTheme.brand500)
+        }
+    }
+
+    private func retryReload() {
+        memoryStore.reload()
+        presentStoreErrorIfNeeded()
+    }
+
+    private func presentStoreErrorIfNeeded() {
+        guard let error = memoryStore.lastError else { return }
+        toast = error.errorDescription ?? String(localized: "保存失败")
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { toast = nil }
     }
 }
