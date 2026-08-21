@@ -69,4 +69,21 @@ struct MemoryContextTests {
         #expect(text.contains("[goal]"))
         #expect(!text.contains("你是吉他练习教练。只输出合法 JSON。"))
     }
+
+    @Test func liveIncludesAICandidateAbilityWhenConsentEnabled() async throws {
+        let (live, repo, profile) = try makeLive()
+        profile.consent = .enabled
+        try repo.upsertAICandidate(
+            profileId: "p1",
+            recordingId: "clip-1",
+            summaryText: "压弦要贴品丝",
+            valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        let text = await live.block(skill: .reviewMedia, query: "")
+        #expect(text.contains("<<<BACKGROUND_MEMORY>>>"))
+        #expect(text.contains("压弦要贴品丝"))
+        #expect(text.contains("[ability]"))
+        #expect(!text.contains("你是吉他练习陪伴教练。根据波形图或练习画面帧给出简短复盘。只返回 JSON，不要 markdown。"))
+    }
 }

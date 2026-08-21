@@ -158,6 +158,7 @@ struct AIMemorySettingsView: View {
         switch raw {
         case "user": return String(localized: "你添加的")
         case "task": return String(localized: "来自练习任务")
+        case "ai": return String(localized: "AI 观察")
         case "debug_seed": return String(localized: "调试种子")
         default: return raw
         }

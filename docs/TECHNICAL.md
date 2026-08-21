@@ -77,6 +77,7 @@ foxgita/
 │   ├── MemoryRepository.swift       # 显式 profileId 的 fetch；用户 CRUD
 │   ├── MemoryContextProviding.swift # LiveMemoryContext / EmptyMemoryContext
 │   ├── TaskMemorySync.swift         # custom-* 任务标题 → goal
+│   ├── AICandidateSync.swift        # 复盘/诊断 focus → ability.current_focus
 │   ├── MemoryStore.swift            # 同意状态 + 用户记忆 CRUD
 │   ├── MemoryConsentState.swift     # 三态 + 隐私文案
 │   ├── MemoryConsentCoordinator.swift # 首次生成授权门
@@ -388,7 +389,7 @@ V7 仍不加 `profileId`。
 | `schemaVersion` | Int | 默认 `1` |
 | `createdAt` / `updatedAt` / `deletedAt` | Date / Date? | 软删 |
 
-同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` / `upsertUser` 保证）。用户可在设置页对手写 `goal` / `preference` 增删改摘要；三个 Skill 的 `memoryWritePolicy` 仍为 `.deny`。正式路径不写 AI 候选记忆。
+同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` / `upsertUser` 保证）。用户可在设置页对手写 `goal` / `preference` 增删改摘要；`practice.plan.from_image` 的 `memoryWritePolicy` 仍为 `.deny`。`practice.review.media` 与 `practice.diagnose.video` 为 `.candidates`。同意 `enabled` 时，`PracticeStore.applyReview` / `applyVideoDiagnosis` 成功后由 `AICandidateSync` 写入全 Profile 一条 ability：`key = ability.current_focus`，`sourceType = ai`，`confidence` / `importance` = `0.4`，`valueJSON = {skill.id}@{skill.version}`。用户改摘要后 `sourceType` 变为 `user`，之后复盘不再覆盖；用户删除或清空后同 key 不复活。记忆写入失败不回滚复盘结果。设计说明：`docs/superpowers/2026-08-21-ai-candidate-memory/specs/2026-08-21-ai-candidate-memory-design.md`。
 
 #### 迁移与别名
 
@@ -439,7 +440,7 @@ typealias MemoryItem = GitaSchemaV7.MemoryItem
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`；正式路径不写 AI 候选。同意 `enabled` 时，`PracticeStore` 对 `custom-*` 任务调用 `TaskMemorySync`：每条练习项一条 goal，`key = task.{taskId}.title`，`sourceType = task`，`importance = 0.6`。用户改摘要后 `sourceType` 变为 `user`，之后改任务标题不再覆盖；用户删除或清空后同 key 不复活。模板与每日 `active-*` 激活不写记忆。设计说明：`docs/superpowers/2026-08-21-task-memory-sync/specs/2026-08-21-task-memory-sync-design.md`。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
+`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`。图片 Skill 仍不写候选；复盘/诊断候选见 `AICandidateSync`（§6.2 MemoryItem）。同意 `enabled` 时，`PracticeStore` 对 `custom-*` 任务调用 `TaskMemorySync`：每条练习项一条 goal，`key = task.{taskId}.title`，`sourceType = task`，`importance = 0.6`。用户改摘要后 `sourceType` 变为 `user`，之后改任务标题不再覆盖；用户删除或清空后同 key 不复活。模板与每日 `active-*` 激活不写记忆。设计说明：`docs/superpowers/2026-08-21-task-memory-sync/specs/2026-08-21-task-memory-sync-design.md`。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
 
 ### 6.3.2 练后媒体复盘
 

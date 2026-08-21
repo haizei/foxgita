@@ -4,7 +4,7 @@
 > 本文为 **Spec 5** 工程设计。Spec 1–4 已落地。Spec 6（三次 Session 升级 / 确认 UI）另开文档。
 
 **日期：** 2026-08-21  
-**状态：** Approved — pending implementation  
+**状态：** Approved — implemented  
 **方案：** 方案 1 — 独立 `AICandidateSync`；全 Profile 一条 `ability.current_focus`；复盘/诊断每次成功落库后用 `focus` 覆盖。  
 **成功标准：** 记忆开启且复盘或诊断解析成功后，设置页「能力」出现当前重点，摘要等于当次 `focus`，并进入会读 ability 的 Skill 的 `BACKGROUND_MEMORY`；整批录音中最后一条成功结果说了算；用户删过的不复活；关闭记忆或解析失败不写候选；记忆写入失败不丢复盘结果；图片转练习仍不写候选。
 
