@@ -7,14 +7,20 @@ import SwiftData
 final class MemoryStore {
     private let repository: MemoryRepository
     private let context: ModelContext
+    private let taskMemorySync: TaskMemorySync?
 
     private(set) var consent: MemoryConsentState = .undecided
     private(set) var items: [MemoryItem] = []
     private(set) var lastError: StoreError?
 
-    init(repository: MemoryRepository, context: ModelContext) {
+    init(
+        repository: MemoryRepository,
+        context: ModelContext,
+        taskMemorySync: TaskMemorySync? = nil
+    ) {
         self.repository = repository
         self.context = context
+        self.taskMemorySync = taskMemorySync
     }
 
     func reload() {
@@ -40,9 +46,15 @@ final class MemoryStore {
 
     @discardableResult
     func setConsent(_ state: MemoryConsentState) -> Bool {
-        mutate { profileId in
+        let ok = mutate { profileId in
             try repository.setConsent(profileId: profileId, state)
         }
+        if ok, state == .enabled, let profileId = try? activeProfile()?.id, !profileId.isEmpty {
+            taskMemorySync?.backfill(profileId: profileId)
+            if let error = taskMemorySync?.lastError { lastError = error }
+            reload()
+        }
+        return ok
     }
 
     @discardableResult

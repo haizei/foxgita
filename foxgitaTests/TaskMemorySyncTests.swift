@@ -167,4 +167,82 @@ struct TaskMemorySyncTests {
         #expect(Set(mine.map(\.summaryText)) == ["旧任务"])
         #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).isEmpty)
     }
+
+    private func makeWired(consent: MemoryConsentState = .enabled) throws -> (
+        PracticeStore, MemoryStore, SwiftDataMemoryRepository, LocalProfile
+    ) {
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        let profile = LocalProfile(id: "p1")
+        profile.consent = consent
+        context.insert(profile)
+        try context.save()
+        let memoryRepo = SwiftDataMemoryRepository(context: context)
+        let sync = TaskMemorySync(repository: memoryRepo, context: context)
+        let defaults = UserDefaults(suiteName: "foxgita.tests.\(UUID().uuidString)")!
+        defaults.set(true, forKey: SeedData.seededKey)
+        let store = PracticeStore(
+            repository: SwiftDataPracticeRepository(context: context),
+            defaults: defaults,
+            taskMemorySync: sync
+        )
+        let memoryStore = MemoryStore(
+            repository: memoryRepo, context: context, taskMemorySync: sync
+        )
+        memoryStore.reload()
+        return (store, memoryStore, memoryRepo, profile)
+    }
+
+    @Test func practiceStoreWritesGoalOnlyWhenEnabled() throws {
+        let (store, _, repo, profile) = try makeWired(consent: .disabled)
+        let id = store.createCustomTask(name: "关着建的", minutes: 10, category: .chord)
+        #expect(id != nil)
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+
+        profile.consent = .enabled
+        let (onStore, _, onRepo, _) = try makeWired(consent: .enabled)
+        let onId = onStore.createCustomTask(name: "开着建的", minutes: 10, category: .chord)!
+        let rows = try onRepo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows.map(\.summaryText) == ["开着建的"])
+        #expect(rows[0].key == "task.\(onId).title")
+    }
+
+    @Test func practiceStoreRenameAndDeleteFollowTaskUntilUserEdits() throws {
+        let (store, memoryStore, repo, _) = try makeWired()
+        let id = store.createCustomTask(name: "原名", minutes: 10, category: .chord)!
+        store.updateTask(id, title: "新名", subtitle: "", minutes: 10)
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["新名"])
+
+        memoryStore.reload()
+        let memId = memoryStore.items[0].id
+        #expect(memoryStore.updateSummary(id: memId, summary: "用户名"))
+        store.updateTask(id, title: "任务又改了", subtitle: "", minutes: 10)
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["用户名"])
+
+        store.softDeleteTask(id)
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["用户名"])
+    }
+
+    @Test func practiceStoreDeleteRemovesUneditedTaskGoal() throws {
+        let (store, _, repo, _) = try makeWired()
+        let id = store.createCustomTask(name: "要删", minutes: 10, category: .chord)!
+        store.softDeleteTask(id)
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func createFromAIDraftWritesTaskGoal() throws {
+        let (store, _, repo, _) = try makeWired()
+        let draft = AIPracticeDraft(
+            title: "AI 草稿", category: .song, targetMin: 15,
+            steps: ["慢练"], chords: []
+        )
+        let id = store.createFromAIDraft(draft)!
+        let rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows[0].summaryText == "AI 草稿")
+        #expect(rows[0].key == "task.\(id).title")
+    }
 }

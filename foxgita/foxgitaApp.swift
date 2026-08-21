@@ -31,11 +31,19 @@ struct foxgitaApp: App {
             self.memoryRepo = memoryRepo
             let liveMemory = LiveMemoryContext(repository: memoryRepo, context: container.mainContext)
             self.liveMemory = liveMemory
-            let memoryStore = MemoryStore(repository: memoryRepo, context: container.mainContext)
+            let taskMemorySync = TaskMemorySync(
+                repository: memoryRepo, context: container.mainContext
+            )
+            let memoryStore = MemoryStore(
+                repository: memoryRepo,
+                context: container.mainContext,
+                taskMemorySync: taskMemorySync
+            )
             self.memoryStore = memoryStore
             self.coordinator = MemoryConsentCoordinator(store: memoryStore)
             let store = PracticeStore(
-                repository: SwiftDataPracticeRepository(context: container.mainContext)
+                repository: SwiftDataPracticeRepository(context: container.mainContext),
+                taskMemorySync: taskMemorySync
             )
             _store = State(initialValue: store)
             _reviewRunner = State(

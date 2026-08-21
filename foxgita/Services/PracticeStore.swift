@@ -26,10 +26,16 @@ final class PracticeStore {
 
     @ObservationIgnored private let repository: PracticeRepository
     @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private let taskMemorySync: TaskMemorySync?
 
-    init(repository: PracticeRepository, defaults: UserDefaults = .standard) {
+    init(
+        repository: PracticeRepository,
+        defaults: UserDefaults = .standard,
+        taskMemorySync: TaskMemorySync? = nil
+    ) {
         self.repository = repository
         self.defaults = defaults
+        self.taskMemorySync = taskMemorySync
     }
 
     func clearError() { lastError = nil }
@@ -128,11 +134,13 @@ final class PracticeStore {
             sortOrder: 50,
             profileId: profileId
         )
-        return produce {
+        let saved = produce {
             try repository.add(task)
             try repository.save()
             return task.id
         }
+        if saved != nil { applySyncUpsert(task) }
+        return saved
     }
 
     @discardableResult
@@ -149,11 +157,13 @@ final class PracticeStore {
             sortOrder: 50,
             profileId: profileId
         )
-        return produce {
+        let saved = produce {
             try repository.add(task)
             try repository.save()
             return task.id
         }
+        if saved != nil { applySyncUpsert(task) }
+        return saved
     }
 
     func setTaskStatus(_ taskId: String, to status: TaskStatus) {
@@ -181,6 +191,7 @@ final class PracticeStore {
             task.touch()
             try repository.save()
         }
+        if lastError == nil { applySyncUpsert(task) }
     }
 
     /// Soft-delete so sync can still see the tombstone later.
@@ -189,11 +200,13 @@ final class PracticeStore {
             lastError = .notFound
             return
         }
+        let profileId = task.profileId
         perform {
             task.deletedAt = Date()
             task.touch()
             try repository.save()
         }
+        if lastError == nil { applySyncDelete(taskId: taskId, profileId: profileId) }
     }
 
     func updateSession(_ sessionId: String, title: String, note: String, minutes: Int) {
@@ -522,6 +535,18 @@ final class PracticeStore {
             try repository.save()
             return task.id
         }
+    }
+
+    private func applySyncUpsert(_ task: TaskItem) {
+        guard let sync = taskMemorySync else { return }
+        sync.syncUpsert(task: task)
+        if let error = sync.lastError { lastError = error }
+    }
+
+    private func applySyncDelete(taskId: String, profileId: String) {
+        guard let sync = taskMemorySync else { return }
+        sync.syncDelete(taskId: taskId, profileId: profileId)
+        if let error = sync.lastError { lastError = error }
     }
 
     private func perform(_ work: () throws -> Void) {

@@ -40,4 +40,35 @@ struct MemoryStoreTests {
         #expect(store.delete(id: id))
         #expect(store.items.isEmpty)
     }
+
+    @Test func enablingBackfillsExistingCustomTaskAndClearAllStaysGone() throws {
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        let profile = LocalProfile(id: "p1")
+        profile.consent = .disabled
+        context.insert(profile)
+        let task = TaskItem(
+            id: "custom-old", title: "关着建的", subtitle: "",
+            category: .chord, targetMin: 10, profileId: "p1"
+        )
+        context.insert(task)
+        try context.save()
+        let repo = SwiftDataMemoryRepository(context: context)
+        let sync = TaskMemorySync(repository: repo, context: context)
+        let store = MemoryStore(repository: repo, context: context, taskMemorySync: sync)
+        store.reload()
+        #expect(store.setConsent(.enabled))
+        #expect(store.consent == .enabled)
+        #expect(store.items.map(\.summaryText) == ["关着建的"])
+
+        #expect(store.clearAll())
+        #expect(store.items.isEmpty)
+        #expect(store.setConsent(.disabled))
+        #expect(store.setConsent(.enabled))
+        #expect(store.items.isEmpty)
+    }
 }
