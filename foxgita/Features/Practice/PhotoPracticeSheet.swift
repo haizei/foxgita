@@ -86,7 +86,6 @@ struct PhotoPracticeSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
-        .memoryConsentGate()
     }
 
     private var sourceContent: some View {

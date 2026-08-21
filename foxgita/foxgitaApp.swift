@@ -53,6 +53,7 @@ struct foxgitaApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .memoryConsentGate()
                 .environment(router)
                 .environment(store)
                 .environment(reviewRunner)

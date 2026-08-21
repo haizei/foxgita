@@ -41,4 +41,20 @@ struct MemoryConsentCoordinatorTests {
         #expect(store.consent == .enabled)
         #expect(coordinator.isPresented == false)
     }
+
+    @Test func concurrentEnsureDecidedBothProceedAfterOneEnable() async throws {
+        let (coordinator, store, _) = try make()
+        #expect(store.consent == .undecided)
+        let first = Task { await coordinator.ensureDecided() }
+        let second = Task { await coordinator.ensureDecided() }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        #expect(coordinator.isPresented == true)
+        coordinator.chooseEnabled()
+        let r1 = await first.value
+        let r2 = await second.value
+        #expect(r1 == .proceed)
+        #expect(r2 == .proceed)
+        #expect(store.consent == .enabled)
+        #expect(coordinator.isPresented == false)
+    }
 }

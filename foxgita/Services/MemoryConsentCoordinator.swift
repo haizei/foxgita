@@ -7,7 +7,7 @@ import SwiftUI
 final class MemoryConsentCoordinator {
     private let store: MemoryStore
     var isPresented = false
-    private var waiter: CheckedContinuation<ConsentGateResult, Never>?
+    private var waiters: [CheckedContinuation<ConsentGateResult, Never>] = []
 
     init(store: MemoryStore) {
         self.store = store
@@ -20,7 +20,7 @@ final class MemoryConsentCoordinator {
         }
         isPresented = true
         return await withCheckedContinuation { continuation in
-            waiter = continuation
+            waiters.append(continuation)
         }
     }
 
@@ -28,11 +28,15 @@ final class MemoryConsentCoordinator {
     func chooseDisabled() { finish(set: .disabled) }
 
     private func finish(set state: MemoryConsentState) {
-        guard waiter != nil else { return }
+        guard !waiters.isEmpty else { return }
         let ok = store.setConsent(state)
         isPresented = false
-        waiter?.resume(returning: ok ? .proceed : .aborted)
-        waiter = nil
+        let result: ConsentGateResult = ok ? .proceed : .aborted
+        let pending = waiters
+        waiters = []
+        for waiter in pending {
+            waiter.resume(returning: result)
+        }
     }
 }
 

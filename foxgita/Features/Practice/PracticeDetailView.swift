@@ -156,7 +156,6 @@ struct PracticeDetailView: View {
         } message: {
             Text("返回会丢掉本次计时、录音和笔记。")
         }
-        .memoryConsentGate()
     }
 
     @ViewBuilder

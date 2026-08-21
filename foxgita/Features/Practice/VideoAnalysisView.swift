@@ -112,7 +112,6 @@ struct VideoAnalysisView: View {
         .onReceive(tick) { _ in advance() }
         .onAppear { syncReady() }
         .onChange(of: status) { _, _ in syncReady() }
-        .memoryConsentGate()
     }
 
     private var header: some View {

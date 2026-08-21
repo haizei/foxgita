@@ -158,7 +158,6 @@ struct RecordDetailView: View {
                 )
             }
         }
-        .memoryConsentGate()
     }
 
     private var dataPane: some View {
