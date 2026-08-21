@@ -43,6 +43,11 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 }
 
+struct StubMemoryContext: MemoryContextProviding {
+    var text: String
+    func block(skill: SkillDefinition, query: String) async -> String { text }
+}
+
 @Suite(.serialized)
 struct VisionPracticeClientTests {
     private func makeClient() -> VisionPracticeClient {
@@ -255,6 +260,45 @@ struct VisionPracticeClientTests {
         let imageURL = user?[1]["image_url"] as? [String: Any]
         let dataURI = imageURL?["url"] as? String ?? ""
         #expect(dataURI.hasPrefix("data:image/jpeg;base64,"))
+    }
+
+    @Test func generateDraftAppendsMemoryBlockWithoutChangingSystemPrompt() async throws {
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"title":"开放弦","category":"left","targetMin":8,"steps":["拨弦"]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        var bodyJSON: [String: Any] = [:]
+        MockURLProtocol.handler = { req in
+            let text = Self.requestBodyString(req)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+            return (200, data)
+        }
+        defer { MockURLProtocol.handler = nil }
+
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = VisionPracticeClient(
+            session: URLSession(configuration: config),
+            memory: StubMemoryContext(text: "<<<BACKGROUND_MEMORY>>>\n- [goal] 当前目标：《晴天》前奏\n<<<END_BACKGROUND_MEMORY>>>")
+        )
+        _ = try await client.generateDraft(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            imageJPEGData: [Data([0xFF, 0xD8, 0xFF])],
+            fallbackCategory: .song
+        )
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == SkillDefinition.planFromImage.systemPrompt)
+        let user = messages?[1]["content"] as? [[String: Any]]
+        let userText = user?[0]["text"] as? String ?? ""
+        #expect(userText.contains(SkillDefinition.planFromImage.userPrompt ?? ""))
+        #expect(userText.contains("<<<BACKGROUND_MEMORY>>>"))
+        #expect(userText.contains("当前目标：《晴天》前奏"))
     }
 
     @Test func generateDraftStripsFenceAfterEmptyCheck() async throws {

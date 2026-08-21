@@ -15,6 +15,7 @@ struct PhotoPracticeSheet: View {
     var onFinished: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.memoryContext) private var memoryContext
     @Environment(PracticeStore.self) private var store
     @State private var phase: Phase = .source
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -26,7 +27,6 @@ struct PhotoPracticeSheet: View {
     @State private var completed = false
     @State private var toast: String?
 
-    private let generator = ImageStepGenerator(client: VisionPracticeClient())
     private let progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -304,6 +304,7 @@ struct PhotoPracticeSheet: View {
     }
 
     private func generate(blobs: [Data]) async throws {
+        let generator = ImageStepGenerator(client: VisionPracticeClient(memory: memoryContext))
         let draft = try await generator.generate(
             imageData: blobs,
             baseURL: baseURL,

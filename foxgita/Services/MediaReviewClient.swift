@@ -13,10 +13,16 @@ protocol MediaReviewing: Sendable {
 struct MediaReviewClient: MediaReviewing {
     private let transport: AITransport
     private let registry: SkillRegistry
+    private let memory: any MemoryContextProviding
 
-    init(session: URLSession = .shared, registry: SkillRegistry = .builtin) {
+    init(
+        session: URLSession = .shared,
+        registry: SkillRegistry = .builtin,
+        memory: any MemoryContextProviding = EmptyMemoryContext()
+    ) {
         self.transport = AITransport(session: session)
         self.registry = registry
+        self.memory = memory
     }
 
     func generateReview(
@@ -33,6 +39,8 @@ struct MediaReviewClient: MediaReviewing {
             throw VisionPracticeError.invalidURL
         }
         let userText = skill.userPrompt ?? contextText
+        let memoryBlock = await memory.block(skill: skill, query: contextText)
+        let finalUserText = memoryBlock.isEmpty ? userText : userText + "\n\n" + memoryBlock
         let rawContent: String
         do {
             rawContent = try await transport.complete(
@@ -40,7 +48,7 @@ struct MediaReviewClient: MediaReviewing {
                 apiKey: apiKey,
                 model: model,
                 systemPrompt: skill.systemPrompt,
-                userText: userText,
+                userText: finalUserText,
                 imageJPEGData: imageJPEGData,
                 includeResponseFormat: true,
                 allowsFormatRetry: skill.allowsFormatRetry,

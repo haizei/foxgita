@@ -26,10 +26,16 @@ protocol VisionGenerating: Sendable {
 struct VisionPracticeClient: VisionGenerating {
     private let transport: AITransport
     private let registry: SkillRegistry
+    private let memory: any MemoryContextProviding
 
-    init(session: URLSession = .shared, registry: SkillRegistry = .builtin) {
+    init(
+        session: URLSession = .shared,
+        registry: SkillRegistry = .builtin,
+        memory: any MemoryContextProviding = EmptyMemoryContext()
+    ) {
         self.transport = AITransport(session: session)
         self.registry = registry
+        self.memory = memory
     }
 
     static func completionsURL(from baseURL: String) -> URL? {
@@ -50,6 +56,8 @@ struct VisionPracticeClient: VisionGenerating {
             throw VisionPracticeError.invalidURL
         }
         let userText = skill.userPrompt ?? ""
+        let memoryBlock = await memory.block(skill: skill, query: "")
+        let finalUserText = memoryBlock.isEmpty ? userText : userText + "\n\n" + memoryBlock
         let rawContent: String
         do {
             rawContent = try await transport.complete(
@@ -57,7 +65,7 @@ struct VisionPracticeClient: VisionGenerating {
                 apiKey: apiKey,
                 model: model,
                 systemPrompt: skill.systemPrompt,
-                userText: userText,
+                userText: finalUserText,
                 imageJPEGData: imageJPEGData,
                 includeResponseFormat: true,
                 allowsFormatRetry: skill.allowsFormatRetry,
