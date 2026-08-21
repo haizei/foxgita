@@ -39,6 +39,7 @@ final class PracticeStore {
     func prepare() {
         RecordingStore.migrateLegacyFiles()
         seedIfNeeded()
+        ensureProfile()
         gcOrphanRecordings()
     }
 
@@ -91,12 +92,14 @@ final class PracticeStore {
             return ensureActive(legacy)
         }
 
+        guard let profileId = requireProfileId() else { return nil }
         let copy = TaskItem(
             id: dailyId, title: template.title, subtitle: template.subtitle,
             category: template.category, targetMin: template.targetMin,
             defaultBpm: template.defaultBpm, timeSig: template.timeSig,
             steps: template.steps, status: .active, startedOn: now,
-            sortOrder: template.sortOrder, isTemplate: false
+            sortOrder: template.sortOrder, isTemplate: false,
+            profileId: profileId
         )
         return produce {
             try repository.add(copy)
@@ -109,6 +112,7 @@ final class PracticeStore {
     func createCustomTask(name: String, minutes: Int, category: PracticeCategory) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let clampedMinutes = min(60, max(1, minutes))
+        guard let profileId = requireProfileId() else { return nil }
         let task = TaskItem(
             id: "custom-\(UUID().uuidString)",
             title: trimmed.isEmpty ? String(localized: "未命名练习") : trimmed,
@@ -117,7 +121,8 @@ final class PracticeStore {
             targetMin: clampedMinutes,
             steps: [String(localized: "新步骤")],
             startedOn: Date(),
-            sortOrder: 50
+            sortOrder: 50,
+            profileId: profileId
         )
         return produce {
             try repository.add(task)
@@ -128,6 +133,7 @@ final class PracticeStore {
 
     @discardableResult
     func createFromAIDraft(_ draft: AIPracticeDraft) -> String? {
+        guard let profileId = requireProfileId() else { return nil }
         let task = TaskItem(
             id: "custom-\(UUID().uuidString)",
             title: draft.title,
@@ -136,7 +142,8 @@ final class PracticeStore {
             targetMin: draft.targetMin,
             steps: draft.steps,
             startedOn: Date(),
-            sortOrder: 50
+            sortOrder: 50,
+            profileId: profileId
         )
         return produce {
             try repository.add(task)
@@ -250,6 +257,7 @@ final class PracticeStore {
             return false
         }
 
+        guard let profileId = requireProfileId() else { return false }
         let session = PracticeSession(
             taskId: task.id,
             taskTitle: task.title,
@@ -260,7 +268,8 @@ final class PracticeStore {
             bpm: bpm,
             timeSig: task.timeSig,
             steps: steps,
-            noteText: note
+            noteText: note,
+            profileId: profileId
         )
         for clip in recordings where FileManager.default.fileExists(atPath: clip.url.path) {
             session.recordings.append(
@@ -302,6 +311,7 @@ final class PracticeStore {
             lastError = .fileMissing
             return nil
         }
+        guard let profileId = requireProfileId() else { return nil }
         let session = PracticeSession(
             taskId: task.id,
             taskTitle: task.title,
@@ -312,7 +322,8 @@ final class PracticeStore {
             bpm: bpm,
             timeSig: task.timeSig,
             steps: steps,
-            noteText: note
+            noteText: note,
+            profileId: profileId
         )
         session.recordings.append(Self.ref(from: clip))
         return produce {
@@ -477,6 +488,22 @@ final class PracticeStore {
     }
 
     // MARK: - Error plumbing
+
+    private func ensureProfile() {
+        perform {
+            let profile = try repository.ensureDefaultProfile()
+            try repository.backfillEmptyProfileIds(profile.id)
+            try repository.save()
+        }
+    }
+
+    private func requireProfileId() -> String? {
+        guard let id = try? repository.ensureDefaultProfile().id else {
+            lastError = .saveFailed
+            return nil
+        }
+        return id
+    }
 
     private func ensureActive(_ task: TaskItem) -> String? {
         if task.status == .active && task.deletedAt == nil { return task.id }

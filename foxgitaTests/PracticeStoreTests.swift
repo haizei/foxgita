@@ -64,6 +64,40 @@ struct PracticeStoreTests {
         #expect((try? repo.tasks().count) == firstCount)
     }
 
+    // MARK: - Profile
+
+    @Test func prepareCreatesOneActiveProfileAndBackfillsEmptyIds() throws {
+        let (store, repo, _) = makeStore(seeded: false)
+        let orphan = TaskItem(
+            id: "orphan", title: "旧任务", subtitle: "",
+            category: .left, targetMin: 5
+        )
+        try repo.add(orphan)
+        try repo.save()
+        #expect(orphan.profileId == "")
+
+        store.prepare()
+
+        let profile = try #require(try repo.activeProfile())
+        #expect(profile.isActive)
+        #expect(profile.memoryConsent == false)
+        let tasks = try repo.tasks()
+        #expect(tasks.contains { $0.id == "orphan" && $0.profileId == profile.id })
+        #expect(tasks.filter(\.isTemplate).allSatisfy { $0.profileId == profile.id })
+
+        store.prepare()
+        #expect(try repo.profileCount() == 1)
+    }
+
+    @Test func createCustomTaskStampsCurrentProfileId() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profile = try #require(try repo.activeProfile())
+        let id = try #require(store.createCustomTask(name: "自定义", minutes: 10, category: .chord))
+        let task = try #require(try repo.task(id: id))
+        #expect(task.profileId == profile.id)
+    }
+
     // MARK: - Tasks
 
     @Test func activateTemplateCreatesActiveCopy() throws {

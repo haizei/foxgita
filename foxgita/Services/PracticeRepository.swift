@@ -22,6 +22,9 @@ protocol PracticeRepository: AnyObject {
     func removeAll() throws
     func save() throws
     func rollback()
+    func activeProfile() throws -> LocalProfile?
+    func ensureDefaultProfile() throws -> LocalProfile
+    func backfillEmptyProfileIds(_ profileId: String) throws
 }
 
 enum StoreError: LocalizedError, Equatable {
@@ -129,6 +132,41 @@ final class SwiftDataPracticeRepository: PracticeRepository {
     }
 
     func rollback() { context.rollback() }
+
+    func activeProfile() throws -> LocalProfile? {
+        try context.fetch(
+            FetchDescriptor<LocalProfile>(
+                predicate: #Predicate { $0.isActive == true },
+                sortBy: [SortDescriptor(\.createdAt)]
+            )
+        ).first
+    }
+
+    func ensureDefaultProfile() throws -> LocalProfile {
+        let all = try context.fetch(
+            FetchDescriptor<LocalProfile>(sortBy: [SortDescriptor(\.createdAt)])
+        )
+        if let active = all.first(where: \.isActive) {
+            for extra in all where extra.isActive && extra.id != active.id {
+                extra.isActive = false
+            }
+            return active
+        }
+        if let first = all.first {
+            first.isActive = true
+            return first
+        }
+        let profile = LocalProfile()
+        context.insert(profile)
+        return profile
+    }
+
+    func backfillEmptyProfileIds(_ profileId: String) throws {
+        let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+        for task in tasks where task.profileId.isEmpty { task.profileId = profileId }
+        let sessions = try context.fetch(FetchDescriptor<PracticeSession>())
+        for session in sessions where session.profileId.isEmpty { session.profileId = profileId }
+    }
 }
 
 /// Array-backed double used by the store tests. It deliberately keeps no
@@ -137,6 +175,7 @@ final class SwiftDataPracticeRepository: PracticeRepository {
 final class InMemoryPracticeRepository: PracticeRepository {
     private(set) var storedTasks: [TaskItem] = []
     private(set) var storedSessions: [PracticeSession] = []
+    private(set) var storedProfiles: [LocalProfile] = []
     private var pendingTasks: [TaskItem] = []
     private var pendingSessions: [PracticeSession] = []
 
@@ -193,4 +232,34 @@ final class InMemoryPracticeRepository: PracticeRepository {
         pendingTasks = []
         pendingSessions = []
     }
+
+    func activeProfile() throws -> LocalProfile? {
+        storedProfiles.filter(\.isActive).sorted { $0.createdAt < $1.createdAt }.first
+    }
+
+    func ensureDefaultProfile() throws -> LocalProfile {
+        let all = storedProfiles.sorted { $0.createdAt < $1.createdAt }
+        if let active = all.first(where: \.isActive) {
+            for extra in all where extra.isActive && extra.id != active.id {
+                extra.isActive = false
+            }
+            return active
+        }
+        if let first = all.first {
+            first.isActive = true
+            return first
+        }
+        let profile = LocalProfile()
+        storedProfiles.append(profile)
+        return profile
+    }
+
+    func backfillEmptyProfileIds(_ profileId: String) throws {
+        for task in storedTasks where task.profileId.isEmpty { task.profileId = profileId }
+        for task in pendingTasks where task.profileId.isEmpty { task.profileId = profileId }
+        for session in storedSessions where session.profileId.isEmpty { session.profileId = profileId }
+        for session in pendingSessions where session.profileId.isEmpty { session.profileId = profileId }
+    }
+
+    func profileCount() -> Int { storedProfiles.count }
 }
