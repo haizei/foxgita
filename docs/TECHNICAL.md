@@ -1,6 +1,6 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V5 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V6 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
 > 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
@@ -63,8 +63,9 @@ foxgita/
 │   └── Settings/             # 提醒 / 外观 / 清数据
 ├── Components/SharedUI.swift # StreakCard / TaskRowCard / DaySessionCard 等
 ├── Models/
-│   ├── Models.swift          # Schema V5 + MigrationPlan（V2–V4 保留供迁移）
-│   └── SchemaV2.swift        # 仅供迁移与测试
+│   ├── Models.swift          # Schema V3–V5 + MigrationPlan（V2–V6）
+│   ├── SchemaV2.swift
+│   └── SchemaV6.swift        # LocalProfile / MemoryItem / profileId
 ├── Services/                 # 业务与基础设施（见 §5、§6）
 │   ├── PracticeStore.swift
 │   ├── AudioRecorderService.swift
@@ -379,7 +380,7 @@ typealias RecordingRef = GitaSchemaV5.RecordingRef
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。记忆权限字段已在 Skill 定义上默认拒绝，本轮无 Memory 运行时。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。
+`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 在 `memoryConsent == false`（Release 默认）时不查表，请求体与无记忆时等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。正式路径不写 MemoryItem。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。
 
 ### 6.3.2 练后媒体复盘
 
@@ -491,6 +492,10 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
 | `SkillRegistryTests` | 内置三 id、version 1.0.0、记忆默认拒绝、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
+| `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
+| `MemoryContextBuilderTests` | 空块、包装分隔符、goal 先于 ability、预算截断 |
+| `MemoryContextTests` | consent 关闭不注入；打开后图片 Skill 不含 ability |
+| `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并打开 consent |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断 |
 | `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试 |

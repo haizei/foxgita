@@ -52,12 +52,16 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按时长进位等通过 |
 | `PracticeTimerTests` | 墙钟计时、暂停不计时、后台不丢时通过 |
 | `PracticeStoreTests` | seed / 激活模板 / finish 不变量 / 回滚 / reset / `createFromAIDraft` / `beginOpenSession` / `appendRecording` / `updateOpenSession` 通过 |
-| `MigrationTests` | V2→V5 / V4→V5 磁盘库迁移不丢数据；新库 `videoFindings` 默认空通过 |
+| `MigrationTests` | V2→V6 / V5→V6 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填 |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制通过 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` 通过 |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试通过 |
-| `SkillRegistryTests` | 内置三 id、version 1.0.0、记忆默认拒绝、缺 id 为 nil |
+| `SkillRegistryTests` | 内置三 id、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
+| `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
+| `MemoryContextBuilderTests` | 空块、包装分隔符、goal 先于 ability、预算截断 |
+| `MemoryContextTests` | consent 关闭不注入；打开后图片 Skill 不含 ability |
+| `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并打开 consent |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验通过 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断通过 |
 | `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试通过 |
