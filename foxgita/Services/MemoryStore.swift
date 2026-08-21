@@ -51,8 +51,9 @@ final class MemoryStore {
         }
         if ok, state == .enabled, let profileId = try? activeProfile()?.id, !profileId.isEmpty {
             taskMemorySync?.backfill(profileId: profileId)
-            if let error = taskMemorySync?.lastError { lastError = error }
+            let backfillError = taskMemorySync?.lastError
             reload()
+            if let error = backfillError { lastError = error }
         }
         return ok
     }
