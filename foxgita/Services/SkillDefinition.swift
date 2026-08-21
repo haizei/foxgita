@@ -69,7 +69,7 @@ extension SkillDefinition {
         timeout: nil,
         allowsFormatRetry: true,
         memoryReadScopes: [.goal, .preference, .ability],
-        memoryWritePolicy: .deny
+        memoryWritePolicy: .candidates
     )
 
     static let diagnoseVideo = SkillDefinition(
@@ -87,6 +87,6 @@ extension SkillDefinition {
         timeout: 180,
         allowsFormatRetry: true,
         memoryReadScopes: [.goal, .preference, .ability],
-        memoryWritePolicy: .deny
+        memoryWritePolicy: .candidates
     )
 }
