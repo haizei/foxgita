@@ -119,6 +119,10 @@ struct MemoryStoreTests {
         }
 
         func softDeleteTaskGoal(profileId: String, taskId: String) throws {}
+
+        func upsertAICandidate(
+            profileId: String, recordingId: String, summaryText: String, valueJSON: String
+        ) throws {}
     }
 
     @Test func enablingMemoryKeepsBackfillErrorAfterReload() throws {
