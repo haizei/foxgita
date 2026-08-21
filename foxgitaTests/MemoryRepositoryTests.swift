@@ -215,4 +215,115 @@ struct MemoryRepositoryTests {
         try repo.save()
         #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["用户留着"])
     }
+
+    @Test func upsertAICandidateRejectsEmptyIdsAndSkipsBlankSummary() throws {
+        let repo = try makeRepo()
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertAICandidate(
+                profileId: "", recordingId: "clip-1",
+                summaryText: "压弦", valueJSON: "practice.review.media@1.1.0"
+            )
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertAICandidate(
+                profileId: "p1", recordingId: "",
+                summaryText: "压弦", valueJSON: "practice.review.media@1.1.0"
+            )
+        }
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-1",
+            summaryText: "   ", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func upsertAICandidateInsertsTruncatesAndUpdatesAISourcedRow() throws {
+        let repo = try makeRepo()
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-1",
+            summaryText: "  压弦  ", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].key == "ability.current_focus")
+        #expect(rows[0].kind == .ability)
+        #expect(rows[0].summaryText == "压弦")
+        #expect(rows[0].sourceType == "ai")
+        #expect(rows[0].sourceId == "clip-1")
+        #expect(rows[0].valueJSON == "practice.review.media@1.1.0")
+        #expect(rows[0].confidence == 0.4)
+        #expect(rows[0].importance == 0.4)
+        #expect(rows[0].expiresAt == nil)
+
+        let long = String(repeating: "啊", count: 121)
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-2",
+            summaryText: long, valueJSON: "practice.diagnose.video@1.1.0"
+        )
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].summaryText.count == 120)
+        #expect(rows[0].summaryText == String(long.prefix(120)))
+        #expect(rows[0].sourceId == "clip-2")
+        #expect(rows[0].valueJSON == "practice.diagnose.video@1.1.0")
+        #expect(rows[0].confidence == 0.4)
+        #expect(rows[0].importance == 0.4)
+    }
+
+    @Test func upsertAICandidateDoesNotOverwriteUserEditedOrTombstone() throws {
+        let repo = try makeRepo()
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-1",
+            summaryText: "旧重点", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        let id = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())[0].id
+        try repo.updateSummary(profileId: "p1", id: id, summaryText: "我改的")
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
+        #expect(rows[0].sourceType == "user")
+        #expect(rows[0].key == "ability.current_focus")
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-9",
+            summaryText: "新重点", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
+        #expect(rows[0].summaryText == "我改的")
+        #expect(rows[0].sourceType == "user")
+        #expect(rows[0].sourceId == "clip-1")
+
+        try repo.softDelete(profileId: "p1", id: id)
+        try repo.save()
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-9",
+            summaryText: "复活？", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func upsertAICandidateIsolatesProfiles() throws {
+        let repo = try makeRepo()
+        try repo.upsertAICandidate(
+            profileId: "p1", recordingId: "clip-a",
+            summaryText: "A 重点", valueJSON: "practice.review.media@1.1.0"
+        )
+        try repo.upsertAICandidate(
+            profileId: "p2", recordingId: "clip-b",
+            summaryText: "B 重点", valueJSON: "practice.diagnose.video@1.1.0"
+        )
+        try repo.save()
+        #expect(
+            try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
+                .map(\.summaryText) == ["A 重点"]
+        )
+        #expect(
+            try repo.fetch(profileId: "p2", scopes: [.ability], matching: "", now: Date())
+                .map(\.summaryText) == ["B 重点"]
+        )
+    }
 }

@@ -18,6 +18,12 @@ protocol MemoryRepository: AnyObject {
     func setConsent(profileId: String, _ state: MemoryConsentState) throws
     func upsertTaskGoal(profileId: String, taskId: String, title: String) throws
     func softDeleteTaskGoal(profileId: String, taskId: String) throws
+    func upsertAICandidate(
+        profileId: String,
+        recordingId: String,
+        summaryText: String,
+        valueJSON: String
+    ) throws
 }
 
 @MainActor
@@ -129,7 +135,7 @@ final class SwiftDataMemoryRepository: MemoryRepository {
             )
         ).first else { throw StoreError.invalidInput }
         item.summaryText = summary
-        if item.sourceType == "task" {
+        if item.sourceType == "task" || item.sourceType == "ai" {
             item.sourceType = "user"
         }
         item.updatedAt = Date()
@@ -221,6 +227,55 @@ final class SwiftDataMemoryRepository: MemoryRepository {
         let now = Date()
         live.deletedAt = now
         live.updatedAt = now
+    }
+
+    private static let currentFocusKey = "ability.current_focus"
+
+    private func currentFocusRows(profileId: String) throws -> [MemoryItem] {
+        let pid = profileId
+        let key = Self.currentFocusKey
+        return try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.key == key }
+            )
+        )
+    }
+
+    func upsertAICandidate(
+        profileId: String,
+        recordingId: String,
+        summaryText: String,
+        valueJSON: String
+    ) throws {
+        guard !profileId.isEmpty, !recordingId.isEmpty else { throw StoreError.invalidInput }
+        let trimmed = summaryText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let summary = trimmed.count <= 120 ? trimmed : String(trimmed.prefix(120))
+        let rows = try currentFocusRows(profileId: profileId)
+        if rows.contains(where: { $0.deletedAt != nil }) { return }
+        if let live = rows.first(where: { $0.deletedAt == nil }) {
+            guard live.sourceType == "ai" else { return }
+            live.summaryText = summary
+            live.sourceId = recordingId
+            live.valueJSON = valueJSON
+            live.confidence = 0.4
+            live.importance = 0.4
+            live.updatedAt = Date()
+            return
+        }
+        context.insert(
+            MemoryItem(
+                profileId: profileId,
+                kind: .ability,
+                key: Self.currentFocusKey,
+                summaryText: summary,
+                valueJSON: valueJSON,
+                sourceType: "ai",
+                sourceId: recordingId,
+                confidence: 0.4,
+                importance: 0.4
+            )
+        )
     }
 
     private static func score(item: MemoryItem, tokens: [String]) -> Int {
