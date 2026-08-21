@@ -73,6 +73,9 @@ foxgita/
 │   ├── AlbumDurationGate.swift      # 相册时长门 [30, 600] 秒
 │   ├── AlbumVideoImporter.swift     # 相册拷进 Recordings
 │   ├── RecordingStore.swift         # m4a / mov 文件与孤儿 GC
+│   ├── MemoryRepository.swift       # 显式 profileId 的只读 fetch
+│   ├── MemoryContextProviding.swift # LiveMemoryContext / EmptyMemoryContext
+│   ├── MemoryDebugSeeder.swift      # DEBUG 种子；Release 不含
 │   └── …
 ├── Theme/                    # 颜色 / 字体 / 外观 / 触感
 ├── Assets.xcassets/Colors/   # 23 个 light/dark Color Set
@@ -87,7 +90,7 @@ foxgitaUITests/               # 主流程冒烟
 - **View**：只负责展示与意图（按钮、表单）；读用 `@Query`，写只调 `PracticeStore`。
 - **Store**：业务不变量与错误映射。
 - **Repository**：持久化细节；未来可套同步装饰器。
-- **Services**：音频、视频、计时、媒体文件、统计纯函数、提醒调度。
+- **Services**：音频、视频、计时、媒体文件、统计纯函数、提醒调度、只读记忆。
 - **Theme**：设计 token，不放业务逻辑。
 
 ---
@@ -257,22 +260,25 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 
 | 介质 | 内容 |
 |---|---|
-| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` |
+| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` / `LocalProfile` / `MemoryItem`（`GitaSchemaV6`） |
 | `Documents/Recordings/` | m4a / mov（及兼容 mp4）二进制 |
-| UserDefaults | 外观、提醒开关与时间、seed 版本键 |
+| UserDefaults | 外观、提醒开关与时间、seed 版本键；DEBUG 记忆种子键 `gita.debug.memorySeed` |
 
-### 6.2 数据库设计（Schema V5）
+### 6.2 数据库设计（Schema V6）
 
-定义位置：`foxgita/Models/Models.swift`（`GitaSchemaV5`；`GitaSchemaV2`–`V4` 同文件或 `SchemaV2.swift` 保留供迁移）。  
-容器创建：`foxgitaApp` → `ModelContainer(for:schema, migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
+定义位置：`foxgita/Models/SchemaV6.swift`（`GitaSchemaV6`）；`GitaSchemaV2`–`V5` 留在 `Models.swift` / `SchemaV2.swift` 供迁移。  
+容器创建：`foxgitaApp` → `Schema(versionedSchema: GitaSchemaV6.self)` + `ModelContainer(..., migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
 媒体文件：`Documents/Recordings/`（见 `RecordingStore`）；库内只存 `fileName`。
 
 关系：
 
 ```text
+LocalProfile 1 ──(逻辑关联 profileId)──> N TaskItem / PracticeSession / MemoryItem
 TaskItem 1 ──(逻辑关联 taskId)──> N PracticeSession
 PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 ```
+
+无 SwiftData `@Relationship` 连 Profile。`RecordingRef` 不加 `profileId`，归属跟随 Session。隐藏默认 Profile；无切换 / 授权设置页。
 
 #### 统一元数据
 
@@ -301,6 +307,7 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `startedOn` | Date? | 开始练习日 |
 | `sortOrder` | Int | 排序 |
 | `isTemplate` | Bool | 是否模板 |
+| `profileId` | String | 默认 `""`；`PracticeStore.prepare()` 回填默认 `LocalProfile.id` |
 | + 统一元数据 | | `createdAt` / `updatedAt` / `deletedAt` / `syncStateRaw` |
 
 #### PracticeSession（一次练习）
@@ -321,6 +328,7 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `stepsSnapshotRaw` | String | 步骤快照 JSON；计算属性 `steps` |
 | `noteText` | String | 笔记 |
 | `recordings` | [RecordingRef] | 一对多，`deleteRule: .cascade` |
+| `profileId` | String | 默认 `""`；同上，由 `prepare()` 回填 |
 | + 统一元数据 | | 同上 |
 
 #### RecordingRef（录音 / 视频元数据）
@@ -341,19 +349,61 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `reviewFindingsJSON` | String | 录像分段诊断 JSON 数组；默认 `"[]"` |
 | + 统一元数据 | | `updatedAt` / `deletedAt` / `syncStateRaw`（`createdAt` 见上） |
 
+V6 不加 `profileId`。
+
 计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `videoFindings` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
 `stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON；`videoFindings` ↔ `reviewFindingsJSON` 编解码 `[VideoFinding]`。
 
+#### LocalProfile（隐藏默认档案）
+
+本机一条 `isActive == true`。`memoryConsent` 默认 `false`；Release 无入口可改。
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | String (unique) | 主键 |
+| `isActive` | Bool | 本机只允许一条 `true` |
+| `memoryConsent` | Bool | 默认 `false`；关闭时不查 MemoryItem |
+| `createdAt` / `updatedAt` | Date | 审计 |
+
+#### MemoryItem（结构化记忆）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | String (unique) | 主键 |
+| `profileId` | String | 必填；创建时传入，空串不参与查询 |
+| `kindRaw` | String | `MemoryScope`：`goal` / `preference` / `ability` |
+| `key` | String | 稳定语义键 |
+| `summaryText` | String | 面向 Prompt 的短句 |
+| `valueJSON` | String | 可选；损坏则跳过该条 |
+| `sourceType` / `sourceId` | String | 种子用 `debug_seed` / 固定 id |
+| `confidence` / `importance` | Double | `0...1` |
+| `expiresAt` | Date? | `nil` = 长期 |
+| `schemaVersion` | Int | 默认 `1` |
+| `createdAt` / `updatedAt` / `deletedAt` | Date / Date? | 软删 |
+
+同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` 保证）。正式路径不写 MemoryItem；三个 Skill 的 `memoryWritePolicy` 仍为 `.deny`。
+
 #### 迁移与别名
 
-- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V4 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）
+- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` → `V6` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V5 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）；V6 新增 `profileId`（默认空串）、`LocalProfile`、`MemoryItem`
+- 默认 Profile 与空 `profileId` 回填在 `PracticeStore.prepare()`，不进 migration stage
 - **禁止**「检测到旧 seed 键就 `delete(model:)` 整库清空」——上架后等同抹用户数据
 
 ```swift
-typealias TaskItem = GitaSchemaV5.TaskItem
-typealias PracticeSession = GitaSchemaV5.PracticeSession
-typealias RecordingRef = GitaSchemaV5.RecordingRef
+typealias TaskItem = GitaSchemaV6.TaskItem
+typealias PracticeSession = GitaSchemaV6.PracticeSession
+typealias RecordingRef = GitaSchemaV6.RecordingRef
+typealias LocalProfile = GitaSchemaV6.LocalProfile
+typealias MemoryItem = GitaSchemaV6.MemoryItem
 ```
+
+#### 只读记忆服务
+
+| 类型 | 职责 |
+|---|---|
+| `MemoryRepository` / `SwiftDataMemoryRepository` | 显式 `profileId` 的只读 fetch；`upsertDebug` 仅测试 / DEBUG |
+| `MemoryContextProviding` | 授权门闩；`LiveMemoryContext` / `EmptyMemoryContext`；失败返回 `""` |
+| `MemoryDebugSeeder` | `#if DEBUG`；仅 `gita.debug.memorySeed == true` 时写三条种子并打开 consent；Release 不含 |
 
 ### 6.3 业务逻辑：PracticeStore 命令
 
@@ -486,11 +536,11 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按日分钟、时长进位 |
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
 | `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
-| `MigrationTests` | 磁盘 V2 store 经 V3/V4 迁到 V5；V3→V5、V4→V5 轻量迁移保留 review 字段；新库 `videoFindings` 默认空 |
+| `MigrationTests` | V2→V6 / V5→V6 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填 |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
-| `SkillRegistryTests` | 内置三 id、version 1.0.0、记忆默认拒绝、缺 id 为 nil |
+| `SkillRegistryTests` | 内置三 id、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
 | `MemoryContextBuilderTests` | 空块、包装分隔符、goal 先于 ability、预算截断 |
