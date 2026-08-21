@@ -63,4 +63,77 @@ struct MemoryRepositoryTests {
         #expect(rows.count == 1)
         #expect(rows[0].summaryText == "新")
     }
+
+    @Test func upsertUserRejectsAbilityEmptyAndOverlong() throws {
+        let repo = try makeRepo()
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertUser(profileId: "p1", kind: .ability, summaryText: "F 和弦")
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertUser(profileId: "p1", kind: .goal, summaryText: "   ")
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertUser(profileId: "p1", kind: .goal, summaryText: String(repeating: "啊", count: 121))
+        }
+    }
+
+    @Test func upsertUserWritesGoalWithUserSourceAndFetches() throws {
+        let repo = try makeRepo()
+        let item = try repo.upsertUser(profileId: "p1", kind: .goal, summaryText: "  练晴天前奏  ")
+        try repo.save()
+        #expect(item.summaryText == "练晴天前奏")
+        #expect(item.sourceType == "user")
+        #expect(item.key.hasPrefix("user.goal."))
+        #expect(item.confidence == 1)
+        #expect(item.importance == 0.8)
+        let rows = try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date())
+        #expect(rows.map(\.summaryText) == ["练晴天前奏"])
+    }
+
+    @Test func updateSummaryLeavesKeyAndSoftDeleteHidesRow() throws {
+        let repo = try makeRepo()
+        let item = try repo.upsertUser(profileId: "p1", kind: .preference, summaryText: "每天 20 分钟")
+        try repo.save()
+        let key = item.key
+        try repo.updateSummary(profileId: "p1", id: item.id, summaryText: "每天 30 分钟")
+        try repo.save()
+        let updated = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(updated[0].key == key)
+        #expect(updated[0].summaryText == "每天 30 分钟")
+        try repo.softDelete(profileId: "p1", id: item.id)
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date()).isEmpty)
+    }
+
+    @Test func setConsentRequiresProfileAndClearAllIsIsolated() throws {
+        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let container = try ModelContainer(
+            for: schema,
+            configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
+        )
+        let context = ModelContext(container)
+        let repo = SwiftDataMemoryRepository(context: context)
+        let p1 = LocalProfile(id: "p1")
+        let p2 = LocalProfile(id: "p2", isActive: false)
+        context.insert(p1)
+        context.insert(p2)
+        try context.save()
+
+        #expect(throws: StoreError.invalidInput) {
+            try repo.setConsent(profileId: "", .enabled)
+        }
+        try repo.setConsent(profileId: "p1", .enabled)
+        try repo.save()
+        #expect(p1.consent == .enabled)
+        #expect(p1.memoryConsent == true)
+        #expect(p2.consent == .undecided)
+
+        _ = try repo.upsertUser(profileId: "p1", kind: .goal, summaryText: "A")
+        _ = try repo.upsertUser(profileId: "p2", kind: .goal, summaryText: "B")
+        try repo.save()
+        try repo.softDeleteAll(profileId: "p1")
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.goal], matching: "", now: Date()).isEmpty)
+        #expect(try repo.fetch(profileId: "p2", scopes: [.goal], matching: "", now: Date()).map(\.summaryText) == ["B"])
+    }
 }

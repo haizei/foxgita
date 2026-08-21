@@ -11,6 +11,11 @@ protocol MemoryRepository: AnyObject {
     ) throws -> [MemoryItem]
     func upsertDebug(_ item: MemoryItem) throws
     func save() throws
+    func upsertUser(profileId: String, kind: MemoryScope, summaryText: String) throws -> MemoryItem
+    func updateSummary(profileId: String, id: String, summaryText: String) throws
+    func softDelete(profileId: String, id: String) throws
+    func softDeleteAll(profileId: String) throws
+    func setConsent(profileId: String, _ state: MemoryConsentState) throws
 }
 
 @MainActor
@@ -85,6 +90,81 @@ final class SwiftDataMemoryRepository: MemoryRepository {
     func save() throws {
         guard context.hasChanges else { return }
         try context.save()
+    }
+
+    private func normalizedSummary(_ raw: String) throws -> String {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, text.count <= 120 else { throw StoreError.invalidInput }
+        return text
+    }
+
+    func upsertUser(profileId: String, kind: MemoryScope, summaryText: String) throws -> MemoryItem {
+        guard !profileId.isEmpty else { throw StoreError.invalidInput }
+        guard kind == .goal || kind == .preference else { throw StoreError.invalidInput }
+        let summary = try normalizedSummary(summaryText)
+        let item = MemoryItem(
+            profileId: profileId,
+            kind: kind,
+            key: "user.\(kind.rawValue).\(UUID().uuidString)",
+            summaryText: summary,
+            sourceType: "user",
+            sourceId: "",
+            confidence: 1,
+            importance: 0.8
+        )
+        context.insert(item)
+        return item
+    }
+
+    func updateSummary(profileId: String, id: String, summaryText: String) throws {
+        guard !profileId.isEmpty, !id.isEmpty else { throw StoreError.invalidInput }
+        let summary = try normalizedSummary(summaryText)
+        let pid = profileId
+        let itemId = id
+        guard let item = try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.id == itemId && $0.deletedAt == nil }
+            )
+        ).first else { throw StoreError.invalidInput }
+        item.summaryText = summary
+        item.updatedAt = Date()
+    }
+
+    func softDelete(profileId: String, id: String) throws {
+        guard !profileId.isEmpty, !id.isEmpty else { throw StoreError.invalidInput }
+        let pid = profileId
+        let itemId = id
+        guard let item = try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.id == itemId && $0.deletedAt == nil }
+            )
+        ).first else { return }
+        item.deletedAt = Date()
+        item.updatedAt = Date()
+    }
+
+    func softDeleteAll(profileId: String) throws {
+        guard !profileId.isEmpty else { throw StoreError.invalidInput }
+        let pid = profileId
+        let rows = try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }
+            )
+        )
+        let now = Date()
+        for row in rows {
+            row.deletedAt = now
+            row.updatedAt = now
+        }
+    }
+
+    func setConsent(profileId: String, _ state: MemoryConsentState) throws {
+        guard !profileId.isEmpty else { throw StoreError.invalidInput }
+        let pid = profileId
+        guard let profile = try context.fetch(
+            FetchDescriptor<LocalProfile>(predicate: #Predicate { $0.id == pid })
+        ).first else { throw StoreError.invalidInput }
+        profile.consent = state
     }
 
     private static func score(item: MemoryItem, tokens: [String]) -> Int {
