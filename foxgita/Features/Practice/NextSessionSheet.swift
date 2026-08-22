@@ -240,6 +240,7 @@ struct NextSessionSheet: View {
             } catch is CancellationError {
                 return
             } catch {
+                if Task.isCancelled { return }
                 fail(with: error)
             }
         }
