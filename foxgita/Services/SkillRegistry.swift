@@ -5,6 +5,7 @@ struct SkillRegistry: Sendable {
         .planFromImage,
         .reviewMedia,
         .diagnoseVideo,
+        .nextSession,
     ])
 
     private let skills: [String: SkillDefinition]

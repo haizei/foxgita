@@ -50,6 +50,21 @@ struct SkillRegistryTests {
         """)
     }
 
+    @Test func builtinContainsNextSessionSkill() {
+        let skill = SkillRegistry.builtin.skill(id: SkillID.nextSession)
+        #expect(skill != nil)
+        #expect(skill?.id == "practice.next_session")
+        #expect(skill?.version == "1.0.0")
+        #expect(skill?.title == "下次练习安排")
+        #expect(skill?.memoryReadScopes == [.goal, .preference, .ability])
+        #expect(skill?.memoryWritePolicy == .deny)
+        #expect(skill?.timeout == nil)
+        #expect(skill?.allowsFormatRetry == true)
+        #expect(skill?.systemPrompt == "你是吉他练习教练。只输出合法 JSON。")
+        #expect(skill?.userPrompt?.contains("{{minutes}}") == true)
+        #expect(skill?.userPrompt == SkillDefinition.nextSession.userPrompt)
+    }
+
     @Test func missingIdReturnsNil() {
         #expect(SkillRegistry.builtin.skill(id: "no.such.skill") == nil)
         let empty = SkillRegistry(skills: [])

@@ -4,6 +4,7 @@ enum SkillID {
     static let planFromImage = "practice.plan.from_image"
     static let reviewMedia = "practice.review.media"
     static let diagnoseVideo = "practice.diagnose.video"
+    static let nextSession = "practice.next_session"
 }
 
 enum MemoryScope: String, Equatable, Sendable {
@@ -88,5 +89,30 @@ extension SkillDefinition {
         allowsFormatRetry: true,
         memoryReadScopes: [.goal, .preference, .ability],
         memoryWritePolicy: .candidates
+    )
+
+    static let nextSession = SkillDefinition(
+        id: SkillID.nextSession,
+        version: "1.0.0",
+        title: "下次练习安排",
+        purpose: "按可用时长和练习记忆生成一条可确认的今日练习",
+        systemPrompt: "你是吉他练习教练。只输出合法 JSON。",
+        userPrompt: """
+        请按用户本次可用的 {{minutes}} 分钟安排一次吉他练习。只返回 JSON 对象，不要 markdown，不要其它说明。
+        字段：
+        - title: 字符串
+        - category: 仅能为 left/right/both/chord/scale/rhythm/song 之一
+        - targetMin: 整数分钟，必须 ≤ {{minutes}}
+        - steps: 字符串数组（练习步骤）
+        - chords: 可选，识别到的和弦名字符串数组（如 C、G、Am）
+        - stepMinutes: 可选，与 steps 按下标对齐的整数分钟；若出现则各项之和必须 ≤ {{minutes}}；没有则省略
+        有背景记忆就延续目标与近期重点，不要重复已经稳定的基础建议。
+        没有背景记忆就给可完成的通用安排，不要编造用户历史。
+        不要承诺精确音准鉴定，不要做医疗判断。
+        """,
+        timeout: nil,
+        allowsFormatRetry: true,
+        memoryReadScopes: [.goal, .preference, .ability],
+        memoryWritePolicy: .deny
     )
 }
