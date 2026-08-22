@@ -326,4 +326,72 @@ struct MemoryRepositoryTests {
                 .map(\.summaryText) == ["B 重点"]
         )
     }
+
+    @Test func upsertDurationPreferenceRejectsEmptyProfileAndClamps() throws {
+        let repo = try makeRepo()
+        #expect(throws: StoreError.invalidInput) {
+            try repo.upsertDurationPreference(profileId: "", minutes: 20)
+        }
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 3)
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].key == "practice.available_minutes")
+        #expect(rows[0].summaryText == "通常可练 5 分钟")
+        #expect(rows[0].valueJSON == "5")
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 90)
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(rows[0].summaryText == "通常可练 60 分钟")
+        #expect(rows[0].valueJSON == "60")
+    }
+
+    @Test func upsertDurationPreferenceInsertsUpdatesAndRevivesTombstone() throws {
+        let repo = try makeRepo()
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 20)
+        try repo.save()
+        var rows = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].kind == .preference)
+        #expect(rows[0].sourceType == "user")
+        #expect(rows[0].sourceId == "")
+        #expect(rows[0].confidence == 1)
+        #expect(rows[0].importance == 0.8)
+        #expect(rows[0].expiresAt == nil)
+        let id = rows[0].id
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 30)
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].id == id)
+        #expect(rows[0].summaryText == "通常可练 30 分钟")
+        #expect(rows[0].valueJSON == "30")
+        try repo.softDelete(profileId: "p1", id: id)
+        try repo.save()
+        #expect(try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date()).isEmpty)
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 15)
+        try repo.save()
+        rows = try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+        #expect(rows.count == 1)
+        #expect(rows[0].id == id)
+        #expect(rows[0].deletedAt == nil)
+        #expect(rows[0].summaryText == "通常可练 15 分钟")
+        #expect(rows[0].valueJSON == "15")
+        #expect(rows[0].sourceType == "user")
+    }
+
+    @Test func upsertDurationPreferenceIsolatesProfiles() throws {
+        let repo = try makeRepo()
+        try repo.upsertDurationPreference(profileId: "p1", minutes: 20)
+        try repo.upsertDurationPreference(profileId: "p2", minutes: 30)
+        try repo.save()
+        #expect(
+            try repo.fetch(profileId: "p1", scopes: [.preference], matching: "", now: Date())
+                .map(\.valueJSON) == ["20"]
+        )
+        #expect(
+            try repo.fetch(profileId: "p2", scopes: [.preference], matching: "", now: Date())
+                .map(\.valueJSON) == ["30"]
+        )
+    }
 }

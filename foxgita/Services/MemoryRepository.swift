@@ -24,6 +24,7 @@ protocol MemoryRepository: AnyObject {
         summaryText: String,
         valueJSON: String
     ) throws
+    func upsertDurationPreference(profileId: String, minutes: Int) throws
 }
 
 @MainActor
@@ -274,6 +275,64 @@ final class SwiftDataMemoryRepository: MemoryRepository {
                 sourceId: recordingId,
                 confidence: 0.4,
                 importance: 0.4
+            )
+        )
+    }
+
+    private static let durationKey = "practice.available_minutes"
+
+    private func durationRows(profileId: String) throws -> [MemoryItem] {
+        let pid = profileId
+        let key = Self.durationKey
+        return try context.fetch(
+            FetchDescriptor<MemoryItem>(
+                predicate: #Predicate { $0.profileId == pid && $0.key == key }
+            )
+        )
+    }
+
+    func upsertDurationPreference(profileId: String, minutes: Int) throws {
+        guard !profileId.isEmpty else { throw StoreError.invalidInput }
+        let n = min(60, max(5, minutes))
+        let summary = "通常可练 \(n) 分钟"
+        let value = "\(n)"
+        let rows = try durationRows(profileId: profileId)
+        if let tomb = rows.first(where: { $0.deletedAt != nil }) {
+            tomb.deletedAt = nil
+            tomb.kindRaw = MemoryScope.preference.rawValue
+            tomb.summaryText = summary
+            tomb.valueJSON = value
+            tomb.sourceType = "user"
+            tomb.sourceId = ""
+            tomb.confidence = 1
+            tomb.importance = 0.8
+            tomb.expiresAt = nil
+            tomb.updatedAt = Date()
+            return
+        }
+        if let live = rows.first(where: { $0.deletedAt == nil }) {
+            live.kindRaw = MemoryScope.preference.rawValue
+            live.summaryText = summary
+            live.valueJSON = value
+            live.sourceType = "user"
+            live.sourceId = ""
+            live.confidence = 1
+            live.importance = 0.8
+            live.expiresAt = nil
+            live.updatedAt = Date()
+            return
+        }
+        context.insert(
+            MemoryItem(
+                profileId: profileId,
+                kind: .preference,
+                key: Self.durationKey,
+                summaryText: summary,
+                valueJSON: value,
+                sourceType: "user",
+                sourceId: "",
+                confidence: 1,
+                importance: 0.8
             )
         )
     }

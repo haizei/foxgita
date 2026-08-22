@@ -291,4 +291,5 @@ private final class SaveFailingMemoryRepository: MemoryRepository {
     func upsertAICandidate(
         profileId: String, recordingId: String, summaryText: String, valueJSON: String
     ) throws {}
+    func upsertDurationPreference(profileId: String, minutes: Int) throws {}
 }
