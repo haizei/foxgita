@@ -31,7 +31,7 @@ struct NextSessionSheet: View {
     @State private var draftChords: [String] = []
     @State private var editTitle = ""
     @State private var editMinutes = 20
-    @State private var editSteps: [String] = []
+    @State private var editSteps: [EditStep] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,7 +73,7 @@ struct NextSessionSheet: View {
         .onAppear {
             memoryStore.reload()
             minutes = NextSessionDuration.resolved(
-                preferenceMinutes: NextSessionDuration.parsePreference(memoryStore.items),
+                preferenceMinutes: NextSessionDuration.parsePreference(consentedItems),
                 initialMinutes: initialMinutes
             )
         }
@@ -175,16 +175,16 @@ struct NextSessionSheet: View {
                 }
             }
             .font(.system(size: 13, weight: .semibold))
-            ForEach(editSteps.indices, id: \.self) { index in
+            ForEach($editSteps) { $step in
                 HStack {
-                    TextField("步骤", text: $editSteps[index])
-                    Button("删") { editSteps.remove(at: index) }
+                    TextField("步骤", text: $step.text)
+                    Button("删") { editSteps.removeAll { $0.id == step.id } }
                         .font(.system(size: 13))
                         .foregroundStyle(GitaTheme.textSecondary)
                 }
             }
             if editSteps.count < 12 {
-                Button("加一步") { editSteps.append("") }
+                Button("加一步") { editSteps.append(EditStep(text: "")) }
                     .font(.system(size: 13, weight: .semibold))
             }
             Spacer()
@@ -232,7 +232,7 @@ struct NextSessionSheet: View {
                 try Task.checkCancellation()
                 applyDraft(draft)
                 citation = NextSessionCitation.line(
-                    items: memoryStore.items,
+                    items: consentedItems,
                     selectedMinutes: minutes
                 )
                 isGenerating = false
@@ -245,17 +245,21 @@ struct NextSessionSheet: View {
         }
     }
 
+    private var consentedItems: [MemoryItem] {
+        memoryStore.consent == .enabled ? memoryStore.items : []
+    }
+
     private func applyDraft(_ draft: AIPracticeDraft) {
         draftCategory = draft.category
         draftChords = draft.chords
         editTitle = draft.title
         editMinutes = draft.targetMin
-        editSteps = draft.steps
+        editSteps = draft.steps.map { EditStep(text: $0) }
     }
 
     private func confirm() {
         var steps = editSteps
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         if steps.isEmpty { steps = [String(localized: "新步骤")] }
         if steps.count > 12 { steps = Array(steps.prefix(12)) }
@@ -302,4 +306,9 @@ struct NextSessionSheet: View {
     private func hideToastLater() {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { toast = nil }
     }
+}
+
+private struct EditStep: Identifiable {
+    let id = UUID()
+    var text: String
 }

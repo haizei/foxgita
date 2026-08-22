@@ -554,7 +554,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
-| `SkillRegistryTests` | 内置三 id、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
+| `SkillRegistryTests` | 内置四 id（含 practice.next_session 1.0.0）、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
 | `MemoryContextBuilderTests` | 空块、包装分隔符、goal 先于 ability、预算截断 |
