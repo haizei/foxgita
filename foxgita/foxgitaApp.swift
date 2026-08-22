@@ -18,6 +18,7 @@ struct foxgitaApp: App {
     private let memoryRepo: SwiftDataMemoryRepository
     private let memoryStore: MemoryStore
     private let coordinator: MemoryConsentCoordinator
+    private let durationPreferenceSync: DurationPreferenceSync
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV7.self)
@@ -37,12 +38,16 @@ struct foxgitaApp: App {
             let aiCandidateSync = AICandidateSync(
                 repository: memoryRepo, context: container.mainContext
             )
+            let durationPreferenceSync = DurationPreferenceSync(
+                repository: memoryRepo, context: container.mainContext
+            )
             let memoryStore = MemoryStore(
                 repository: memoryRepo,
                 context: container.mainContext,
                 taskMemorySync: taskMemorySync
             )
             self.memoryStore = memoryStore
+            self.durationPreferenceSync = durationPreferenceSync
             self.coordinator = MemoryConsentCoordinator(store: memoryStore)
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
@@ -72,6 +77,7 @@ struct foxgitaApp: App {
                 .environment(\.memoryContext, liveMemory)
                 .environment(memoryStore)
                 .environment(coordinator)
+                .environment(\.durationPreferenceSync, durationPreferenceSync)
                 .modelContainer(container)
                 .tint(GitaTheme.brand500)
                 .preferredColorScheme(appearance.colorScheme)

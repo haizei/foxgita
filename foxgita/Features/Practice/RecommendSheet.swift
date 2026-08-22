@@ -21,6 +21,7 @@ struct RecommendSheet: View {
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
     @State private var showPhotoSheet = false
+    @State private var showNextSessionSheet = false
     @State private var toast: String?
     private let credentials = LLMCredentialsStore()
     /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
@@ -85,7 +86,30 @@ struct RecommendSheet: View {
                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                             }
                             .buttonStyle(.plain)
-                            .disabled(showPhotoSheet)
+                            .disabled(showPhotoSheet || showNextSessionSheet)
+                            Button {
+                                let missing = credentials.missingFieldLabels(
+                                    baseURL: llmBaseURL, model: llmModel
+                                )
+                                if missing.isEmpty {
+                                    showNextSessionSheet = true
+                                } else {
+                                    toast = String(
+                                        localized: "还缺 \(missing.joined(separator: "、"))，请在设置里填完并点保存"
+                                    )
+                                    hideToastLater()
+                                }
+                            } label: {
+                                Text("安排今日")
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                    .padding(.horizontal, 10)
+                                    .frame(height: 34)
+                                    .background(GitaTheme.brand50)
+                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            }
+                            .buttonStyle(.plain)
+                            .disabled(showPhotoSheet || showNextSessionSheet)
                             Rectangle()
                                 .fill(GitaTheme.borderSubtle)
                                 .frame(width: 1, height: 24)
@@ -192,6 +216,19 @@ struct RecommendSheet: View {
                 selection: $selection,
                 onFinished: {
                     showPhotoSheet = false
+                    dismiss()
+                }
+            )
+        }
+        .sheet(isPresented: $showNextSessionSheet) {
+            NextSessionSheet(
+                initialMinutes: duration,
+                fallbackCategory: category,
+                baseURL: llmBaseURL,
+                model: llmModel,
+                selection: $selection,
+                onFinished: {
+                    showNextSessionSheet = false
                     dismiss()
                 }
             )

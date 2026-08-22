@@ -78,6 +78,10 @@ foxgita/
 │   ├── MemoryContextProviding.swift # LiveMemoryContext / EmptyMemoryContext
 │   ├── TaskMemorySync.swift         # custom-* 任务标题 → goal
 │   ├── AICandidateSync.swift        # 复盘/诊断 focus → ability.current_focus
+│   ├── DurationPreferenceSync.swift # 当场时长 → practice.available_minutes
+│   ├── NextSessionClient.swift      # practice.next_session 无图调用
+│   ├── NextSessionGenerator.swift
+│   ├── NextSessionCitation.swift
 │   ├── MemoryStore.swift            # 同意状态 + 用户记忆 CRUD
 │   ├── MemoryConsentState.swift     # 三态 + 隐私文案
 │   ├── MemoryConsentCoordinator.swift # 首次生成授权门
@@ -389,7 +393,7 @@ V7 仍不加 `profileId`。
 | `schemaVersion` | Int | 默认 `1` |
 | `createdAt` / `updatedAt` / `deletedAt` | Date / Date? | 软删 |
 
-同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` / `upsertUser` 保证）。用户可在设置页对手写 `goal` / `preference` 增删改摘要；`practice.plan.from_image` 的 `memoryWritePolicy` 仍为 `.deny`。`practice.review.media` 与 `practice.diagnose.video` 为 `.candidates`。同意 `enabled` 时，`PracticeStore.applyReview` / `applyVideoDiagnosis` 成功后由 `AICandidateSync` 写入全 Profile 一条 ability：`key = ability.current_focus`，`sourceType = ai`，`confidence` / `importance` = `0.4`，`valueJSON = {skill.id}@{skill.version}`。用户改摘要后 `sourceType` 变为 `user`，之后复盘不再覆盖；用户删除或清空后同 key 不复活。记忆写入失败不回滚复盘结果。设计说明：`docs/superpowers/2026-08-21-ai-candidate-memory/specs/2026-08-21-ai-candidate-memory-design.md`。
+同一 `profileId` + `key` 至多一条 `deletedAt == nil` 的记录（由 `upsertDebug` / `upsertUser` 保证）。用户可在设置页对手写 `goal` / `preference` 增删改摘要；`practice.plan.from_image` 的 `memoryWritePolicy` 仍为 `.deny`。`practice.review.media` 与 `practice.diagnose.video` 为 `.candidates`。同意 `enabled` 时，`PracticeStore.applyReview` / `applyVideoDiagnosis` 成功后由 `AICandidateSync` 写入全 Profile 一条 ability：`key = ability.current_focus`，`sourceType = ai`，`confidence` / `importance` = `0.4`，`valueJSON = {skill.id}@{skill.version}`。用户改摘要后 `sourceType` 变为 `user`，之后复盘不再覆盖；用户删除或清空后同 key 不复活。记忆写入失败不回滚复盘结果。设计说明：`docs/superpowers/2026-08-21-ai-candidate-memory/specs/2026-08-21-ai-candidate-memory-design.md`。`practice.next_session` 为 `1.0.0`，读 `goal` / `preference` / `ability`，`memoryWritePolicy = .deny`。推荐 Sheet「安排今日」选时长后生成预览，确认才 `createFromAIDraft`。同意 `enabled` 时，生成前由 `DurationPreferenceSync` 写入偏好 `practice.available_minutes`（tombstone 可复活）。预览引用句由本地记忆生成，不采用模型自报。设计说明：`docs/superpowers/2026-08-22-next-session/specs/2026-08-22-next-session-design.md`。
 
 #### 迁移与别名
 
