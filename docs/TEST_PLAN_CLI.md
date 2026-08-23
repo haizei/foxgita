@@ -80,6 +80,9 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `RecordingStoreTests` | 写入后 `fileExists` true，删除后 false |
 | `AudioSessionCoordinatorTests` | apply 失败回滚计数；成对 acquire/release；record+playback 仍 prefersPlayAndRecord |
 | `MetronomeEngineTests` | `bump(1)` 钳制；acquire 失败 `isPlaying == false`；start/stop/start 引擎 running 且无第二份 pump |
+| `PracticeResumeQueryTests` | 无历史隐藏行；有效 session 覆盖 default；跳过无效/已删；nextAction 优先；28 字截断；BPM 钳制 |
+| `JustCompletedCopyTests` | 分钟进位；0 分钟+笔记/媒体为「不足 1 分钟」；摘要不含 0 条 |
+| `AppRouterTests` | `clearJustCompleted` 清 id |
 
 **通过**：日志出现 `TEST SUCCEEDED`，无 `✘` / `error:`（业务测试失败）。
 

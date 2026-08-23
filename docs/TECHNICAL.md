@@ -130,7 +130,7 @@ flowchart TD
 | 计时中返回 | `confirmationDialog` 二次确认，避免误丢本次记录 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
-| 完成练习 | 成功触感 + 回到今天的练习列表 |
+| 完成练习 | 有效完成：写回 task.defaultBpm，AppRouter.lastCompletedSessionId = 刚保存的 session id，回今天并展示「刚刚完成」。空完成：toast「这次没有留下记录」，不写 BPM / id。返回已有 session：updateOpenSession（含 defaultBpm），不写 lastCompletedSessionId。 |
 | 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 切到练习 Tab、清空导航栈并复位到今天；今日有任务则打开第一项，空则停留空 inbox，不打开昨日任务 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
 
@@ -159,6 +159,10 @@ flowchart TD
 完成时：`recorder.consume()` + `video.takeAll()` 合并为 `[AudioRecorderService.Clip]` 交给 `finishSession`。离开详情未完成则丢弃 audio/video pending 并删文件。
 
 列表展示该 `taskId` 下全部未删除 recording；`openSessionId` 只用于写入。
+
+#### 4.1.3 工作台进入恢复
+
+`PracticeDetailView.onAppear` 用 `PracticeResumeQuery.resume`：最近有效 session 的 BPM，否则 `task.defaultBpm`。焦点行优先 `reviewNextAction`，否则上次笔记首行。笔记框不预填。
 
 ### 4.2 数据交互（读 / 写分工）
 

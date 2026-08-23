@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-23  
-**状态：** Draft — 待实现计划  
+**状态：** Approved — implementation plan in ../plans/2026-08-23-practice-workbench-resume.md  
 **方案：** 方案 B — 抽出可测核心，页面只绑定  
 **产品来源：** `design-boards/产品PRD/练习工作台/2026-08-23-Gita-练习工作台-上次状态与当场回放-PRD.md`  
 **升级对象：** [练习详情片段卡](../../2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md) 与 [练习详情稳定性](../../2026-08-19-practice-detail-stability/specs/2026-08-19-practice-detail-stability-design.md) 中「练中播放不做」  
