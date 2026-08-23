@@ -255,14 +255,14 @@ final class PracticeStore {
         durationSec: Int,
         bpm: Int,
         recordings: [AudioRecorderService.Clip]
-    ) -> Bool {
+    ) -> String? {
         guard let task = try? repository.task(id: taskId) else {
             lastError = .notFound
-            return false
+            return nil
         }
         guard endedAt >= startedAt, durationSec >= 0 else {
             lastError = .invalidInput
-            return false
+            return nil
         }
 
         let existingClipCount = recordings.filter {
@@ -274,10 +274,10 @@ final class PracticeStore {
             recordingCount: existingClipCount
         ) else {
             lastError = .invalidInput
-            return false
+            return nil
         }
 
-        guard let profileId = requireProfileId() else { return false }
+        guard let profileId = requireProfileId() else { return nil }
         let session = PracticeSession(
             taskId: task.id,
             taskTitle: task.title,
@@ -302,11 +302,12 @@ final class PracticeStore {
 
         return produce {
             task.steps = steps
+            task.defaultBpm = min(200, max(40, bpm))
             task.touch()
             try repository.add(session)
             try repository.save()
-            return true
-        } ?? false
+            return session.id
+        }
     }
 
     func beginOpenSession(
@@ -400,6 +401,7 @@ final class PracticeStore {
             session.bpm = bpm
             session.updatedAt = Date()
             task.steps = steps
+            task.defaultBpm = min(200, max(40, bpm))
             task.touch()
             try repository.save()
             return true

@@ -282,17 +282,19 @@ struct PracticeStoreTests {
         let start = Date(timeIntervalSince1970: 1_700_000_000)
         let end = start.addingTimeInterval(300)
 
-        let ok = store.finishSession(
+        let id = store.finishSession(
             taskId: "warm",
             steps: ["热身", "主练"],
             note: "感觉不错",
             startedAt: start,
             endedAt: end,
             durationSec: 300,
-            bpm: 80,
+            bpm: 72,
             recordings: []
         )
-        #expect(ok)
+        #expect(id != nil)
+        #expect(try repo.task(id: "warm")?.defaultBpm == 72)
+        #expect(try repo.sessions()[0].id == id)
         let sessions = try repo.sessions()
         #expect(sessions.count == 1)
         #expect(sessions[0].noteText == "感觉不错")
@@ -309,7 +311,7 @@ struct PracticeStoreTests {
             startedAt: start, endedAt: start.addingTimeInterval(-10),
             durationSec: 10, bpm: 80, recordings: []
         )
-        #expect(ok == false)
+        #expect(ok == nil)
         #expect(store.lastError == .invalidInput)
         #expect(try repo.sessions().isEmpty)
     }
@@ -321,7 +323,7 @@ struct PracticeStoreTests {
             store.finishSession(
                 taskId: "ghost", steps: [], note: "",
                 startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
-            ) == false
+            ) == nil
         )
         #expect(store.lastError == .notFound)
     }
@@ -335,7 +337,7 @@ struct PracticeStoreTests {
             store.finishSession(
                 taskId: "warm", steps: ["x"], note: "",
                 startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
-            ) == false
+            ) == nil
         )
         #expect(store.lastError == .diskFull)
         // Session insert is pending and must not survive a failed save.
@@ -351,7 +353,7 @@ struct PracticeStoreTests {
             store.finishSession(
                 taskId: "warm", steps: [], note: "",
                 startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
-            ) == false
+            ) == nil
         )
         #expect(store.lastError == .invalidInput)
         #expect(try repo.sessions().isEmpty)
@@ -365,7 +367,7 @@ struct PracticeStoreTests {
             store.finishSession(
                 taskId: "warm", steps: [], note: "只记一句",
                 startedAt: now, endedAt: now, durationSec: 0, bpm: 80, recordings: []
-            )
+            ) != nil
         )
         #expect(try repo.sessions().count == 1)
         #expect(try repo.sessions()[0].noteText == "只记一句")
@@ -482,6 +484,52 @@ struct PracticeStoreTests {
         #expect(try repo.session(id: sid)?.durationSec == 0)
     }
 
+    @Test func beginOpenSessionDoesNotWriteDefaultBpm() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        let clip = try writeClip(id: "a")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        #expect(try repo.task(id: "warm")?.defaultBpm == 80)
+        _ = try #require(store.beginOpenSession(
+            taskId: "warm", steps: [], note: "",
+            startedAt: now, endedAt: now, durationSec: 0, bpm: 95,
+            clip: clip
+        ))
+        #expect(try repo.task(id: "warm")?.defaultBpm == 80)
+    }
+
+    @Test func updateOpenSessionWritesDefaultBpm() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clip = try writeClip(id: "a")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        let sid = try #require(store.beginOpenSession(
+            taskId: "warm", steps: ["旧"], note: "",
+            startedAt: start, endedAt: start, durationSec: 0, bpm: 80,
+            clip: clip
+        ))
+        #expect(store.updateOpenSession(
+            sessionId: sid, steps: ["新"], note: "记",
+            endedAt: start.addingTimeInterval(90), durationSec: 90, bpm: 88
+        ))
+        #expect(try repo.task(id: "warm")?.defaultBpm == 88)
+    }
+
+    @Test func finishSessionRejectsEmptyDoesNotWriteBpm() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let now = Date()
+        #expect(
+            store.finishSession(
+                taskId: "warm", steps: [], note: "",
+                startedAt: now, endedAt: now, durationSec: 0, bpm: 120, recordings: []
+            ) == nil
+        )
+        #expect(try repo.task(id: "warm")?.defaultBpm == 80)
+    }
+
     @Test func seedIfNeededWritesOnlyTemplates() throws {
         let (store, repo, defaults) = makeStore(seeded: false)
         store.seedIfNeeded()
@@ -528,7 +576,7 @@ struct PracticeStoreTests {
             taskId: "warm", steps: ["a"], note: "n",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 72,
             recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         let rec = RecordingRef(id: "clip-1", fileName: "x.m4a", bytes: 1, durationSec: 8)
         rec.reviewStatus = .ready
@@ -552,7 +600,7 @@ struct PracticeStoreTests {
             taskId: "warm", steps: ["慢速"], note: "笔记",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 80,
             recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         session.recordings.append(RecordingRef(id: "clip-2", fileName: "y.mov", bytes: 2, durationSec: 20))
         try repo.save()
@@ -579,7 +627,7 @@ struct PracticeStoreTests {
         #expect(store.finishSession(
             taskId: "warm", steps: [], note: "n",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         let rec = RecordingRef(id: "clip-3", fileName: "z.m4a", bytes: 1)
         rec.reviewStatus = .pending
@@ -597,7 +645,7 @@ struct PracticeStoreTests {
         #expect(store.finishSession(
             taskId: "warm", steps: ["慢速"], note: "笔记",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 80, recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         session.recordings.append(RecordingRef(id: "clip-v", fileName: "y.mov", bytes: 2, durationSec: 40))
         try repo.save()
@@ -628,7 +676,7 @@ struct PracticeStoreTests {
         #expect(store.finishSession(
             taskId: "warm", steps: ["a"], note: "n",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 72, recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         let rec = RecordingRef(id: "clip-p", fileName: "x.mov", bytes: 1, durationSec: 8)
         rec.reviewStatus = .ready

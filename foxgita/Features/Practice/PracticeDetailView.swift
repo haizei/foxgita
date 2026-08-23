@@ -849,12 +849,12 @@ struct PracticeDetailView: View {
         clips += video.takeAll().map { audioClip($0) }
         let end = Date()
         let elapsed = practiceTimer.elapsedSec
-        let saved = store.finishSession(
+        let savedId = store.finishSession(
             taskId: task.id, steps: steps, note: noteText,
             startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
             endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: clips
         )
-        guard saved else {
+        guard savedId != nil else {
             isCompleting = false
             return
         }

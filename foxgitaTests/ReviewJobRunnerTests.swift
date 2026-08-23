@@ -18,7 +18,7 @@ struct ReviewJobRunnerTests {
         #expect(store.finishSession(
             taskId: "warm", steps: ["a"], note: "",
             startedAt: now, endedAt: now, durationSec: 30, bpm: 80, recordings: []
-        ))
+        ) != nil)
         let session = try repo.sessions()[0]
         for id in ["a", "b", "c"] {
             session.recordings.append(RecordingRef(id: id, fileName: "\(id).m4a", bytes: 1, durationSec: 5))

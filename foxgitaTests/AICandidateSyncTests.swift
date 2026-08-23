@@ -129,7 +129,7 @@ struct AICandidateSyncTests {
             taskId: taskId, steps: ["慢练"], note: "笔记",
             startedAt: now, endedAt: now, durationSec: 60, bpm: 80,
             recordings: []
-        ))
+        ) != nil)
         let session = try practiceRepo.sessions()[0]
         session.recordings.append(
             RecordingRef(id: recordingId, fileName: "y.m4a", bytes: 2, durationSec: 20)
