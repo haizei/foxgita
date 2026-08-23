@@ -30,4 +30,10 @@ final class AppRouter {
     var returnPracticeToToday = false
     /// Set by detail / past-day open; PracticeView shows it then clears.
     var practiceToast: String?
+    /// Set only after an effective Complete. Never persist. Never infer "latest session".
+    var lastCompletedSessionId: String?
+
+    func clearJustCompleted() {
+        lastCompletedSessionId = nil
+    }
 }

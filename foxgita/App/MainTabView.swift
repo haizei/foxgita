@@ -25,5 +25,10 @@ struct MainTabView: View {
                 .tag(MainTab.settings)
         }
         .tint(GitaTheme.brand500)
+        .onChange(of: router.selectedTab) { old, new in
+            if old == .practice, new != .practice {
+                router.clearJustCompleted()
+            }
+        }
     }
 }
