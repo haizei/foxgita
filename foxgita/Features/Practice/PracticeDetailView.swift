@@ -31,8 +31,6 @@ struct PracticeDetailView: View {
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
     @State private var toast: String?
-    @State private var confirmExit = false
-    @State private var abandoning = false
     @State private var isCompleting = false
     @State private var openSessionId: String?
     @State private var analysisRoute: VideoRoute?
@@ -140,7 +138,7 @@ struct PracticeDetailView: View {
             if recorder.isRecording { recorder.stop(label: task?.title ?? "") }
             player.stop()
             videoPlayURL = nil
-            if !abandoning, let task {
+            if let task {
                 persistPending(task: task)
                 saveOpenSession(task: task)
             }
@@ -175,17 +173,6 @@ struct PracticeDetailView: View {
                 onCancel: { video.dismiss() }
             )
             .ignoresSafeArea()
-        }
-        .confirmationDialog(
-            "这次练习还没保存", isPresented: $confirmExit, titleVisibility: .visible
-        ) {
-            Button("放弃并返回", role: .destructive) {
-                abandoning = true
-                leave()
-            }
-            Button("继续练习", role: .cancel) {}
-        } message: {
-            Text("返回会丢掉本次计时、录音和笔记。")
         }
     }
 
@@ -830,18 +817,9 @@ struct PracticeDetailView: View {
         metronome.stop()
         if let task {
             if recorder.isRecording { recorder.stop(label: task.title) }
-            persistPending(task: task)
+            persistVisit(task: task)
         }
-        if openSessionId != nil {
-            if let task { saveOpenSession(task: task) }
-            leave()
-            return
-        }
-        if hasUnsavedWork {
-            confirmExit = true
-        } else {
-            leave()
-        }
+        leave()
     }
 
     private func leave() {
@@ -907,6 +885,27 @@ struct PracticeDetailView: View {
             durationSec: practiceTimer.elapsedSec,
             bpm: metronome.bpm
         )
+    }
+
+    @discardableResult
+    private func persistVisit(task: TaskItem) -> String? {
+        persistPending(task: task)
+        if let open = openSessionId {
+            saveOpenSession(task: task)
+            return open
+        }
+        guard hasUnsavedWork else { return nil }
+        var clips = recorder.consume()
+        clips += video.takeAll().map { audioClip($0) }
+        let end = Date()
+        let elapsed = practiceTimer.elapsedSec
+        let savedId = store.finishSession(
+            taskId: task.id, steps: steps, note: noteText,
+            startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
+            endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: clips
+        )
+        if let savedId { openSessionId = savedId }
+        return savedId
     }
 
     private func complete(_ task: TaskItem) {
