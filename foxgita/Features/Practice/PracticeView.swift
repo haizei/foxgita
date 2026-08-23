@@ -51,6 +51,11 @@ struct PracticeView: View {
 
     private var calendar: Calendar { .current }
     private var isSelectedToday: Bool { calendar.isDateInToday(selectedDay) }
+
+    private var justCompleted: PracticeSession? {
+        guard isSelectedToday, let id = router.lastCompletedSessionId else { return nil }
+        return sessions.first { $0.id == id && $0.deletedAt == nil }
+    }
     private var isSelectedFuture: Bool {
         calendar.startOfDay(for: selectedDay) > calendar.startOfDay(for: Date())
     }
@@ -124,6 +129,32 @@ struct PracticeView: View {
                             selectedDay: $selectedDay,
                             weekAnchor: $weekAnchor
                         )
+
+                        if let session = justCompleted {
+                            JustCompletedCard(
+                                title: session.taskTitle,
+                                minutes: JustCompletedCopy.minutesLabel(
+                                    durationSec: session.durationSec,
+                                    hasNote: !session.noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                    mediaCount: session.recordings.filter { $0.deletedAt == nil }.count
+                                ),
+                                summary: JustCompletedCopy.summary(
+                                    hasNote: !session.noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                                    fileNames: session.recordings.filter { $0.deletedAt == nil }.map(\.fileName)
+                                ),
+                                onPracticeAgain: {
+                                    let taskId = session.taskId
+                                    router.clearJustCompleted()
+                                    router.practicePath = [.detail(taskId: taskId)]
+                                },
+                                onViewRecord: {
+                                    let taskId = session.taskId
+                                    router.clearJustCompleted()
+                                    router.selectedTab = .record
+                                    router.recordPath = [.detail(taskId: taskId)]
+                                }
+                            )
+                        }
 
                         HStack {
                             Text(sectionTitle)
@@ -251,6 +282,15 @@ struct PracticeView: View {
                 if !calendar.isDate(start, inSameDayAs: weekAnchor) {
                     weekAnchor = start
                 }
+                if !calendar.isDateInToday(newDay) {
+                    router.clearJustCompleted()
+                }
+            }
+            .onChange(of: router.lastCompletedSessionId) { _, _ in
+                clearJustCompletedIfMissing()
+            }
+            .onChange(of: sessions.map(\.id)) { _, _ in
+                clearJustCompletedIfMissing()
             }
             .onChange(of: router.openTodayFirstPractice) { _, requested in
                 guard requested else { return }
@@ -325,6 +365,14 @@ struct PracticeView: View {
                     openPastGroup(group)
                 }
             }
+        }
+    }
+
+    private func clearJustCompletedIfMissing() {
+        guard let id = router.lastCompletedSessionId else { return }
+        let found = sessions.contains { $0.id == id && $0.deletedAt == nil }
+        if !found {
+            router.clearJustCompleted()
         }
     }
 
