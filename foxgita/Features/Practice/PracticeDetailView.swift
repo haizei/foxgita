@@ -919,9 +919,10 @@ struct PracticeDetailView: View {
         videoPlayURL = nil
         persistPending(task: task)
 
-        if let _ = openSessionId {
+        if let open = openSessionId {
             saveOpenSession(task: task)
             Haptics.success()
+            router.lastCompletedSessionId = open
             router.returnPracticeToToday = true
             router.practicePath.removeAll()
             return
@@ -947,6 +948,7 @@ struct PracticeDetailView: View {
             isCompleting = false
             return
         }
+        router.lastCompletedSessionId = savedId
         Haptics.success()
         router.returnPracticeToToday = true
         router.practicePath.removeAll()
