@@ -916,41 +916,20 @@ struct PracticeDetailView: View {
         metronome.stop()
         player.stop()
         videoPlayURL = nil
-        persistPending(task: task)
-
-        if let open = openSessionId {
-            saveOpenSession(task: task)
+        let savedId = persistVisit(task: task)
+        if let savedId {
             Haptics.success()
-            router.lastCompletedSessionId = open
             router.returnPracticeToToday = true
             router.practicePath.removeAll()
             return
         }
-
         if !hasUnsavedWork {
             router.practiceToast = String(localized: "这次没有留下记录")
             router.returnPracticeToToday = true
             router.practicePath.removeAll()
             return
         }
-
-        var clips = recorder.consume()
-        clips += video.takeAll().map { audioClip($0) }
-        let end = Date()
-        let elapsed = practiceTimer.elapsedSec
-        let savedId = store.finishSession(
-            taskId: task.id, steps: steps, note: noteText,
-            startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
-            endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: clips
-        )
-        guard savedId != nil else {
-            isCompleting = false
-            return
-        }
-        router.lastCompletedSessionId = savedId
-        Haptics.success()
-        router.returnPracticeToToday = true
-        router.practicePath.removeAll()
+        isCompleting = false
     }
 
     private func show(_ message: String) {
