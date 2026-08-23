@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-23  
-**状态：** Draft  
+**状态：** Approved — implementation plan in ../plans/2026-08-23-practice-workbench-quiet-leave.md  
 **方案：** 方案 B — 一条保存路径；完成不再写成果卡 id；首页不渲染「刚刚完成」  
 **升级对象：** [练习工作台上次速度与当场回放](../../2026-08-23-practice-workbench-resume/specs/2026-08-23-practice-workbench-resume-design.md) 中「返回确认框」「完成写 lastCompletedSessionId / 成果卡」  
 **不改：** 进入恢复 BPM / 焦点行、当场播放、`finishSession -> String?`、Schema

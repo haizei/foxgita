@@ -127,10 +127,10 @@ flowchart TD
 | 周历选日 | `StreakCard` 展示大日期数字；`selectedDay` 驱动列表内容（见 §4.1.1） |
 | 左滑练习行 | 今日列表：`swipeActions` → 编辑 Sheet / 软删确认 |
 | 推荐 Sheet 选任务 | 只回传 `taskId`；用 `pendingTaskId` + `.sheet(onDismiss:)` 导航，避免 dismiss 时序 hack |
-| 计时中返回 | `confirmationDialog` 二次确认，避免误丢本次记录 |
+| 计时中返回 | 有内容：静默写入 session（计时 / 笔记 / 步骤 / BPM / 媒体）并离开，无确认框、不拉回今天、不写 lastCompletedSessionId。空访：直接离开。 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
-| 完成练习 | 有效完成：写回 task.defaultBpm，AppRouter.lastCompletedSessionId = 刚保存的 session id，回今天并展示「刚刚完成」。空完成：toast「这次没有留下记录」，不写 BPM / id。返回已有 session：updateOpenSession（含 defaultBpm），不写 lastCompletedSessionId。 |
+| 完成练习 | 有效完成：写回 task.defaultBpm，震动，回今天。不写 lastCompletedSessionId，不展示「刚刚完成」。空完成：toast「这次没有留下记录」，不写 BPM / id。返回：与完成同一套落库，不震动、不拉回今天。 |
 | 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 切到练习 Tab、清空导航栈并复位到今天；今日有任务则打开第一项，空则停留空 inbox，不打开昨日任务 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
 
