@@ -359,6 +359,16 @@ struct PracticeStoreTests {
         #expect(try repo.sessions().isEmpty)
     }
 
+    @Test func updateTaskPracticeStateWritesStepsWithoutSession() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        #expect(try repo.task(id: "warm")?.steps.isEmpty == true)
+        store.updateTaskPracticeState("warm", steps: ["热身", "主练"], bpm: 88)
+        #expect(try repo.task(id: "warm")?.steps == ["热身", "主练"])
+        #expect(try repo.task(id: "warm")?.defaultBpm == 88)
+        #expect(try repo.sessions().isEmpty)
+    }
+
     @Test func finishSessionAcceptsZeroDurationWithNote() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)

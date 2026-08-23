@@ -139,10 +139,8 @@ struct PracticeDetailView: View {
             player.stop()
             videoPlayURL = nil
             if let task {
-                persistPending(task: task)
-                saveOpenSession(task: task)
+                persistVisit(task: task)
             }
-            // Takes never attached to a session would otherwise linger on disk.
             recorder.discardPending()
             for clip in video.takeAll() {
                 RecordingStore.delete(fileName: clip.fileName)
@@ -871,18 +869,24 @@ struct PracticeDetailView: View {
             saveOpenSession(task: task)
             return open
         }
-        guard hasUnsavedWork else { return nil }
-        var clips = recorder.consume()
-        clips += video.takeAll().map { audioClip($0) }
-        let end = Date()
+        let leftover = recorder.consume() + video.takeAll().map { audioClip($0) }
+        let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
         let elapsed = practiceTimer.elapsedSec
-        let savedId = store.finishSession(
-            taskId: task.id, steps: steps, note: noteText,
-            startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
-            endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: clips
-        )
-        if let savedId { openSessionId = savedId }
-        return savedId
+        let hasRecord = elapsed > 0 || !note.isEmpty || !leftover.isEmpty
+        if hasRecord {
+            let end = Date()
+            let savedId = store.finishSession(
+                taskId: task.id, steps: steps, note: noteText,
+                startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
+                endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: leftover
+            )
+            if let savedId {
+                openSessionId = savedId
+                return savedId
+            }
+        }
+        store.updateTaskPracticeState(task.id, steps: steps, bpm: metronome.bpm)
+        return nil
     }
 
     private func complete(_ task: TaskItem) {
@@ -893,6 +897,9 @@ struct PracticeDetailView: View {
         metronome.stop()
         player.stop()
         videoPlayURL = nil
+        let hadContent = hasUnsavedWork
+        let stepsChanged = steps != task.steps
+        let hadNote = !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         let savedId = persistVisit(task: task)
         if let savedId {
             Haptics.success()
@@ -900,8 +907,10 @@ struct PracticeDetailView: View {
             router.practicePath.removeAll()
             return
         }
-        if !hasUnsavedWork {
-            router.practiceToast = String(localized: "这次没有留下记录")
+        if !hadContent {
+            if !stepsChanged && !hadNote {
+                router.practiceToast = String(localized: "这次没有留下记录")
+            }
             router.returnPracticeToToday = true
             router.practicePath.removeAll()
             return

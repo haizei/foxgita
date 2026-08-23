@@ -181,6 +181,20 @@ final class PracticeStore {
         }
     }
 
+    func updateTaskPracticeState(_ taskId: String, steps: [String], bpm: Int) {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return
+        }
+        perform {
+            task.steps = steps
+            task.defaultBpm = min(200, max(40, bpm))
+            task.touch()
+            try repository.save()
+        }
+        if lastError == nil { applySyncUpsert(task) }
+    }
+
     func updateTask(_ taskId: String, title: String, subtitle: String, minutes: Int) {
         guard let task = try? repository.task(id: taskId) else {
             lastError = .notFound
