@@ -220,30 +220,7 @@ struct PracticeDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if AIPracticePresentation.isAIGenerated(subtitle: task.subtitle) {
-                        HStack {
-                            let chords = AIPracticePresentation.chords(fromSubtitle: task.subtitle)
-                            if !chords.isEmpty {
-                                Text("识别：\(chords.joined(separator: " · "))")
-                            }
-                            Spacer()
-                            Text("目标 \(task.targetMin) 分钟")
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(GitaTheme.textSecondary)
-
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("已从图片生成")
-                                .font(.system(size: 14, weight: .semibold))
-                            Text("识别出 \(task.steps.count) 个步骤，可直接修改")
-                                .font(.system(size: 12))
-                                .foregroundStyle(GitaTheme.textSecondary)
-                        }
-                        .padding(14)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(GitaTheme.bgSubtle)
-                        .clipShape(RoundedRectangle(cornerRadius: 16))
-                    } else {
+                    if !AIPracticePresentation.isAIGenerated(subtitle: task.subtitle) {
                         HStack {
                             Text(task.subtitle)
                             Spacer()
