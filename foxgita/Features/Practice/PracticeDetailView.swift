@@ -41,6 +41,8 @@ struct PracticeDetailView: View {
     @State private var pendingDiagnosisRoute: VideoRoute?
     @State private var isSourcePresented = false
     @State private var pendingCamera = false
+    @State private var player = AudioPlayerService()
+    @State private var videoPlayURL: URL?
 
     init(taskId: String) {
         self.taskId = taskId
@@ -136,6 +138,8 @@ struct PracticeDetailView: View {
             practiceTimer.pause()
             metronome.stop()
             if recorder.isRecording { recorder.stop(label: task?.title ?? "") }
+            player.stop()
+            videoPlayURL = nil
             if !abandoning, let task {
                 persistPending(task: task)
                 saveOpenSession(task: task)
@@ -207,6 +211,8 @@ struct PracticeDetailView: View {
             .fullScreenCover(isPresented: $isSourcePresented, onDismiss: {
                 if pendingCamera {
                     pendingCamera = false
+                    player.stop()
+                    videoPlayURL = nil
                     video.presentCamera()
                 }
             }) {
@@ -467,6 +473,8 @@ struct PracticeDetailView: View {
                         recorder.stop(label: task.title)
                         persistPending(task: task)
                     } else {
+                        player.stop()
+                        videoPlayURL = nil
                         await recorder.start(label: task.title)
                     }
                 }
@@ -491,6 +499,8 @@ struct PracticeDetailView: View {
                     toolMode = .video
                     return
                 }
+                player.stop()
+                videoPlayURL = nil
                 isSourcePresented = true
             }
         }
@@ -522,6 +532,17 @@ struct PracticeDetailView: View {
                 }
             }
         }
+        .fullScreenCover(isPresented: Binding(
+            get: { videoPlayURL != nil },
+            set: { if !$0 { videoPlayURL = nil } }
+        )) {
+            if let videoPlayURL {
+                SystemVideoPlayer(url: videoPlayURL) {
+                    self.videoPlayURL = nil
+                }
+                .ignoresSafeArea()
+            }
+        }
     }
 
     private func clipCard(_ rec: RecordingRef, taskTitle: String) -> some View {
@@ -539,6 +560,38 @@ struct PracticeDetailView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(GitaTheme.textSecondary)
                 Spacer()
+                Button {
+                    presentIfFileExists(rec) {
+                        metronome.stop()
+                        if MediaReviewMedia.isVideo(fileName: rec.fileName) {
+                            player.stop()
+                            do {
+                                try AudioSessionCoordinator.shared.acquire(.playback)
+                                videoPlayURL = rec.fileURL
+                            } catch {
+                                show(String(localized: "无法播放"))
+                            }
+                        } else {
+                            player.toggle(url: rec.fileURL, id: rec.id)
+                        }
+                    }
+                } label: {
+                    Image(systemName: player.playingId == rec.id ? "pause.fill" : "play.fill")
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(width: 36, height: 36)
+                        .background(GitaTheme.brand50)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(
+                    Text(
+                        MediaReviewMedia.isVideo(fileName: rec.fileName)
+                            ? String(localized: "播放这段视频")
+                            : (player.playingId == rec.id
+                                ? String(localized: "暂停播放")
+                                : String(localized: "播放这段录音"))
+                    )
+                )
             }
             Text("\(taskTitle) · \(rec.durationLabel)")
                 .font(.system(size: 16, weight: .semibold))
@@ -862,6 +915,8 @@ struct PracticeDetailView: View {
         if recorder.isRecording { recorder.stop(label: task.title) }
         practiceTimer.pause()
         metronome.stop()
+        player.stop()
+        videoPlayURL = nil
         persistPending(task: task)
 
         if let _ = openSessionId {
