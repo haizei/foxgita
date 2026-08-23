@@ -67,6 +67,33 @@ struct PracticeDetailView: View {
         return visible.compactMap { byId[$0.id] }
     }
 
+    private var resumeState: ResumeState {
+        let sessionRows = sessions.map { session in
+            ResumeSession(
+                id: session.id,
+                endedAt: session.endedAt,
+                bpm: session.bpm,
+                noteText: session.noteText,
+                deletedAt: session.deletedAt,
+                durationSec: session.durationSec,
+                recordingCount: session.recordings.filter { $0.deletedAt == nil }.count
+            )
+        }
+        let recordingRows = sessions.flatMap(\.recordings).map {
+            ResumeRecording(
+                id: $0.id,
+                createdAt: $0.createdAt,
+                deletedAt: $0.deletedAt,
+                reviewNextAction: $0.reviewNextAction
+            )
+        }
+        return PracticeResumeQuery.resume(
+            sessions: sessionRows,
+            recordings: recordingRows,
+            defaultBpm: task?.defaultBpm ?? 80
+        )
+    }
+
     /// Anything worth losing a confirmation tap over.
     private var hasUnsavedWork: Bool {
         practiceTimer.elapsedSec > 0
@@ -96,7 +123,7 @@ struct PracticeDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             guard let task else { return }
-            metronome.setBpm(task.defaultBpm)
+            metronome.setBpm(resumeState.bpm)
             steps = task.steps.isEmpty ? [String(localized: "新步骤")] : task.steps
             AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
                 metronome.stop()
@@ -231,6 +258,13 @@ struct PracticeDetailView: View {
                         }
                         .font(.system(size: 12))
                         .foregroundStyle(GitaTheme.textSecondary)
+                    }
+
+                    if let line = PracticeResumeQuery.focusLine(state: resumeState) {
+                        Text(line)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .accessibilityLabel(Text(line))
                     }
 
                     metronomeCard
