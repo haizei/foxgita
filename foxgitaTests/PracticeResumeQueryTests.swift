@@ -14,11 +14,18 @@ struct PracticeResumeQueryTests {
         note: String = "",
         deletedAt: Date? = nil,
         durationSec: Int = 60,
-        recordingCount: Int = 0
+        recordingCount: Int = 0,
+        startedAt: Date? = nil
     ) -> ResumeSession {
         ResumeSession(
-            id: id, endedAt: endedAt, bpm: bpm, noteText: note,
-            deletedAt: deletedAt, durationSec: durationSec, recordingCount: recordingCount
+            id: id,
+            endedAt: endedAt,
+            bpm: bpm,
+            noteText: note,
+            deletedAt: deletedAt,
+            durationSec: durationSec,
+            recordingCount: recordingCount,
+            startedAt: startedAt ?? endedAt.addingTimeInterval(TimeInterval(-durationSec))
         )
     }
 
@@ -98,5 +105,49 @@ struct PracticeResumeQueryTests {
                 defaultBpm: 80
             ).bpm == 200
         )
+    }
+
+    @Test func continuableUsesLatestEffective() {
+        let state = PracticeResumeQuery.resume(
+            sessions: [
+                session(id: "old", endedAt: t0, bpm: 70, note: "旧", durationSec: 30),
+                session(id: "new", endedAt: t2, bpm: 88, note: "新笔记", durationSec: 120),
+            ],
+            recordings: [],
+            defaultBpm: 80
+        )
+        #expect(state.openSessionId == "new")
+        #expect(state.durationSec == 120)
+        #expect(state.noteText == "新笔记")
+        #expect(state.bpm == 88)
+    }
+
+    @Test func skippedLatestIsNotContinuable() {
+        let state = PracticeResumeQuery.resume(
+            sessions: [
+                session(id: "sealed", endedAt: t2, bpm: 90, note: "封", durationSec: 50),
+                session(id: "older", endedAt: t0, bpm: 70, note: "更早", durationSec: 20),
+            ],
+            recordings: [],
+            defaultBpm: 80,
+            skippedSessionId: "sealed"
+        )
+        #expect(state.openSessionId == nil)
+        #expect(state.durationSec == 0)
+        #expect(state.noteText == "")
+        #expect(state.hasHistory)
+        #expect(state.bpm == 90)
+    }
+
+    @Test func skippedWithNoOtherHistoryStillHidesContinuable() {
+        let state = PracticeResumeQuery.resume(
+            sessions: [session(id: "only", endedAt: t1, bpm: 66, note: "x", durationSec: 10)],
+            recordings: [],
+            defaultBpm: 80,
+            skippedSessionId: "only"
+        )
+        #expect(state.openSessionId == nil)
+        #expect(state.durationSec == 0)
+        #expect(state.hasHistory)
     }
 }

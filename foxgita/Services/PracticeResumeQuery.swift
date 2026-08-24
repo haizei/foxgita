@@ -8,6 +8,7 @@ struct ResumeSession: Equatable {
     var deletedAt: Date?
     var durationSec: Int
     var recordingCount: Int
+    var startedAt: Date
 }
 
 struct ResumeRecording: Equatable {
@@ -21,13 +22,18 @@ struct ResumeState: Equatable {
     var bpm: Int
     var focus: String?
     var hasHistory: Bool
+    var openSessionId: String? = nil
+    var durationSec: Int = 0
+    var noteText: String = ""
+    var startedAt: Date? = nil
 }
 
 enum PracticeResumeQuery {
     static func resume(
         sessions: [ResumeSession],
         recordings: [ResumeRecording],
-        defaultBpm: Int
+        defaultBpm: Int,
+        skippedSessionId: String? = nil
     ) -> ResumeState {
         let live = sessions.filter { $0.deletedAt == nil }
         let effective = live.filter {
@@ -59,7 +65,22 @@ enum PracticeResumeQuery {
             focus = nil
         }
 
-        return ResumeState(bpm: bpm, focus: focus, hasHistory: hasHistory)
+        let newest = effective.first
+        let canContinue: Bool = {
+            guard let newest else { return false }
+            if let skippedSessionId, newest.id == skippedSessionId { return false }
+            return true
+        }()
+
+        return ResumeState(
+            bpm: bpm,
+            focus: focus,
+            hasHistory: hasHistory,
+            openSessionId: canContinue ? newest?.id : nil,
+            durationSec: canContinue ? (newest?.durationSec ?? 0) : 0,
+            noteText: canContinue ? (newest?.noteText ?? "") : "",
+            startedAt: canContinue ? newest?.startedAt : nil
+        )
     }
 
     static func focusLine(state: ResumeState) -> String? {

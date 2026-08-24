@@ -76,7 +76,8 @@ struct PracticeDetailView: View {
                 noteText: session.noteText,
                 deletedAt: session.deletedAt,
                 durationSec: session.durationSec,
-                recordingCount: session.recordings.filter { $0.deletedAt == nil }.count
+                recordingCount: session.recordings.filter { $0.deletedAt == nil }.count,
+                startedAt: session.startedAt
             )
         }
         let recordingRows = sessions.flatMap(\.recordings).map {
@@ -90,7 +91,8 @@ struct PracticeDetailView: View {
         return PracticeResumeQuery.resume(
             sessions: sessionRows,
             recordings: recordingRows,
-            defaultBpm: task?.defaultBpm ?? 80
+            defaultBpm: task?.defaultBpm ?? 80,
+            skippedSessionId: PracticeResumeSkipStore.skippedSessionId(taskId: taskId)
         )
     }
 
