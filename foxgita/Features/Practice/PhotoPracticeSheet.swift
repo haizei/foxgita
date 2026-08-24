@@ -26,6 +26,7 @@ struct PhotoPracticeSheet: View {
     @State private var generationStartedAt = Date()
     @State private var elapsed: TimeInterval = 0
     @State private var completed = false
+    @State private var generationId = UUID().uuidString
     @State private var toast: String?
 
     private let progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
@@ -305,6 +306,7 @@ struct PhotoPracticeSheet: View {
     }
 
     private func prepareGeneration() {
+        generationId = UUID().uuidString
         phase = .generating
         isGenerating = true
         completed = false
@@ -322,7 +324,10 @@ struct PhotoPracticeSheet: View {
             fallbackCategory: fallbackCategory
         )
         try Task.checkCancellation()
-        guard let id = store.createFromAIDraft(draft) else {
+        guard let id = store.createFromAIDraft(
+            draft,
+            originKey: PracticeTaskOrigin.photoOriginKey(generationId: generationId)
+        ) else {
             throw PhotoPracticeSheetError.storeFailed
         }
         completed = true

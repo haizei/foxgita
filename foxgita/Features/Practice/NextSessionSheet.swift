@@ -26,6 +26,7 @@ struct NextSessionSheet: View {
     @State private var isGenerating = false
     @State private var generateTask: Task<Void, Never>?
     @State private var toast: String?
+    @State private var generationId = UUID().uuidString
     @State private var citation = ""
     @State private var draftCategory: PracticeCategory = .chord
     @State private var draftChords: [String] = []
@@ -216,6 +217,7 @@ struct NextSessionSheet: View {
             guard gate == .proceed else { return }
             durationSync?.syncActive(minutes: minutes)
             memoryStore.reload()
+            generationId = UUID().uuidString
             phase = .generating
             isGenerating = true
             toast = nil
@@ -272,7 +274,10 @@ struct NextSessionSheet: View {
             steps: steps,
             chords: draftChords
         )
-        guard let id = store.createFromAIDraft(draft) else {
+        guard let id = store.createFromAIDraft(
+            draft,
+            originKey: PracticeTaskOrigin.nextOriginKey(generationId: generationId)
+        ) else {
             toast = String(localized: "生成失败，请稍后重试")
             hideToastLater()
             return
