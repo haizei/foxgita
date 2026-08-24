@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-24  
-**状态：** Draft — awaiting user review of this spec  
+**状态：** Approved — implementation plan in ../plans/2026-08-24-practice-detail-resume-save.md  
 **方案：** 方案 1 — 按任务续写最近一条有效 session；不改 Schema  
 **升级对象：** [练习工作台静默离开](../../2026-08-23-practice-workbench-quiet-leave/specs/2026-08-23-practice-workbench-quiet-leave-design.md) 的落库路径；[练习工作台恢复](../../2026-08-23-practice-workbench-resume/specs/2026-08-23-practice-workbench-resume-design.md) 中「笔记框不预填、进入不恢复计时」  
 **不改：** Schema、`PracticeRecordRules.isEffective`、Record Tab「进行中/已完成」按任务 `status` 的筛选、节拍器/步骤/录影工具外观

@@ -127,10 +127,10 @@ flowchart TD
 | 周历选日 | `StreakCard` 展示大日期数字；`selectedDay` 驱动列表内容（见 §4.1.1） |
 | 左滑练习行 | 今日列表：`swipeActions` → 编辑 Sheet / 软删确认 |
 | 推荐 Sheet 选任务 | 只回传 `taskId`；用 `pendingTaskId` + `.sheet(onDismiss:)` 导航，避免 dismiss 时序 hack |
-| 计时中返回 | 有内容：静默写入 session（计时 / 笔记 / 步骤 / BPM / 媒体）并离开，无确认框、不拉回今天、不写 lastCompletedSessionId。空访：直接离开。 |
+| 计时中返回 | 有内容：`updateOpenSession` 更新同一可续 session（计时 / 笔记 / 步骤 / BPM / 媒体）并离开，无确认框、不拉回今天、不写 lastCompletedSessionId。空访：直接离开。 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
-| 完成练习 | 有效完成：写回 task.defaultBpm，震动，回今天。不写 lastCompletedSessionId，不展示「刚刚完成」。空完成：toast「这次没有留下记录」，不写 BPM / id。返回：与完成同一套落库，不震动、不拉回今天。 |
+| 完成练习 | 有效完成：同一可续 session 落库（同返回 visit 字段），写回 task.defaultBpm，震动，回今天；不结案，再进可续。不写 lastCompletedSessionId，不展示「刚刚完成」。空完成：toast「这次没有留下记录」，不写 BPM / id。返回：与完成同一套落库，不震动、不拉回今天。 |
 | 提醒通知点击 | `ReminderDelegate` → `router.openTodayFirstPractice` → 切到练习 Tab、清空导航栈并复位到今天；今日有任务则打开第一项，空则停留空 inbox，不打开昨日任务 |
 | 音频打断（来电等） | `AudioSessionCoordinator` 回调：停节拍器、暂停计时、停录音 |
 
@@ -153,7 +153,7 @@ flowchart TD
 | 工具 | 图标 | 行为 |
 |---|---|---|
 | 录音 | `mic` / `mic.fill` | 切换录制；录制中展示 ActivePanel（`elapsedDisplay`、暂停/继续、停止） |
-| 写笔记 | `square.and.pencil` | 展开笔记输入 |
+| 写笔记 | `square.and.pencil` | 展开笔记输入；`@FocusState` + 交互滚动收起，点空白或切工具失焦 |
 | 录视频 | `video.fill` | 第 1 次切视频模式；第 2 次打开 `VideoSourceView`。现场录像仍 `presentCamera()`；相册预览确认后 `AlbumVideoImporter` 拷贝再 `persist`。模拟器无相机时 Toast |
 
 完成时：`recorder.consume()` + `video.takeAll()` 合并为 `[AudioRecorderService.Clip]` 交给 `finishSession`。离开详情未完成则丢弃 audio/video pending 并删文件。
@@ -162,7 +162,12 @@ flowchart TD
 
 #### 4.1.3 工作台进入恢复
 
-`PracticeDetailView.onAppear` 用 `PracticeResumeQuery.resume`：最近有效 session 的 BPM，否则 `task.defaultBpm`。焦点行优先 `reviewNextAction`，否则上次笔记首行。笔记框不预填。
+`PracticeDetailView.onAppear` 用 `PracticeResumeQuery.resume`（并读 `PracticeResumeSkipStore`）：
+
+- 可续 session：该任务最新有效 session，且 id 未被 RESET 跳过 → 绑定 `openSessionId`，计时恢复 `durationSec`（暂停），笔记框预填 `noteText`。
+- BPM：最近有效 session，否则 `task.defaultBpm`。
+- 焦点行：优先 `reviewNextAction`，否则上次笔记首行；无历史不渲染。
+- RESET：先 `persistVisit`，对该 session id 写入跳过键，再清空计时/笔记/`openSessionId`；随后活动 `finishSession` 新建并在成功后清除跳过键。
 
 ### 4.2 数据交互（读 / 写分工）
 
