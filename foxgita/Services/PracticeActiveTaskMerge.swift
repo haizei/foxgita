@@ -89,10 +89,7 @@ enum PracticeActiveTaskMerge {
     static func applyPending(repository: PracticeRepository) throws {
         let collected = try collectTasks(repository: repository)
         let sessions = try repository.sessions()
-        var counts: [String: Int] = [:]
-        for session in sessions {
-            counts[session.taskId, default: 0] += 1
-        }
+        let counts = effectiveSessionCounts(from: sessions)
         let planned = plans(tasks: collected, effectiveSessionCount: counts)
         try apply(planned, repository: repository)
     }
@@ -100,10 +97,7 @@ enum PracticeActiveTaskMerge {
     @MainActor
     static func apply(_ plans: [Plan], repository: PracticeRepository) throws {
         let sessions = try repository.sessions()
-        var counts: [String: Int] = [:]
-        for session in sessions {
-            counts[session.taskId, default: 0] += 1
-        }
+        let counts = effectiveSessionCounts(from: sessions)
 
         for plan in plans {
             if try repository.task(id: plan.canonicalId) == nil {
@@ -118,6 +112,8 @@ enum PracticeActiveTaskMerge {
                 }) else {
                     continue
                 }
+                // Preserve today visibility: max startedOn among live sources.
+                let maxStartedOn = liveSources.compactMap(\.startedOn).max()
                 let copy = TaskItem(
                     id: plan.canonicalId,
                     title: winner.title,
@@ -128,13 +124,26 @@ enum PracticeActiveTaskMerge {
                     timeSig: winner.timeSig,
                     steps: winner.steps,
                     status: winner.status,
-                    startedOn: winner.startedOn,
+                    startedOn: maxStartedOn ?? winner.startedOn,
                     sortOrder: winner.sortOrder,
                     isTemplate: false,
                     profileId: winner.profileId,
                     originKey: winner.originKey
                 )
                 try repository.add(copy)
+            } else if let stable = try repository.task(id: plan.canonicalId) {
+                // Live stable already exists: bump startedOn before soft-deleting dailies.
+                var startedOns: [Date] = []
+                if let existing = stable.startedOn { startedOns.append(existing) }
+                for taskId in plan.softDeleteTaskIds {
+                    if let daily = try repository.task(id: taskId), let started = daily.startedOn {
+                        startedOns.append(started)
+                    }
+                }
+                if let maxStarted = startedOns.max(), maxStarted != stable.startedOn {
+                    stable.startedOn = maxStarted
+                    stable.touch()
+                }
             }
 
             let reassign = Set(plan.reassignSessionTaskIds)
@@ -151,6 +160,16 @@ enum PracticeActiveTaskMerge {
             }
         }
         try repository.save()
+    }
+
+    /// Counts only effective sessions (duration / note / recording). Soft-deleted
+    /// sessions follow whatever `repository.sessions()` already returns.
+    private static func effectiveSessionCounts(from sessions: [PracticeSession]) -> [String: Int] {
+        var counts: [String: Int] = [:]
+        for session in sessions where session.isEffective {
+            counts[session.taskId, default: 0] += 1
+        }
+        return counts
     }
 
     @MainActor

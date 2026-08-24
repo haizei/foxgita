@@ -155,6 +155,162 @@ struct PracticeActiveTaskMergeTests {
         #expect(try repo.sessions().allSatisfy { $0.taskId == "active-tpl-chord" })
     }
 
+    @Test func applyCreatesStableWithMaxStartedOnFromLiveSources() throws {
+        let repo = InMemoryPracticeRepository()
+        let past = date(2026, 8, 18)
+        let today = date(2026, 8, 25)
+        let pastDaily = TaskItem(
+            id: "active-tpl-chord-2026-08-18",
+            title: "过去赢家",
+            subtitle: "past",
+            category: .chord,
+            targetMin: 12,
+            startedOn: past,
+            now: past
+        )
+        pastDaily.updatedAt = past
+        let todayDaily = TaskItem(
+            id: "active-tpl-chord-2026-08-25",
+            title: "今天",
+            subtitle: "today",
+            category: .chord,
+            targetMin: 5,
+            startedOn: today,
+            now: today
+        )
+        todayDaily.updatedAt = today
+        try repo.add(pastDaily)
+        try repo.add(todayDaily)
+        try repo.save()
+
+        // Past has more effective sessions; today has one.
+        try repo.add(PracticeSession(
+            id: "s-past-1", taskId: pastDaily.id, taskTitle: pastDaily.title, category: .chord,
+            startedAt: past, endedAt: past.addingTimeInterval(60),
+            durationSec: 60, bpm: 80, timeSig: "4/4", steps: []
+        ))
+        try repo.add(PracticeSession(
+            id: "s-past-2", taskId: pastDaily.id, taskTitle: pastDaily.title, category: .chord,
+            startedAt: past.addingTimeInterval(100), endedAt: past.addingTimeInterval(160),
+            durationSec: 60, bpm: 80, timeSig: "4/4", steps: []
+        ))
+        try repo.add(PracticeSession(
+            id: "s-today", taskId: todayDaily.id, taskTitle: todayDaily.title, category: .chord,
+            startedAt: today, endedAt: today.addingTimeInterval(60),
+            durationSec: 60, bpm: 80, timeSig: "4/4", steps: []
+        ))
+        try repo.save()
+
+        let plan = PracticeActiveTaskMerge.Plan(
+            canonicalId: "active-tpl-chord",
+            sourceTaskIds: [pastDaily.id, todayDaily.id].sorted(),
+            softDeleteTaskIds: [pastDaily.id, todayDaily.id].sorted(),
+            reassignSessionTaskIds: [pastDaily.id, todayDaily.id].sorted()
+        )
+        try PracticeActiveTaskMerge.apply([plan], repository: repo)
+
+        let stable = try #require(try repo.task(id: "active-tpl-chord"))
+        #expect(stable.title == "过去赢家")
+        #expect(stable.targetMin == 12)
+        #expect(stable.startedOn == today)
+    }
+
+    @Test func applyBumpsExistingStableStartedOnFromLaterDaily() throws {
+        let repo = InMemoryPracticeRepository()
+        let yesterday = date(2026, 8, 24)
+        let today = date(2026, 8, 25)
+        let stable = TaskItem(
+            id: "active-tpl-chord",
+            title: "稳定",
+            subtitle: "",
+            category: .chord,
+            targetMin: 8,
+            startedOn: yesterday,
+            now: yesterday
+        )
+        let todayDaily = TaskItem(
+            id: "active-tpl-chord-2026-08-25",
+            title: "今日日更",
+            subtitle: "",
+            category: .chord,
+            targetMin: 8,
+            startedOn: today,
+            now: today
+        )
+        try repo.add(stable)
+        try repo.add(todayDaily)
+        try repo.save()
+
+        let plan = PracticeActiveTaskMerge.Plan(
+            canonicalId: "active-tpl-chord",
+            sourceTaskIds: [todayDaily.id],
+            softDeleteTaskIds: [todayDaily.id],
+            reassignSessionTaskIds: [todayDaily.id]
+        )
+        try PracticeActiveTaskMerge.apply([plan], repository: repo)
+
+        let updated = try #require(try repo.task(id: "active-tpl-chord"))
+        #expect(updated.startedOn == today)
+        #expect(try repo.task(id: todayDaily.id) == nil)
+        #expect(try repo.taskIncludingDeleted(id: todayDaily.id)?.deletedAt != nil)
+    }
+
+    @Test func applyWinnerIgnoresIneffectiveSessions() throws {
+        let repo = InMemoryPracticeRepository()
+        let dayA = date(2026, 8, 18)
+        let dayB = date(2026, 8, 19)
+        let manyIneffective = TaskItem(
+            id: "active-tpl-chord-2026-08-18",
+            title: "无效多",
+            subtitle: "",
+            category: .chord,
+            targetMin: 3,
+            startedOn: dayA,
+            now: dayA
+        )
+        manyIneffective.updatedAt = dayA
+        let oneEffective = TaskItem(
+            id: "active-tpl-chord-2026-08-19",
+            title: "有效一",
+            subtitle: "",
+            category: .chord,
+            targetMin: 11,
+            startedOn: dayB,
+            now: dayB
+        )
+        oneEffective.updatedAt = dayB
+        try repo.add(manyIneffective)
+        try repo.add(oneEffective)
+        try repo.save()
+
+        // Three ineffective sessions on A (duration 0, empty note).
+        for i in 1...3 {
+            try repo.add(PracticeSession(
+                id: "ineff-\(i)", taskId: manyIneffective.id, taskTitle: manyIneffective.title,
+                category: .chord, startedAt: dayA, endedAt: dayA,
+                durationSec: 0, bpm: 80, timeSig: "4/4", steps: [], noteText: ""
+            ))
+        }
+        try repo.add(PracticeSession(
+            id: "eff-1", taskId: oneEffective.id, taskTitle: oneEffective.title,
+            category: .chord, startedAt: dayB, endedAt: dayB.addingTimeInterval(60),
+            durationSec: 60, bpm: 80, timeSig: "4/4", steps: []
+        ))
+        try repo.save()
+
+        let plan = PracticeActiveTaskMerge.Plan(
+            canonicalId: "active-tpl-chord",
+            sourceTaskIds: [manyIneffective.id, oneEffective.id].sorted(),
+            softDeleteTaskIds: [manyIneffective.id, oneEffective.id].sorted(),
+            reassignSessionTaskIds: [manyIneffective.id, oneEffective.id].sorted()
+        )
+        try PracticeActiveTaskMerge.apply([plan], repository: repo)
+
+        let stable = try #require(try repo.task(id: "active-tpl-chord"))
+        #expect(stable.title == "有效一")
+        #expect(stable.targetMin == 11)
+    }
+
     // MARK: - Integration via prepare()
 
     @Test func prepareMergesTwoDailyActivesAndRetargetsSessions() throws {
