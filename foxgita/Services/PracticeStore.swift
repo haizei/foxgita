@@ -80,7 +80,7 @@ final class PracticeStore {
     func activateTemplate(
         _ templateId: String,
         now: Date = Date(),
-        calendar: Calendar = .current
+        calendar _: Calendar = .current
     ) -> String? {
         guard let template = try? repository.task(id: templateId) else {
             lastError = .notFound
@@ -88,26 +88,19 @@ final class PracticeStore {
         }
         guard template.isTemplate else { return template.id }
 
-        let dayKey = PracticeTaskRules.localDayKey(for: now, calendar: calendar)
-        let dailyId = "active-\(template.id)-\(dayKey)"
-        let legacyId = "active-\(template.id)"
-
-        if let existing = try? repository.task(id: dailyId) {
-            return ensureActive(existing)
-        }
-        if let tombstone = try? repository.taskIncludingDeleted(id: dailyId),
+        let stableId = PracticeTaskOrigin.stableActiveId(templateId: template.id)
+        if let tombstone = try? repository.taskIncludingDeleted(id: stableId),
            tombstone.deletedAt != nil {
-            return ensureActive(tombstone)
+            lastError = .notFound
+            return nil
         }
-        if let legacy = try? repository.task(id: legacyId),
-           let started = legacy.startedOn,
-           calendar.isDate(started, inSameDayAs: now) {
-            return ensureActive(legacy)
+        if let live = try? repository.task(id: stableId) {
+            return ensureForToday(live.id, now: now)
         }
 
         guard let profileId = requireProfileId() else { return nil }
         let copy = TaskItem(
-            id: dailyId, title: template.title, subtitle: template.subtitle,
+            id: stableId, title: template.title, subtitle: template.subtitle,
             category: template.category, targetMin: template.targetMin,
             defaultBpm: template.defaultBpm, timeSig: template.timeSig,
             steps: template.steps, status: .active, startedOn: now,
@@ -118,6 +111,21 @@ final class PracticeStore {
             try repository.add(copy)
             try repository.save()
             return copy.id
+        }
+    }
+
+    @discardableResult
+    func ensureForToday(_ taskId: String, now: Date = Date()) -> String? {
+        guard let task = try? repository.task(id: taskId) else {
+            lastError = .notFound
+            return nil
+        }
+        return produce {
+            task.status = .active
+            task.startedOn = now
+            task.touch()
+            try repository.save()
+            return task.id
         }
     }
 
@@ -567,17 +575,6 @@ final class PracticeStore {
             return nil
         }
         return id
-    }
-
-    private func ensureActive(_ task: TaskItem) -> String? {
-        if task.status == .active && task.deletedAt == nil { return task.id }
-        return produce {
-            task.deletedAt = nil
-            task.status = .active
-            task.touch()
-            try repository.save()
-            return task.id
-        }
     }
 
     private func applyCandidateFocus(
