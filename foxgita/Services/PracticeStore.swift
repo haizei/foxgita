@@ -49,6 +49,7 @@ final class PracticeStore {
         RecordingStore.migrateLegacyFiles()
         seedIfNeeded()
         ensureProfile()
+        mergeLegacyActiveTasksIfNeeded()
         gcOrphanRecordings()
     }
 
@@ -585,6 +586,14 @@ final class PracticeStore {
             }
             try repository.backfillEmptyProfileIds(profile.id)
             try repository.save()
+        }
+    }
+
+    private func mergeLegacyActiveTasksIfNeeded() {
+        guard !defaults.bool(forKey: PracticeActiveTaskMerge.defaultsKey) else { return }
+        perform {
+            try PracticeActiveTaskMerge.applyPending(repository: repository)
+            defaults.set(true, forKey: PracticeActiveTaskMerge.defaultsKey)
         }
     }
 
