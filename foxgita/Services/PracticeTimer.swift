@@ -55,6 +55,20 @@ final class PracticeTimer {
         elapsedSec = 0
     }
 
+    func restore(elapsedSec: Int, startedAt: Date?) {
+        stopTicker()
+        isRunning = false
+        resumedAt = nil
+        let clamped = max(0, elapsedSec)
+        accumulated = TimeInterval(clamped)
+        self.elapsedSec = clamped
+        if clamped == 0 {
+            self.startedAt = nil
+        } else {
+            self.startedAt = startedAt ?? now().addingTimeInterval(-TimeInterval(clamped))
+        }
+    }
+
     /// Recomputes from the clock. Called by the display ticker and by tests.
     func refresh() {
         let running = resumedAt.map { now().timeIntervalSince($0) } ?? 0

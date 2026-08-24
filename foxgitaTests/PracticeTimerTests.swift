@@ -82,4 +82,25 @@ struct PracticeTimerTests {
         timer.pause()
         #expect(timer.elapsedSec == 20)
     }
+
+    @Test func restoreSeedsElapsedAndAllowsFurtherAccumulation() {
+        let (timer, clock) = makeTimer()
+        let begin = clock.now.addingTimeInterval(-90)
+        timer.restore(elapsedSec: 90, startedAt: begin)
+        #expect(timer.elapsedSec == 90)
+        #expect(timer.startedAt == begin)
+        #expect(timer.isRunning == false)
+        timer.start()
+        clock.advance(30)
+        timer.pause()
+        #expect(timer.elapsedSec == 120)
+        #expect(timer.startedAt == begin)
+    }
+
+    @Test func restoreZeroClearsStartedAt() {
+        let (timer, _) = makeTimer()
+        timer.restore(elapsedSec: 0, startedAt: Date())
+        #expect(timer.elapsedSec == 0)
+        #expect(timer.startedAt == nil)
+    }
 }
