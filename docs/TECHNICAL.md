@@ -153,7 +153,7 @@ flowchart TD
 | 工具 | 图标 | 行为 |
 |---|---|---|
 | 录音 | `mic` / `mic.fill` | 切换录制；录制中展示 ActivePanel（`elapsedDisplay`、暂停/继续、停止） |
-| 写笔记 | `square.and.pencil` | 展开笔记输入；`@FocusState` + 交互滚动收起，点空白或切工具失焦 |
+| 写笔记 | `square.and.pencil` | 展开笔记输入；`@FocusState` + 交互滚动收起，点工具/完成/返回等失焦 |
 | 录视频 | `video.fill` | 第 1 次切视频模式；第 2 次打开 `VideoSourceView`。现场录像仍 `presentCamera()`；相册预览确认后 `AlbumVideoImporter` 拷贝再 `persist`。模拟器无相机时 Toast |
 
 完成时：`persistVisit` 先落 pending clips。已绑 `openSessionId` 则 `updateOpenSession`（失败返回 nil，留在页上并 toast）；否则 `recorder.consume()` + `video.takeAll()` 合并交给 `finishSession`。离开详情同样 `persistVisit`；未写入的 pending 再 discard/删文件。
