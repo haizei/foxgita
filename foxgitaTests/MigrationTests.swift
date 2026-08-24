@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V7 migration plan
-/// (V2→V3→V4→V5→V6→V7) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V8 migration plan
+/// (V2→V3→…→V8) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V7 + migration plan --------------------
-        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
-        let config = ModelConfiguration(schema: v7Schema, url: url)
+        // --- Phase 2: reopen under V8 + migration plan --------------------
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
         let container = try ModelContainer(
-            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -114,10 +114,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
-        let config = ModelConfiguration(schema: v7Schema, url: url)
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
         let container = try ModelContainer(
-            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -155,10 +155,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
-        let config = ModelConfiguration(schema: v7Schema, url: url)
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
         let container = try ModelContainer(
-            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -201,10 +201,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
-        let config = ModelConfiguration(schema: v7Schema, url: url)
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
         let container = try ModelContainer(
-            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -251,10 +251,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
-        let config = ModelConfiguration(schema: v7Schema, url: url)
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
         let container = try ModelContainer(
-            for: v7Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -267,5 +267,37 @@ struct MigrationTests {
         #expect(profiles.count == 1)
         #expect(profiles[0].memoryConsent == false)
         #expect(profiles[0].memoryConsentState == "")
+    }
+
+    @Test func v7StoreMigratesToV8WithoutLosingRowsAndDefaultsOriginKey() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v7-v8-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v7Schema = Schema(versionedSchema: GitaSchemaV7.self)
+            let config = ModelConfiguration(schema: v7Schema, url: url)
+            let container = try ModelContainer(for: v7Schema, configurations: [config])
+            let context = ModelContext(container)
+            let task = GitaSchemaV7.TaskItem(
+                id: "warm", title: "指尖热身", subtitle: "开放弦",
+                category: .left, targetMin: 5, steps: ["开放弦"], profileId: "p1"
+            )
+            context.insert(task)
+            try context.save()
+        }
+
+        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let container = try ModelContainer(
+            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let context = ModelContext(container)
+        let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+        #expect(tasks.count == 1)
+        #expect(tasks[0].id == "warm")
+        #expect(tasks[0].title == "指尖热身")
+        #expect(tasks[0].profileId == "p1")
+        #expect(tasks[0].originKey == "")
     }
 }

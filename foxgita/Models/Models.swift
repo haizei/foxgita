@@ -6,11 +6,11 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV7.TaskItem
-typealias PracticeSession = GitaSchemaV7.PracticeSession
-typealias RecordingRef = GitaSchemaV7.RecordingRef
-typealias LocalProfile = GitaSchemaV7.LocalProfile
-typealias MemoryItem = GitaSchemaV7.MemoryItem
+typealias TaskItem = GitaSchemaV8.TaskItem
+typealias PracticeSession = GitaSchemaV8.PracticeSession
+typealias RecordingRef = GitaSchemaV8.RecordingRef
+typealias LocalProfile = GitaSchemaV8.LocalProfile
+typealias MemoryItem = GitaSchemaV8.MemoryItem
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -709,12 +709,14 @@ enum StepCoding {
 /// V2 → V3 adds defaulted attributes and indexes; V3 → V4 adds defaulted
 /// review fields on RecordingRef; V4 → V5 adds defaulted findings JSON;
 /// V5 → V6 adds profileId, LocalProfile, and MemoryItem;
-/// V6 → V7 adds LocalProfile.memoryConsentState.
+/// V6 → V7 adds LocalProfile.memoryConsentState;
+/// V7 → V8 adds TaskItem.originKey.
 enum GitaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
             GitaSchemaV2.self, GitaSchemaV3.self, GitaSchemaV4.self,
             GitaSchemaV5.self, GitaSchemaV6.self, GitaSchemaV7.self,
+            GitaSchemaV8.self,
         ]
     }
 
@@ -725,6 +727,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV4.self, toVersion: GitaSchemaV5.self),
             .lightweight(fromVersion: GitaSchemaV5.self, toVersion: GitaSchemaV6.self),
             .lightweight(fromVersion: GitaSchemaV6.self, toVersion: GitaSchemaV7.self),
+            .lightweight(fromVersion: GitaSchemaV7.self, toVersion: GitaSchemaV8.self),
         ]
     }
 }
