@@ -42,6 +42,7 @@ struct PracticeDetailView: View {
     @State private var pendingCamera = false
     @State private var player = AudioPlayerService()
     @State private var videoPlayURL: URL?
+    @FocusState private var noteFocused: Bool
 
     init(taskId: String) {
         self.taskId = taskId
@@ -263,6 +264,7 @@ struct PracticeDetailView: View {
                             TextField("记录一点感受…", text: $noteText, axis: .vertical)
                                 .font(.system(size: 14))
                                 .lineLimit(3...6)
+                                .focused($noteFocused)
                             Text("记录一点感受，下次继续从这里开始")
                                 .font(.system(size: 12))
                                 .foregroundStyle(GitaTheme.textSecondary)
@@ -292,6 +294,10 @@ struct PracticeDetailView: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
             }
+            .scrollDismissesKeyboard(.interactively)
+            .simultaneousGesture(
+                TapGesture().onEnded { noteFocused = false }
+            )
             // Two covers on the same view would leave only the last one live, so
             // the diagnosis cover hangs off the scroll view instead.
             .fullScreenCover(item: $diagnosisRoute) { route in
@@ -331,7 +337,10 @@ struct PracticeDetailView: View {
                     .foregroundStyle(GitaTheme.textSecondary)
             }
             HStack {
-                circleBtn("－", label: String(localized: "降低 1 BPM")) { metronome.bump(-1) }
+                circleBtn("－", label: String(localized: "降低 1 BPM")) {
+                    noteFocused = false
+                    metronome.bump(-1)
+                }
                 VStack(spacing: 0) {
                     Text("\(metronome.bpm)")
                         .font(GitaFont.timer())
@@ -343,6 +352,7 @@ struct PracticeDetailView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(Text("当前速度 \(metronome.bpm) BPM"))
                 circleBtn("＋", label: String(localized: "提高 1 BPM"), accent: true) {
+                    noteFocused = false
                     metronome.bump(1)
                 }
             }
@@ -435,6 +445,7 @@ struct PracticeDetailView: View {
                 systemImage: recorder.isRecording ? "mic.fill" : "mic",
                 on: toolMode == .audio
             ) {
+                noteFocused = false
                 Task {
                     if toolMode != .audio {
                         if recorder.isRecording {
@@ -455,6 +466,7 @@ struct PracticeDetailView: View {
                 }
             }
             tool(title: String(localized: "写笔记"), systemImage: "square.and.pencil", on: toolMode == .note) {
+                noteFocused = false
                 if recorder.isRecording {
                     recorder.stop(label: task.title)
                     persistPending(task: task)
@@ -466,6 +478,7 @@ struct PracticeDetailView: View {
                 systemImage: "video.fill",
                 on: toolMode == .video
             ) {
+                noteFocused = false
                 if recorder.isRecording {
                     recorder.stop(label: task.title)
                     persistPending(task: task)
@@ -787,6 +800,7 @@ struct PracticeDetailView: View {
     }
 
     private func togglePlay() {
+        noteFocused = false
         if practiceTimer.isRunning {
             practiceTimer.pause()
             metronome.stop()
@@ -801,6 +815,7 @@ struct PracticeDetailView: View {
     }
 
     private func requestExit() {
+        noteFocused = false
         practiceTimer.pause()
         metronome.stop()
         if let task {
@@ -906,6 +921,7 @@ struct PracticeDetailView: View {
     }
 
     private func resetTrip(_ task: TaskItem) {
+        noteFocused = false
         practiceTimer.pause()
         metronome.stop()
         if recorder.isRecording { recorder.stop(label: task.title) }
@@ -926,6 +942,7 @@ struct PracticeDetailView: View {
 
     private func complete(_ task: TaskItem) {
         guard !isCompleting else { return }
+        noteFocused = false
         isCompleting = true
         if recorder.isRecording { recorder.stop(label: task.title) }
         practiceTimer.pause()
