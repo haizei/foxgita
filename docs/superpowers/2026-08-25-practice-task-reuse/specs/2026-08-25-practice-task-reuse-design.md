@@ -3,7 +3,7 @@
 > 功能需求目录：[`../`](../)。本文为设计规格。
 
 **日期：** 2026-08-25  
-**状态：** Draft — awaiting user review of this spec  
+**状态：** Approved — implementation plan in ../plans/2026-08-25-practice-task-reuse.md  
 **方案：** 方案 1 — 稳定任务 id + `originKey`；「＋」同源复用并拉回今日  
 **依赖：** [练习详情续练落库](../../2026-08-24-practice-detail-resume-save/specs/2026-08-24-practice-detail-resume-save-design.md)（同一任务内 session 续写）  
 **升级对象：** 今日按 `startedOn` 过滤的任务箱；`activateTemplate` 按日 `active-…-dayKey`；`createFromAIDraft` 每次新 `custom-uuid`  
