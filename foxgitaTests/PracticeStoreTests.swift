@@ -701,4 +701,30 @@ struct PracticeStoreTests {
         #expect(after.reviewStatus == .pending)
         #expect(after.videoFindings.isEmpty)
     }
+
+    @Test func updateThenFinishWithoutOpenIdCreatesSecondSession() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        let clip = try writeClip(id: "a")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        let sid = try #require(store.beginOpenSession(
+            taskId: "warm", steps: [], note: "一",
+            startedAt: start, endedAt: start, durationSec: 10, bpm: 80,
+            clip: clip
+        ))
+        #expect(store.updateOpenSession(
+            sessionId: sid, steps: [], note: "一",
+            endedAt: start.addingTimeInterval(10), durationSec: 10, bpm: 80
+        ))
+        let second = store.finishSession(
+            taskId: "warm", steps: [], note: "二",
+            startedAt: start.addingTimeInterval(100),
+            endedAt: start.addingTimeInterval(130),
+            durationSec: 30, bpm: 80, recordings: []
+        )
+        #expect(second != nil)
+        #expect(second != sid)
+        #expect(try repo.sessions().count == 2)
+    }
 }

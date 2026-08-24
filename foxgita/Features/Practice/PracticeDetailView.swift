@@ -33,6 +33,7 @@ struct PracticeDetailView: View {
     @State private var toast: String?
     @State private var isCompleting = false
     @State private var openSessionId: String?
+    @State private var didRestoreSession = false
     @State private var analysisRoute: VideoRoute?
     @State private var diagnosisRoute: VideoRoute?
     /// Set only by analysis `onReady`; presented from the analysis cover's `onDismiss`.
@@ -125,8 +126,19 @@ struct PracticeDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             guard let task else { return }
-            metronome.setBpm(resumeState.bpm)
-            steps = task.steps.isEmpty ? [String(localized: "新步骤")] : task.steps
+            if !didRestoreSession {
+                didRestoreSession = true
+                metronome.setBpm(resumeState.bpm)
+                if let sid = resumeState.openSessionId {
+                    openSessionId = sid
+                    noteText = resumeState.noteText
+                    practiceTimer.restore(
+                        elapsedSec: resumeState.durationSec,
+                        startedAt: resumeState.startedAt
+                    )
+                }
+                steps = task.steps.isEmpty ? [String(localized: "新步骤")] : task.steps
+            }
             AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
                 metronome.stop()
                 practiceTimer.pause()
@@ -352,8 +364,7 @@ struct PracticeDetailView: View {
             }
             Spacer()
             Button("RESET") {
-                practiceTimer.reset()
-                metronome.stop()
+                resetTrip(task)
             }
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(GitaTheme.textSecondary)
@@ -830,6 +841,7 @@ struct PracticeDetailView: View {
         }
         guard let sid else { return }
         openSessionId = sid
+        clearSkipIfResumed(taskId: task.id, sessionId: sid)
         recorder.detach(clip.id)
         video.detach(clip.id)
         if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
@@ -869,6 +881,7 @@ struct PracticeDetailView: View {
         persistPending(task: task)
         if let open = openSessionId {
             saveOpenSession(task: task)
+            clearSkipIfResumed(taskId: task.id, sessionId: open)
             return open
         }
         let leftover = recorder.consume() + video.takeAll().map { audioClip($0) }
@@ -884,11 +897,31 @@ struct PracticeDetailView: View {
             )
             if let savedId {
                 openSessionId = savedId
+                clearSkipIfResumed(taskId: task.id, sessionId: savedId)
                 return savedId
             }
         }
         store.updateTaskPracticeState(task.id, steps: steps, bpm: metronome.bpm)
         return nil
+    }
+
+    private func resetTrip(_ task: TaskItem) {
+        practiceTimer.pause()
+        metronome.stop()
+        if recorder.isRecording { recorder.stop(label: task.title) }
+        let sealedId = persistVisit(task: task) ?? openSessionId ?? resumeState.openSessionId
+        if let sealedId {
+            PracticeResumeSkipStore.skip(taskId: task.id, sessionId: sealedId)
+        }
+        practiceTimer.reset()
+        noteText = ""
+        openSessionId = nil
+    }
+
+    private func clearSkipIfResumed(taskId: String, sessionId: String) {
+        if PracticeResumeSkipStore.skippedSessionId(taskId: taskId) != sessionId {
+            PracticeResumeSkipStore.clear(taskId: taskId)
+        }
     }
 
     private func complete(_ task: TaskItem) {
