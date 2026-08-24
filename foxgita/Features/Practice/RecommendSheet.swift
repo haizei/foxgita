@@ -29,10 +29,10 @@ struct RecommendSheet: View {
     @Binding var selection: String?
 
     private var cards: [TaskItem] {
-        let templates = allTasks
-            .filter { $0.isTemplate && $0.category == category }
-            .filter { !store.isTemplateOriginDeleted($0.id) }
-        if !templates.isEmpty { return templates }
+        let allTemplates = allTasks.filter { $0.isTemplate && $0.category == category }
+        let visibleTemplates = allTemplates.filter { !store.isTemplateOriginDeleted($0.id) }
+        // Categories that ship templates stay template-only, even if every origin is tombstoned.
+        if !allTemplates.isEmpty { return visibleTemplates }
         return allTasks.filter { !$0.isTemplate && $0.category == category }
     }
 
