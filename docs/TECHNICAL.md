@@ -1,9 +1,9 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V7 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V8 / Store + Repository / 橙色设计系统 v2）  
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
-> 近期增量：首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
+> 近期增量：同源练习任务复用（稳定 `active-{templateId}` + AI `originKey`）、首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
 
 ---
 
@@ -63,10 +63,11 @@ foxgita/
 │   └── Settings/             # 提醒 / 外观 / 清数据 / AI 记忆 / 首次授权 Sheet
 ├── Components/SharedUI.swift # StreakCard / TaskRowCard / DaySessionCard 等
 ├── Models/
-│   ├── Models.swift          # Schema V3–V5 + MigrationPlan（V2–V7）
+│   ├── Models.swift          # Schema V3–V5 + MigrationPlan（V2–V8）
 │   ├── SchemaV2.swift
 │   ├── SchemaV6.swift        # LocalProfile / MemoryItem / profileId
-│   └── SchemaV7.swift        # memoryConsentState；当前容器版本
+│   ├── SchemaV7.swift        # memoryConsentState
+│   └── SchemaV8.swift        # TaskItem.originKey；当前容器版本
 ├── Services/                 # 业务与基础设施（见 §5、§6）
 │   ├── PracticeStore.swift
 │   ├── AudioRecorderService.swift
@@ -126,7 +127,7 @@ flowchart TD
 |---|---|
 | 周历选日 | `StreakCard` 展示大日期数字；`selectedDay` 驱动列表内容（见 §4.1.1） |
 | 左滑练习行 | 今日列表：`swipeActions` → 编辑 Sheet / 软删确认 |
-| 推荐 Sheet 选任务 | 只回传 `taskId`；用 `pendingTaskId` + `.sheet(onDismiss:)` 导航，避免 dismiss 时序 hack |
+| 推荐 Sheet「＋」 | 软删模板起源不展示（`isTemplateOriginDeleted`）；点未删模板 → `activateTemplate` 稳定 id；拍照/下一练带 `originKey` 进 `createFromAIDraft`。只回传 `taskId`；用 `pendingTaskId` + `.sheet(onDismiss:)` 导航 |
 | 计时中返回 | 有内容：`updateOpenSession` 更新同一可续 session（计时 / 笔记 / 步骤 / BPM / 媒体）并离开，无确认框、不拉回今天、不写 lastCompletedSessionId。空访：直接离开。 |
 | 录音中 | 工具按钮显示「录音中」+ 粉色「正在录音」面板（计时 / 暂停 / 停止） |
 | 录视频 | 第 2 次点打开来源页；现场录像仍 `presentCamera()`；相册经预览确认后拷进 Recordings 再 `persist` |
@@ -143,6 +144,8 @@ flowchart TD
 | **未来** | 空态「这一天还没到」 | 隐藏 | 无 | 不可练 |
 
 今日列表按读时过滤，不在午夜或启动时删除昨日任务。空态文案：「今天还没加练习」。首页无「本周节奏 / 当周节奏」卡；连续练习卡与记录 Tab 仍在。跨午夜仅当选中日本来是「当时的今天」时拨到新的今天。
+
+同源复用（不跨天新建任务）：模板激活 id 固定为 `active-{templateId}`（不再按日 `active-…-yyyy-MM-dd`）；跨天再选同一模板只 `ensureForToday`（`startedOn = 今天`、`status = .active`），id 不变。AI/拍照草稿带每代 `originKey`（如 `ai.photo.{uuid}` / `ai.next.{uuid}`）；活任务同 key 则复用并可选更新文案/步骤后再拉回今日。软删同源不复活；「＋」隐藏已删模板起源。启动时 `prepare()` 经 `PracticeActiveTaskMerge` 把遗留日实例合并到稳定 id（UserDefaults `gita.practice.mergedActiveTasks.v1`）。设计说明：`docs/superpowers/2026-08-25-practice-task-reuse/specs/2026-08-25-practice-task-reuse-design.md`。
 
 有效记录：`durationSec > 0`，或笔记非空，或至少一条录音/视频。空完成不落库、不点亮周历。
 
@@ -279,14 +282,14 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 
 | 介质 | 内容 |
 |---|---|
-| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` / `LocalProfile` / `MemoryItem`（`GitaSchemaV7`） |
+| SwiftData | `TaskItem` / `PracticeSession` / `RecordingRef` / `LocalProfile` / `MemoryItem`（`GitaSchemaV8`） |
 | `Documents/Recordings/` | m4a / mov（及兼容 mp4）二进制 |
-| UserDefaults | 外观、提醒开关与时间、seed 版本键；DEBUG 记忆种子键 `gita.debug.memorySeed` |
+| UserDefaults | 外观、提醒开关与时间、seed 版本键；遗留日实例合并一次旗标 `gita.practice.mergedActiveTasks.v1`；DEBUG 记忆种子键 `gita.debug.memorySeed` |
 
-### 6.2 数据库设计（Schema V7）
+### 6.2 数据库设计（Schema V8）
 
-定义位置：`foxgita/Models/SchemaV7.swift`（`GitaSchemaV7`）；`GitaSchemaV2`–`V5` 留在 `Models.swift` / `SchemaV2.swift` 供迁移；`SchemaV6.swift` 保留为轻量迁移源。  
-容器创建：`foxgitaApp` → `Schema(versionedSchema: GitaSchemaV7.self)` + `ModelContainer(..., migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
+定义位置：`foxgita/Models/SchemaV8.swift`（`GitaSchemaV8`）；`GitaSchemaV2`–`V5` 留在 `Models.swift` / `SchemaV2.swift` 供迁移；`SchemaV6.swift` / `SchemaV7.swift` 保留为轻量迁移源。  
+容器创建：`foxgitaApp` → `Schema(versionedSchema: GitaSchemaV8.self)` + `ModelContainer(..., migrationPlan:GitaMigrationPlan)`，默认 Application Support 落盘。  
 媒体文件：`Documents/Recordings/`（见 `RecordingStore`）；库内只存 `fileName`。
 
 关系：
@@ -323,9 +326,10 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `timeSig` | String | 拍号，如 `4/4` |
 | `stepsRaw` | String | 步骤 JSON 数组；计算属性 `steps` |
 | `statusRaw` | String | 状态；计算属性 `status` |
-| `startedOn` | Date? | 开始练习日 |
+| `startedOn` | Date? | 开始练习日；今日列表按当地自然日过滤 |
 | `sortOrder` | Int | 排序 |
 | `isTemplate` | Bool | 是否模板 |
+| `originKey` | String | 同源键；空串=无。AI/拍照写入 `ai.photo.*` / `ai.next.*`；模板任务不用此字段（用稳定 `active-{templateId}`） |
 | `profileId` | String | 默认 `""`；`PracticeStore.prepare()` 回填默认 `LocalProfile.id` |
 | + 统一元数据 | | `createdAt` / `updatedAt` / `deletedAt` / `syncStateRaw` |
 
@@ -368,7 +372,7 @@ PracticeSession 1 ──(cascade Relationship)──> N RecordingRef
 | `reviewFindingsJSON` | String | 录像分段诊断 JSON 数组；默认 `"[]"` |
 | + 统一元数据 | | `updatedAt` / `deletedAt` / `syncStateRaw`（`createdAt` 见上） |
 
-V7 仍不加 `profileId`。
+V8 仍不加 `profileId` 到 `RecordingRef`。
 
 计算属性不单独落库：`category` / `status` / `steps` / `syncState` / `reviewStatus` / `videoFindings` / `fileURL` / `durationLabel` / `sizeLabel` 等。  
 `stepsRaw` / `stepsSnapshotRaw` 经 `StepCoding` 编解码为 `[String]` JSON；`videoFindings` ↔ `reviewFindingsJSON` 编解码 `[VideoFinding]`。
@@ -406,16 +410,17 @@ V7 仍不加 `profileId`。
 
 #### 迁移与别名
 
-- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` → `V6` → `V7` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V5 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）；V6 新增 `profileId`（默认空串）、`LocalProfile`、`MemoryItem`；V7 新增 `memoryConsentState`（默认空串）
+- 迁移：`GitaSchemaV2` → `V3` → `V4` → `V5` → `V6` → `V7` → `V8` 均为轻量迁移（`GitaMigrationPlan`）；V2 定义在 `SchemaV2.swift`，V3–V5 保留在 `Models.swift`；V5 新增 `reviewFindingsJSON`（默认空数组）；V6 新增 `profileId`（默认空串）、`LocalProfile`、`MemoryItem`；V7 新增 `memoryConsentState`（默认空串）；V8 新增 `TaskItem.originKey`（默认空串）
 - 默认 Profile、空 `profileId` 回填、空 `memoryConsentState` 从遗留 Bool 映射（`true` → `.enabled`，否则 → `.undecided`）在 `PracticeStore.prepare()` / `ensureProfile()`，不进 migration stage
+- 遗留模板日实例 `active-{templateId}-{yyyy-MM-dd}` → 稳定 `active-{templateId}` 的合并在 `prepare()` 经 `PracticeActiveTaskMerge`（非 migration stage）；已软删日实例不复活
 - **禁止**「检测到旧 seed 键就 `delete(model:)` 整库清空」——上架后等同抹用户数据
 
 ```swift
-typealias TaskItem = GitaSchemaV7.TaskItem
-typealias PracticeSession = GitaSchemaV7.PracticeSession
-typealias RecordingRef = GitaSchemaV7.RecordingRef
-typealias LocalProfile = GitaSchemaV7.LocalProfile
-typealias MemoryItem = GitaSchemaV7.MemoryItem
+typealias TaskItem = GitaSchemaV8.TaskItem
+typealias PracticeSession = GitaSchemaV8.PracticeSession
+typealias RecordingRef = GitaSchemaV8.RecordingRef
+typealias LocalProfile = GitaSchemaV8.LocalProfile
+typealias MemoryItem = GitaSchemaV8.MemoryItem
 ```
 
 #### 记忆服务
@@ -434,14 +439,16 @@ typealias MemoryItem = GitaSchemaV7.MemoryItem
 
 | 命令 | 不变量 / 行为 |
 |---|---|
-| `prepare()` | 迁移旧录音路径 → seed → ensure Profile（回填空 `profileId` / 空 `memoryConsentState`）→ GC 孤儿文件 |
+| `prepare()` | 迁移旧录音路径 → seed → ensure Profile（回填空 `profileId` / 空 `memoryConsentState`）→ `PracticeActiveTaskMerge` 合并遗留日实例 → GC 孤儿文件 |
 | `seedIfNeeded()` | 只写入模板，不写入 `todayTasks()` |
-| `activateTemplate(id, now, calendar)` | 模板 → `active-{id}-{yyyy-MM-dd}`（本地日键）当日幂等；旧 `active-{id}` 仅当 `startedOn` 是今天时复用；同日软删后恢复 |
-| `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」 |
-| `createFromAIDraft(_:)` | 由 `AIPracticeDraft` 写入活跃任务（含完整 `steps`）；副标题 `AI · N 分钟` |
+| `activateTemplate(id, now, calendar)` | 模板 → 稳定 id `active-{templateId}`；已有活任务则 `ensureForToday`（跨天复用）；软删墓碑不复活（返回 nil）；无记录则新建 |
+| `ensureForToday(taskId, now)` | 未删任务：`status = .active`、`startedOn = now`；不改 id / `originKey`；不创建 session |
+| `createCustomTask(name:minutes:category:)` | 分钟钳制 1…60；空名 →「未命名练习」；每次新 `custom-{uuid}`（无同源） |
+| `createFromAIDraft(_:originKey:)` | 非空 `originKey` 且存在活任务 → 更新文案/步骤并 `ensureForToday`；否则新建 `custom-uuid` 写入 key（空 key 总是新建）；不复活墓碑 |
 | `setTaskStatus(id:to:)` | 改状态并 `touch()` |
 | `updateTask(id:title:subtitle:minutes:)` | 编辑标题/备注；分钟钳制 1…60；空标题保留原值 |
-| `softDeleteTask(id)` | 写 `deletedAt` 并 `touch()`（tombstone，供未来同步） |
+| `isTemplateOriginDeleted(templateId)` | 稳定 `active-{id}` 是否软删；`RecommendSheet` 据此隐藏模板行 |
+| `softDeleteTask(id)` | 写 `deletedAt` 并 `touch()`（tombstone，供未来同步）；同源不自动复活 |
 | `finishSession(...)` | `endedAt >= startedAt`、`durationSec >= 0`；无效记录（0 秒且无笔记/录音）返回 `false` 并设 `.invalidInput`；媒体文件存在才建 `RecordingRef`（音频+视频）；一次 save 成功或整体 rollback |
 | `beginOpenSession(...)` | 文件在磁盘才建 session + 第一条 `RecordingRef`（id=clip.id）；否则 `.fileMissing` |
 | `appendRecording(sessionId:clip:)` | 挂到已有 session；缺文件 / 缺 session 失败 |
@@ -453,7 +460,7 @@ typealias MemoryItem = GitaSchemaV7.MemoryItem
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`。图片 Skill 仍不写候选；复盘/诊断候选见 `AICandidateSync`（§6.2 MemoryItem）。同意 `enabled` 时，`PracticeStore` 对 `custom-*` 任务调用 `TaskMemorySync`：每条练习项一条 goal，`key = task.{taskId}.title`，`sourceType = task`，`importance = 0.6`。用户改摘要后 `sourceType` 变为 `user`，之后改任务标题不再覆盖；用户删除或清空后同 key 不复活。模板与每日 `active-*` 激活不写记忆。设计说明：`docs/superpowers/2026-08-21-task-memory-sync/specs/2026-08-21-task-memory-sync-design.md`。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft` 落库并打开详情。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
+`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`。图片 Skill 仍不写候选；复盘/诊断候选见 `AICandidateSync`（§6.2 MemoryItem）。同意 `enabled` 时，`PracticeStore` 对 `custom-*` 任务调用 `TaskMemorySync`：每条练习项一条 goal，`key = task.{taskId}.title`，`sourceType = task`，`importance = 0.6`。用户改摘要后 `sourceType` 变为 `user`，之后改任务标题不再覆盖；用户删除或清空后同 key 不复活。模板与 `active-*` 激活不写记忆。设计说明：`docs/superpowers/2026-08-21-task-memory-sync/specs/2026-08-21-task-memory-sync-design.md`。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft(_:originKey:)` 落库：`PhotoPracticeSheet` / `NextSessionSheet` 各用当次 `generationId` 生成 `PracticeTaskOrigin.photoOriginKey` / `nextOriginKey`；同 key 活任务复用。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
 
 ### 6.3.2 练后媒体复盘
 
@@ -558,8 +565,9 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 |---|---|
 | `StatsAggregatorTests` | 连续日、周点、周一边界、环比、按日分钟、时长进位 |
 | `PracticeTimerTests` | 墙钟推进、后台不丢时、暂停不计时、幂等 start、reset |
-| `PracticeStoreTests` | seed、激活模板、自定义任务、finish 不变量、save 失败回滚、resetAll |
-| `MigrationTests` | V2→V7 / V5→V7 / V6→V7 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填；V6 false → undecided |
+| `PracticeStoreTests` | seed、稳定 `activateTemplate` / `originKey` 复用与不复活、自定义任务、finish 不变量、save 失败回滚、resetAll |
+| `PracticeActiveTaskMergeTests` | 遗留日实例合并到稳定 id；有效 session 计票；max `startedOn`；墓碑不复活 |
+| `MigrationTests` | V2→V8 / V5→V8 / V6→V8 / V7→V8 磁盘库迁移不丢数据；V8 `originKey` 默认为空；新行 profileId 默认为空直到 prepare 回填；V6 false → undecided |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
 | `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
@@ -623,7 +631,7 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | 云同步 | 仅有 `syncState` / 软删字段；UI 已接软删 | 实现 `RemoteSyncRepository` 装饰器 + 冲突策略 |
 | 账号 / 多端 | 无 | 选定 BaaS 或自建后再扩 Repository |
 | 录视频 | 系统相机 + mov 入库；模拟器无相机 | 自定义 `AVCapture`、预览回放 UI、压缩策略 |
-| 按日任务规划 | 「今日练习」按 `startedOn` 当地自然日过滤；模板每日新实例 | 昨日未练不结转；「最近录入」入口如需要再开 |
+| 按日任务规划 | 「今日练习」按 `startedOn` 当地自然日过滤；模板稳定 `active-{templateId}` + `ensureForToday` 拉回今日 | 昨日未练不结转；「最近录入」入口如需要再开 |
 | 聚合缓存 | 全量 session 上算统计 | 数据量上来后再在 Store 侧缓存 |
 | 英文 locale | Catalog 已就绪，暂无 en 译文 | 在 `Localizable.xcstrings` 填 `en` |
 | 无障碍 | FAB / BPM / 工具按钮 / 录音面板有 label | 持续扫 VoiceOver 路径 |
