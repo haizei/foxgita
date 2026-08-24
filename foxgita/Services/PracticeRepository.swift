@@ -14,6 +14,7 @@ protocol PracticeRepository: AnyObject {
     func tasks() throws -> [TaskItem]
     func task(id: String) throws -> TaskItem?
     func taskIncludingDeleted(id: String) throws -> TaskItem?
+    func liveTask(originKey: String) throws -> TaskItem?
     func sessions() throws -> [PracticeSession]
     func session(id: String) throws -> PracticeSession?
     func recording(id: String) throws -> RecordingRef?
@@ -88,6 +89,16 @@ final class SwiftDataPracticeRepository: PracticeRepository {
     func taskIncludingDeleted(id: String) throws -> TaskItem? {
         try context.fetch(
             FetchDescriptor<TaskItem>(predicate: #Predicate { $0.id == id })
+        ).first
+    }
+
+    func liveTask(originKey: String) throws -> TaskItem? {
+        let key = originKey
+        guard !key.isEmpty else { return nil }
+        return try context.fetch(
+            FetchDescriptor<TaskItem>(
+                predicate: #Predicate<TaskItem> { $0.originKey == key && $0.deletedAt == nil }
+            )
         ).first
     }
 
@@ -192,6 +203,11 @@ final class InMemoryPracticeRepository: PracticeRepository {
 
     func taskIncludingDeleted(id: String) throws -> TaskItem? {
         storedTasks.first { $0.id == id }
+    }
+
+    func liveTask(originKey: String) throws -> TaskItem? {
+        guard !originKey.isEmpty else { return nil }
+        return try tasks().first { $0.originKey == originKey }
     }
 
     func sessions() throws -> [PracticeSession] {

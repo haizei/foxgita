@@ -155,7 +155,19 @@ final class PracticeStore {
     }
 
     @discardableResult
-    func createFromAIDraft(_ draft: AIPracticeDraft) -> String? {
+    func createFromAIDraft(_ draft: AIPracticeDraft, originKey: String? = nil) -> String? {
+        let key = originKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !key.isEmpty, let live = try? repository.liveTask(originKey: key) {
+            live.title = draft.title
+            live.subtitle = draft.subtitleLine
+            live.category = draft.category
+            live.targetMin = draft.targetMin
+            live.steps = draft.steps
+            guard let id = ensureForToday(live.id) else { return nil }
+            applySyncUpsert(live)
+            return id
+        }
+
         guard let profileId = requireProfileId() else { return nil }
         let task = TaskItem(
             id: "custom-\(UUID().uuidString)",
@@ -166,7 +178,8 @@ final class PracticeStore {
             steps: draft.steps,
             startedOn: Date(),
             sortOrder: 50,
-            profileId: profileId
+            profileId: profileId,
+            originKey: key
         )
         let saved = produce {
             try repository.add(task)

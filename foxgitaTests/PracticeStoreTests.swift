@@ -284,6 +284,92 @@ struct PracticeStoreTests {
         #expect(task.steps == ["识别和弦顺序 · 2 分钟"])
     }
 
+    @Test func createFromAIDraftReusesSameOriginKey() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let cal = shanghai()
+        let yesterday = date(2026, 8, 18, calendar: cal)
+        let key = PracticeTaskOrigin.photoOriginKey(generationId: "g1")
+        let firstId = try #require(store.createFromAIDraft(
+            AIPracticeDraft(
+                title: "扫弦入门", category: .rhythm, targetMin: 12,
+                steps: ["熟悉下下上"], chords: []
+            ),
+            originKey: key
+        ))
+        let first = try #require(try repo.task(id: firstId))
+        first.startedOn = yesterday
+        first.status = .done
+        try repo.save()
+
+        let reusedId = try #require(store.createFromAIDraft(
+            AIPracticeDraft(
+                title: "扫弦进阶", category: .scale, targetMin: 15,
+                steps: ["80 BPM"], chords: ["G"]
+            ),
+            originKey: key
+        ))
+        #expect(reusedId == firstId)
+        let reused = try #require(try repo.task(id: firstId))
+        #expect(reused.title == "扫弦进阶")
+        #expect(reused.subtitle == "AI · 15 分钟 · G")
+        #expect(reused.category == .scale)
+        #expect(reused.targetMin == 15)
+        #expect(reused.steps == ["80 BPM"])
+        #expect(reused.originKey == key)
+        #expect(reused.status == .active)
+        #expect(cal.isDate(reused.startedOn ?? .distantPast, inSameDayAs: Date()))
+        #expect(try repo.tasks().filter { $0.originKey == key }.count == 1)
+    }
+
+    @Test func createFromAIDraftDifferentOriginKeysStayDistinct() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let draft = AIPracticeDraft(
+            title: "转换", category: .chord, targetMin: 10,
+            steps: ["识别"], chords: ["C"]
+        )
+        let photo = PracticeTaskOrigin.photoOriginKey(generationId: "g1")
+        let next = PracticeTaskOrigin.nextOriginKey(generationId: "g1")
+        let photoId = try #require(store.createFromAIDraft(draft, originKey: photo))
+        let nextId = try #require(store.createFromAIDraft(draft, originKey: next))
+        #expect(photoId != nextId)
+        #expect(try repo.task(id: photoId)?.originKey == photo)
+        #expect(try repo.task(id: nextId)?.originKey == next)
+
+        let emptyA = try #require(store.createFromAIDraft(draft, originKey: "  "))
+        let emptyB = try #require(store.createFromAIDraft(draft))
+        #expect(Set([photoId, nextId, emptyA, emptyB]).count == 4)
+        #expect(try repo.task(id: emptyA)?.originKey == "")
+        #expect(try repo.task(id: emptyB)?.originKey == "")
+    }
+
+    @Test func createFromAIDraftIgnoresDeletedOriginAndCreatesNew() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let key = PracticeTaskOrigin.photoOriginKey(generationId: "g-del")
+        let oldId = try #require(store.createFromAIDraft(
+            AIPracticeDraft(
+                title: "旧稿", category: .left, targetMin: 8,
+                steps: ["慢"], chords: []
+            ),
+            originKey: key
+        ))
+        store.softDeleteTask(oldId)
+        #expect(try repo.task(id: oldId) == nil)
+
+        let newId = try #require(store.createFromAIDraft(
+            AIPracticeDraft(
+                title: "新稿", category: .rhythm, targetMin: 9,
+                steps: ["快"], chords: []
+            ),
+            originKey: key
+        ))
+        #expect(newId != oldId)
+        #expect(try repo.taskIncludingDeleted(id: oldId)?.deletedAt != nil)
+        let created = try #require(try repo.task(id: newId))
+        #expect(created.originKey == key)
+        #expect(created.title == "新稿")
+        #expect(try repo.tasks().filter { $0.originKey == key }.count == 1)
+    }
+
     @Test func setTaskStatusTouchesUpdatedAt() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
