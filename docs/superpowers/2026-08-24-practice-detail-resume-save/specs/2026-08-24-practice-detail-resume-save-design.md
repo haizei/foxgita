@@ -41,7 +41,7 @@
 | 续写哪条 session | 该 `taskId` 未删除且有效的 session 中，`endedAt` 最新一条 |
 | 笔记框 | 有可续 session 时预填；与旧「不预填」冲突时以本规格为准 |
 | 焦点行 | 保留现有「上次 …」展示逻辑 |
-| RESET | 先落库当前趟（若有内容 / open id），再清 UI 与 `openSessionId`；无确认框、无 toast |
+| RESET | 先落库当前趟（若有内容 / open id），写入 per-task UserDefaults 跳过该 session id，再清 UI 与 `openSessionId`；无确认框、无 toast。新建成功后清跳过键 |
 | 键盘 | `@FocusState` + 交互式滚动收起 + 点非输入区失焦 |
 | Schema | 不改 |
 
@@ -83,8 +83,11 @@
 ### 3.4 RESET
 
 1. 若有可写内容或 `openSessionId`：先按 §3.3 落库一次（上一趟留在记录）。
-2. 计时 `reset`、笔记清空、节拍器停、`openSessionId = nil`。
-3. 之后活动写入**新** session。
+2. 若刚落库或已有可续 session id：把该 id 记入 **UserDefaults 跳过键**（按 `taskId`），使「最新有效 session」在等于该 id 时**不作为可续目标**（BPM/焦点行仍可读历史；不改 Schema）。
+3. 计时 `reset`、笔记清空、节拍器停、`openSessionId = nil`。
+4. 之后活动写入**新** session；新建成功后清除该 `taskId` 的跳过键。
+
+跳过键仅表示「这一条已用 RESET 封档，勿再灌回工作台」，不是删除记录。
 
 ### 3.5 媒体
 
