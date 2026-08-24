@@ -232,6 +232,12 @@ final class PracticeStore {
         if lastError == nil { applySyncUpsert(task) }
     }
 
+    func isTemplateOriginDeleted(_ templateId: String) -> Bool {
+        let id = PracticeTaskOrigin.stableActiveId(templateId: templateId)
+        guard let task = try? repository.taskIncludingDeleted(id: id) else { return false }
+        return task.deletedAt != nil
+    }
+
     /// Soft-delete so sync can still see the tombstone later.
     func softDeleteTask(_ taskId: String) {
         guard let task = try? repository.task(id: taskId) else {

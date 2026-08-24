@@ -201,6 +201,17 @@ struct PracticeStoreTests {
         #expect(try repo.tasks().filter { $0.id.hasPrefix("active-") }.count == 0)
     }
 
+    @Test func isTemplateOriginDeletedReflectsSoftDelete() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 19, calendar: cal)
+        let id = try #require(store.activateTemplate("tpl-chord", now: now, calendar: cal))
+        #expect(store.isTemplateOriginDeleted("tpl-chord") == false)
+        store.softDeleteTask(id)
+        #expect(store.isTemplateOriginDeleted("tpl-chord") == true)
+    }
+
     @Test func ensureForTodaySetsStartedOn() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)

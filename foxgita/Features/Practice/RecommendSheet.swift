@@ -29,7 +29,9 @@ struct RecommendSheet: View {
     @Binding var selection: String?
 
     private var cards: [TaskItem] {
-        let templates = allTasks.filter { $0.isTemplate && $0.category == category }
+        let templates = allTasks
+            .filter { $0.isTemplate && $0.category == category }
+            .filter { !store.isTemplateOriginDeleted($0.id) }
         if !templates.isEmpty { return templates }
         return allTasks.filter { !$0.isTemplate && $0.category == category }
     }
