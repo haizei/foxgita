@@ -295,9 +295,6 @@ struct PracticeDetailView: View {
                 .padding(.bottom, 32)
             }
             .scrollDismissesKeyboard(.interactively)
-            .simultaneousGesture(
-                TapGesture().onEnded { noteFocused = false }
-            )
             // Two covers on the same view would leave only the last one live, so
             // the diagnosis cover hangs off the scroll view instead.
             .fullScreenCover(item: $diagnosisRoute) { route in
@@ -878,10 +875,10 @@ struct PracticeDetailView: View {
         for clip in video.pending { persist(audioClip(clip), task: task) }
     }
 
-    private func saveOpenSession(task: TaskItem) {
-        guard let openSessionId else { return }
+    private func saveOpenSession(task: TaskItem) -> Bool {
+        guard let openSessionId else { return false }
         let end = Date()
-        _ = store.updateOpenSession(
+        return store.updateOpenSession(
             sessionId: openSessionId,
             steps: steps,
             note: noteText,
@@ -895,7 +892,7 @@ struct PracticeDetailView: View {
     private func persistVisit(task: TaskItem) -> String? {
         persistPending(task: task)
         if let open = openSessionId {
-            saveOpenSession(task: task)
+            guard saveOpenSession(task: task) else { return nil }
             clearSkipIfResumed(taskId: task.id, sessionId: open)
             return open
         }

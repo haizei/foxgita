@@ -527,6 +527,16 @@ struct PracticeStoreTests {
         #expect(try repo.task(id: "warm")?.defaultBpm == 88)
     }
 
+    @Test func updateOpenSessionUnknownIdReturnsFalse() {
+        let (store, _, _) = makeStore(seeded: true)
+        let now = Date()
+        #expect(!store.updateOpenSession(
+            sessionId: "ghost", steps: [], note: "",
+            endedAt: now, durationSec: 0, bpm: 80
+        ))
+        #expect(store.lastError == .notFound)
+    }
+
     @Test func finishSessionRejectsEmptyDoesNotWriteBpm() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
