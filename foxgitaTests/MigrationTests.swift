@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V8 migration plan
-/// (V2→V3→…→V8) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V9 migration plan
+/// (V2→V3→…→V9) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -55,10 +55,10 @@ struct MigrationTests {
         }
 
         // --- Phase 2: reopen under V8 + migration plan --------------------
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -114,10 +114,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -155,10 +155,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -201,10 +201,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -251,10 +251,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -287,10 +287,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
-        let config = ModelConfiguration(schema: v8Schema, url: url)
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
         let container = try ModelContainer(
-            for: v8Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -299,5 +299,89 @@ struct MigrationTests {
         #expect(tasks[0].title == "指尖热身")
         #expect(tasks[0].profileId == "p1")
         #expect(tasks[0].originKey == "")
+    }
+
+    @Test func v8StoreMigratesToV9WithoutLosingRowsAndCanInsertPracticeItem() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v8-v9-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        do {
+            let v8Schema = Schema(versionedSchema: GitaSchemaV8.self)
+            let config = ModelConfiguration(schema: v8Schema, url: url)
+            let container = try ModelContainer(for: v8Schema, configurations: [config])
+            let context = ModelContext(container)
+            let task = GitaSchemaV8.TaskItem(
+                id: "warm", title: "指尖热身", subtitle: "开放弦",
+                category: .left, targetMin: 5, steps: ["开放弦"], profileId: "p1"
+            )
+            context.insert(task)
+            let session = GitaSchemaV8.PracticeSession(
+                id: "sess-1", taskId: "warm", taskTitle: "指尖热身",
+                category: .left, startedAt: Date(), endedAt: Date(),
+                durationSec: 300, bpm: 80, timeSig: "4/4",
+                steps: ["开放弦"], noteText: "V8 笔记"
+            )
+            let rec = GitaSchemaV8.RecordingRef(
+                id: "rec-1", fileName: "clip.m4a", bytes: 2048,
+                durationSec: 12, createdAt: Date(), label: "片段"
+            )
+            session.recordings.append(rec)
+            context.insert(session)
+            try context.save()
+        }
+
+        let itemId = UUID()
+        let profileId = UUID()
+
+        do {
+            let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+            let config = ModelConfiguration(schema: v9Schema, url: url)
+            let container = try ModelContainer(
+                for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            )
+            let context = ModelContext(container)
+            let tasks = try context.fetch(FetchDescriptor<TaskItem>())
+            let sessions = try context.fetch(FetchDescriptor<PracticeSession>())
+            let recordings = try context.fetch(FetchDescriptor<RecordingRef>())
+
+            #expect(tasks.count == 1)
+            #expect(tasks[0].id == "warm")
+            #expect(tasks[0].title == "指尖热身")
+            #expect(sessions.count == 1)
+            #expect(sessions[0].noteText == "V8 笔记")
+            #expect(recordings.count == 1)
+            #expect(recordings[0].fileName == "clip.m4a")
+            #expect(recordings[0].practiceItem == nil)
+
+            context.insert(
+                PracticeItem(
+                    id: itemId,
+                    profileId: profileId,
+                    practiceDayKey: "2026-08-26",
+                    title: "今日练习",
+                    categoryRaw: PracticeCategory.left.rawValue,
+                    durationSeconds: 180,
+                    bpm: 80,
+                    timeSignature: "4/4",
+                    note: "V9 笔记"
+                )
+            )
+            try context.save()
+        }
+
+        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let container = try ModelContainer(
+            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
+        #expect(items.count == 1)
+        #expect(items[0].id == itemId)
+        #expect(items[0].profileId == profileId)
+        #expect(items[0].practiceDayKey == "2026-08-26")
+        #expect(items[0].title == "今日练习")
+        #expect(items[0].durationSeconds == 180)
+        #expect(items[0].note == "V9 笔记")
     }
 }
