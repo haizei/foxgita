@@ -1311,4 +1311,294 @@ struct PracticeStoreTests {
         #expect(RecordingStore.fileExists(fileName: clip.fileName))
         #expect(try repo.recording(id: clip.id) != nil)
     }
+
+    // MARK: - Daily item entry points
+
+    private func sampleDraft(
+        title: String = "扫弦入门",
+        category: PracticeCategory = .rhythm
+    ) -> AIPracticeDraft {
+        AIPracticeDraft(
+            title: title,
+            category: category,
+            targetMin: 12,
+            steps: ["熟悉下下上"],
+            chords: ["G"]
+        )
+    }
+
+    private func expectSoloCreatedItem(
+        _ item: PracticeItem,
+        repo: InMemoryPracticeRepository,
+        profileId: UUID,
+        tasksBefore: Int,
+        sessionsBefore: Int
+    ) throws {
+        #expect(try repo.practiceItems(profileId: profileId).map(\.id) == [item.id])
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.id == item.id)
+        #expect(try repo.tasks().count == tasksBefore)
+        #expect(try repo.sessions().count == sessionsBefore)
+        #expect(
+            PracticeDetailState.practiceRoute(fromSheetSelection: item.id.uuidString)
+                == .detail(itemId: item.id)
+        )
+    }
+
+    @Test func customEntryCreatesOnePracticeItemWithoutTaskOrSession() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 9, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let sessionsBefore = try repo.sessions().count
+        let gate = PracticeEntryGate()
+
+        let created = try gate.submit(
+            store: store,
+            input: PracticeEntry.custom(name: "  F 和弦转换  ", category: .chord),
+            token: PracticeEntryToken(),
+            now: now,
+            calendar: cal
+        )
+
+        try expectSoloCreatedItem(
+            created, repo: repo, profileId: profileId,
+            tasksBefore: tasksBefore, sessionsBefore: sessionsBefore
+        )
+        #expect(created.title == "F 和弦转换")
+        #expect(created.categoryRaw == PracticeCategory.chord.rawValue)
+        #expect(created.sourceRaw == PracticeItemSource.custom.rawValue)
+        #expect(created.originId == nil)
+        #expect(created.durationSeconds == 0)
+        #expect(created.practiceDayKey == "2026-08-26")
+        #expect(try repo.tasks().contains { $0.id.hasPrefix("custom-") } == false)
+    }
+
+    @Test func recommendEntryCopiesTemplateWithoutActivatingTask() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedTemplate(into: repo)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 10, calendar: cal)
+        let template = try #require(try repo.task(id: "tpl-chord"))
+        let tasksBefore = try repo.tasks().count
+        let sessionsBefore = try repo.sessions().count
+        let gate = PracticeEntryGate()
+
+        let created = try gate.submit(
+            store: store,
+            input: PracticeEntry.recommend(from: template),
+            token: PracticeEntryToken(),
+            now: now,
+            calendar: cal
+        )
+
+        try expectSoloCreatedItem(
+            created, repo: repo, profileId: profileId,
+            tasksBefore: tasksBefore, sessionsBefore: sessionsBefore
+        )
+        #expect(created.title == "和弦模板")
+        #expect(created.categoryRaw == PracticeCategory.chord.rawValue)
+        #expect(created.sourceRaw == PracticeItemSource.recommend.rawValue)
+        #expect(created.bpm == template.defaultBpm)
+        #expect(created.timeSignature == template.timeSig)
+        #expect(try repo.task(id: "tpl-chord")?.isTemplate == true)
+        #expect(try repo.task(id: "active-tpl-chord") == nil)
+    }
+
+    @Test func photoEntryCreatesOnePracticeItemFromDraft() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 11, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let sessionsBefore = try repo.sessions().count
+        let gate = PracticeEntryGate()
+        let generationId = "photo-gen-1"
+
+        let created = try gate.submit(
+            store: store,
+            input: PracticeEntry.photo(draft: sampleDraft(), generationId: generationId),
+            token: PracticeEntryToken(),
+            now: now,
+            calendar: cal
+        )
+
+        try expectSoloCreatedItem(
+            created, repo: repo, profileId: profileId,
+            tasksBefore: tasksBefore, sessionsBefore: sessionsBefore
+        )
+        #expect(created.title == "扫弦入门")
+        #expect(created.categoryRaw == PracticeCategory.rhythm.rawValue)
+        #expect(created.sourceRaw == PracticeItemSource.photo.rawValue)
+        #expect(created.originId == PracticeTaskOrigin.photoOriginKey(generationId: generationId))
+        #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
+    }
+
+    @Test func nextEntryCreatesOnePracticeItemFromDraft() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 12, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let sessionsBefore = try repo.sessions().count
+        let gate = PracticeEntryGate()
+        let generationId = "next-gen-1"
+
+        let created = try gate.submit(
+            store: store,
+            input: PracticeEntry.next(draft: sampleDraft(title: "今日安排", category: .scale), generationId: generationId),
+            token: PracticeEntryToken(),
+            now: now,
+            calendar: cal
+        )
+
+        try expectSoloCreatedItem(
+            created, repo: repo, profileId: profileId,
+            tasksBefore: tasksBefore, sessionsBefore: sessionsBefore
+        )
+        #expect(created.title == "今日安排")
+        #expect(created.categoryRaw == PracticeCategory.scale.rawValue)
+        #expect(created.sourceRaw == PracticeItemSource.next.rawValue)
+        #expect(created.originId == PracticeTaskOrigin.nextOriginKey(generationId: generationId))
+        #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
+    }
+
+    @Test func sameActionTokenTwiceCreatesOnePracticeItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 13, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let gate = PracticeEntryGate()
+        let token = PracticeEntryToken()
+        let input = PracticeEntry.custom(name: "开放弦", category: .left)
+
+        let first = try gate.submit(store: store, input: input, token: token, now: now, calendar: cal)
+        let second = try gate.submit(store: store, input: input, token: token, now: now, calendar: cal)
+
+        #expect(first.id == second.id)
+        #expect(try repo.practiceItems(profileId: profileId).map(\.id) == [first.id])
+        #expect(try repo.tasks().count == tasksBefore)
+        #expect(try repo.sessions().isEmpty)
+        #expect(
+            PracticeDetailState.practiceRoute(fromSheetSelection: second.id.uuidString)
+                == .detail(itemId: first.id)
+        )
+    }
+
+    @Test func differentTokensWithSameTitleCreateTwoPracticeItems() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 14, calendar: cal)
+        let gate = PracticeEntryGate()
+        let input = PracticeEntry.custom(name: "开放弦", category: .left)
+
+        let first = try gate.submit(
+            store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+        )
+        let second = try gate.submit(
+            store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+        )
+
+        #expect(first.id != second.id)
+        #expect(first.title == second.title)
+        #expect(Set(try repo.practiceItems(profileId: profileId).map(\.id)) == [first.id, second.id])
+        #expect(try repo.tasks().isEmpty)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func photoOriginRetryWithDifferentTokensReusesOneItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 15, calendar: cal)
+        let gate = PracticeEntryGate()
+        let generationId = "photo-retry"
+        let input = PracticeEntry.photo(draft: sampleDraft(), generationId: generationId)
+
+        let first = try gate.submit(
+            store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+        )
+        let second = try gate.submit(
+            store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+        )
+
+        #expect(first.id == second.id)
+        #expect(try repo.practiceItems(profileId: profileId).count == 1)
+        #expect(try repo.tasks().isEmpty)
+    }
+
+    @Test func cancelWithoutSubmitCreatesNoPracticeItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let tasksBefore = try repo.tasks().count
+        _ = PracticeEntryGate()
+
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+        #expect(try repo.tasks().count == tasksBefore)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func generationFailureLeavesNoPracticeItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 16, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let gate = PracticeEntryGate()
+
+        let created = try gate.commitIfSucceeded(
+            false,
+            store: store,
+            input: PracticeEntry.photo(draft: sampleDraft(), generationId: "fail-gen"),
+            token: PracticeEntryToken(),
+            now: now,
+            calendar: cal
+        )
+
+        #expect(created == nil)
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+        #expect(try repo.practiceItemsIncludingDeleted().isEmpty)
+        #expect(try repo.tasks().count == tasksBefore)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func generationSuccessAfterFailureCreatesOneItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 17, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let gate = PracticeEntryGate()
+        let input = PracticeEntry.next(draft: sampleDraft(title: "安排"), generationId: "ok-gen")
+
+        #expect(
+            try gate.commitIfSucceeded(
+                false, store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+            ) == nil
+        )
+        let created = try #require(
+            try gate.commitIfSucceeded(
+                true, store: store, input: input, token: PracticeEntryToken(), now: now, calendar: cal
+            )
+        )
+
+        try expectSoloCreatedItem(
+            created, repo: repo, profileId: profileId,
+            tasksBefore: tasksBefore, sessionsBefore: 0
+        )
+        #expect(created.sourceRaw == PracticeItemSource.next.rawValue)
+    }
 }

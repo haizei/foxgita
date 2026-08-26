@@ -23,6 +23,9 @@ struct RecommendSheet: View {
     @State private var showPhotoSheet = false
     @State private var showNextSessionSheet = false
     @State private var toast: String?
+    @State private var isSubmitting = false
+    @State private var entryGate = PracticeEntryGate()
+    @State private var inFlightToken: PracticeEntryToken?
     private let credentials = LLMCredentialsStore()
     /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
     /// Pushing from inside the sheet races the dismissal animation.
@@ -133,10 +136,7 @@ struct RecommendSheet: View {
                         .background(GitaTheme.bgSubtle)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                         Button {
-                            selection = store.createCustomTask(
-                                name: name, minutes: duration, category: category
-                            )
-                            dismiss()
+                            submitCustom()
                         } label: {
                             Text("创建练习")
                                 .font(.system(size: 16, weight: .semibold))
@@ -147,6 +147,7 @@ struct RecommendSheet: View {
                                 .clipShape(Capsule())
                         }
                         .buttonStyle(.plain)
+                        .disabled(isSubmitting)
                     }
                     .padding(16)
                     .background(GitaTheme.bgSurface)
@@ -183,8 +184,7 @@ struct RecommendSheet: View {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
                         ForEach(cards, id: \.id) { task in
                             Button {
-                                selection = store.activateTemplate(task.id)
-                                dismiss()
+                                submitRecommend(task)
                             } label: {
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(task.title)
@@ -202,6 +202,7 @@ struct RecommendSheet: View {
                                 .clipShape(RoundedRectangle(cornerRadius: 14))
                             }
                             .buttonStyle(.plain)
+                            .disabled(isSubmitting)
                         }
                     }
                 }
@@ -245,6 +246,42 @@ struct RecommendSheet: View {
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+    }
+
+    private func submitCustom() {
+        submit(PracticeEntry.custom(name: name, category: category))
+    }
+
+    private func submitRecommend(_ template: TaskItem) {
+        submit(PracticeEntry.recommend(from: template))
+    }
+
+    private func submit(_ input: PracticeItemInput) {
+        let token = inFlightToken ?? PracticeEntryToken()
+        inFlightToken = token
+        if isSubmitting {
+            if let item = try? entryGate.submit(
+                store: store, input: input, token: token, now: Date(), calendar: .current
+            ) {
+                selection = item.id.uuidString
+            }
+            return
+        }
+        isSubmitting = true
+        do {
+            let item = try entryGate.submit(
+                store: store,
+                input: input,
+                token: token,
+                now: Date(),
+                calendar: .current
+            )
+            selection = item.id.uuidString
+            dismiss()
+        } catch {
+            isSubmitting = false
+            inFlightToken = nil
+        }
     }
 
     private func hideToastLater() {

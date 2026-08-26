@@ -27,6 +27,9 @@ struct NextSessionSheet: View {
     @State private var generateTask: Task<Void, Never>?
     @State private var toast: String?
     @State private var generationId = UUID().uuidString
+    @State private var entryGate = PracticeEntryGate()
+    @State private var submitToken = PracticeEntryToken()
+    @State private var isSubmitting = false
     @State private var citation = ""
     @State private var draftCategory: PracticeCategory = .chord
     @State private var draftChords: [String] = []
@@ -142,6 +145,7 @@ struct NextSessionSheet: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .disabled(isGenerating)
             .padding(.bottom, 28)
         }
         .padding(.horizontal, 16)
@@ -195,6 +199,7 @@ struct NextSessionSheet: View {
             }
             .font(.system(size: 14, weight: .semibold))
             .foregroundStyle(GitaTheme.brand500)
+            .disabled(isSubmitting)
             Button(action: confirm) {
                 Text("加入今日练习")
                     .font(.system(size: 16, weight: .semibold))
@@ -205,12 +210,14 @@ struct NextSessionSheet: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            .disabled(isSubmitting)
             .padding(.bottom, 28)
         }
         .padding(.horizontal, 16)
     }
 
     private func beginGeneration() {
+        guard !isGenerating, !isSubmitting else { return }
         generateTask = Task {
             let gate = await consent.ensureDecided()
             guard !Task.isCancelled else { return }
@@ -218,6 +225,7 @@ struct NextSessionSheet: View {
             durationSync?.syncActive(minutes: minutes)
             memoryStore.reload()
             generationId = UUID().uuidString
+            submitToken = PracticeEntryToken()
             phase = .generating
             isGenerating = true
             toast = nil
@@ -261,6 +269,26 @@ struct NextSessionSheet: View {
     }
 
     private func confirm() {
+        let token = submitToken
+        if isSubmitting {
+            if let item = try? commitDraft(token: token) {
+                selection = item.id.uuidString
+            }
+            return
+        }
+        isSubmitting = true
+        do {
+            let item = try commitDraft(token: token)
+            selection = item.id.uuidString
+            onFinished()
+        } catch {
+            isSubmitting = false
+            toast = String(localized: "生成失败，请稍后重试")
+            hideToastLater()
+        }
+    }
+
+    private func commitDraft(token: PracticeEntryToken) throws -> PracticeItem {
         var steps = editSteps
             .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
@@ -274,16 +302,13 @@ struct NextSessionSheet: View {
             steps: steps,
             chords: draftChords
         )
-        guard let id = store.createFromAIDraft(
-            draft,
-            originKey: PracticeTaskOrigin.nextOriginKey(generationId: generationId)
-        ) else {
-            toast = String(localized: "生成失败，请稍后重试")
-            hideToastLater()
-            return
-        }
-        selection = id
-        onFinished()
+        return try entryGate.submit(
+            store: store,
+            input: PracticeEntry.next(draft: draft, generationId: generationId),
+            token: token,
+            now: Date(),
+            calendar: .current
+        )
     }
 
     private func fail(with error: Error) {

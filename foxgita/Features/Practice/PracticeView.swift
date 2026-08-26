@@ -18,7 +18,7 @@ struct PracticeView: View {
     @State private var toast: String?
     @State private var weekAnchor = StatsAggregator.week().start
     @State private var showSheet = false
-    @State private var pendingTaskId: String?
+    @State private var pendingItemId: String?
     @State private var lastSeenTodayStart: Date?
 
     private var calendar: Calendar { .current }
@@ -142,14 +142,14 @@ struct PracticeView: View {
                 }
             }
             .sheet(isPresented: $showSheet) {
-                guard let raw = pendingTaskId else { return }
-                pendingTaskId = nil
+                guard let raw = pendingItemId else { return }
+                pendingItemId = nil
                 guard let route = PracticeDetailState.practiceRoute(fromSheetSelection: raw) else {
                     return
                 }
                 router.practicePath.append(route)
             } content: {
-                RecommendSheet(selection: $pendingTaskId)
+                RecommendSheet(selection: $pendingItemId)
             }
             .onChange(of: selectedDay) { _, newDay in
                 let start = StatsAggregator.week(containing: newDay).start

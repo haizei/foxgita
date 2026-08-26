@@ -28,6 +28,8 @@ struct PhotoPracticeSheet: View {
     @State private var completed = false
     @State private var generationId = UUID().uuidString
     @State private var toast: String?
+    @State private var entryGate = PracticeEntryGate()
+    @State private var submitToken = PracticeEntryToken()
 
     private let progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
@@ -265,6 +267,7 @@ struct PhotoPracticeSheet: View {
     }
 
     private func beginGeneration(items: [PhotosPickerItem]) {
+        guard !isGenerating else { return }
         generateTask = Task {
             let gate = await consent.ensureDecided()
             guard !Task.isCancelled else { return }
@@ -289,6 +292,7 @@ struct PhotoPracticeSheet: View {
     }
 
     private func beginGeneration(blobs: [Data]) {
+        guard !isGenerating else { return }
         generateTask = Task {
             let gate = await consent.ensureDecided()
             guard !Task.isCancelled else { return }
@@ -307,6 +311,7 @@ struct PhotoPracticeSheet: View {
 
     private func prepareGeneration() {
         generationId = UUID().uuidString
+        submitToken = PracticeEntryToken()
         phase = .generating
         isGenerating = true
         completed = false
@@ -324,15 +329,16 @@ struct PhotoPracticeSheet: View {
             fallbackCategory: fallbackCategory
         )
         try Task.checkCancellation()
-        guard let id = store.createFromAIDraft(
-            draft,
-            originKey: PracticeTaskOrigin.photoOriginKey(generationId: generationId)
-        ) else {
-            throw PhotoPracticeSheetError.storeFailed
-        }
+        let item = try entryGate.submit(
+            store: store,
+            input: PracticeEntry.photo(draft: draft, generationId: generationId),
+            token: submitToken,
+            now: Date(),
+            calendar: .current
+        )
         completed = true
         isGenerating = false
-        selection = id
+        selection = item.id.uuidString
         onFinished()
     }
 
@@ -368,8 +374,4 @@ struct PhotoPracticeSheet: View {
             toast = nil
         }
     }
-}
-
-private enum PhotoPracticeSheetError: Error {
-    case storeFailed
 }
