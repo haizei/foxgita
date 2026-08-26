@@ -1291,4 +1291,24 @@ struct PracticeStoreTests {
         #expect(!RecordingStore.fileExists(fileName: orphanName))
         #expect(try repo.recording(id: clip.id) != nil)
     }
+
+    @Test func gcOrphanRecordingsReturnsZeroWhenFetchFails() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let item = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: shanghai()), calendar: shanghai()
+        )
+        let clip = try writeClip(id: "item-gc-fail")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        let recording = RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes, durationSec: clip.durationSec
+        )
+        try store.attachRecording(recording, toPracticeItemId: item.id)
+        repo.fetchError = .saveFailed
+
+        let removed = store.gcOrphanRecordings()
+        #expect(removed == 0)
+        #expect(RecordingStore.fileExists(fileName: clip.fileName))
+        #expect(try repo.recording(id: clip.id) != nil)
+    }
 }

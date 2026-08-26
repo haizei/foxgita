@@ -1,115 +1,131 @@
-# Task 5 Report: Sheet, chip, App injection, TECHNICAL.md
+# Task 5 Report: 将录音归属切到 PracticeItem
 
-## Status
-DONE_WITH_CONCERNS
+**Status:** DONE_WITH_CONCERNS  
+**Branch:** `codex/practice-home-daily-items`  
+**Commit:** `32dc9e9` `feat: attach recordings to practice items`
 
-## Branch
-`feat/next-session`
+## What you implemented
 
-## Commit
-- `03b0283` — Add Arrange Today chip and a confirm-before-save sheet.
+New recordings attach to `PracticeItem` only. No empty `PracticeSession` is created. Review dual-reads: prefer `practiceItem`, else legacy `session`.
 
-## Summary
-
-Wired Spec 6 UI and App injection only. Recommend Sheet gained「安排今日」; `NextSessionSheet` is a three-phase flow (duration → generating → preview). Generate never writes a task; Confirm is the only `createFromAIDraft` call. `DurationPreferenceSync` is constructed in `foxgitaApp.init()` and injected via `EnvironmentKey` `durationPreferenceSync`. TECHNICAL.md documents the new services and write policy.
+- `PracticeStore.attachRecording(_:toPracticeItemId:)` requires the clip file on disk, sets `recording.session = nil`, appends to `item.recordings`, and saves with the item. Throws `.fileMissing` / `.notFound`.
+- `PracticeReviewContext` (`.practiceItem(UUID)` / `.legacySession(UUID)`) plus `practiceReviewContext(recordingId:)`. `reviewContext` still returns `MediaReviewContext` (item title/bpm/timeSignature/note, or legacy session fields) so ReviewJobRunner keeps working.
+- `RecordingStore.referencedFileNames(practiceItems:sessions:)` unions both relationship file names. `gcOrphanRecordings` uses it so launch GC does not delete new item clips. Soft-deleted items still protect their files (`practiceItemsIncludingDeleted`).
+- InMemory cascade equivalent: `removePracticeItem(id:)` drops the item object; `recording(id:)` no longer finds its clips. Soft-delete does not cascade.
+- Did not migrate old session recordings onto items. Did not edit `project.pbxproj` or `Localizable.xcstrings`.
 
 ## Files
 
 | Action | Path |
-|--------|------|
-| Created | `foxgita/Features/Practice/NextSessionSheet.swift` |
-| Modified | `foxgita/Features/Practice/RecommendSheet.swift` |
-| Modified | `foxgita/foxgitaApp.swift` |
-| Modified | `docs/TECHNICAL.md` |
+|---|---|
+| Modified | `foxgita/Services/RecordingStore.swift` |
+| Modified | `foxgita/Services/PracticeStore.swift` |
+| Modified | `foxgitaTests/RecordingStoreTests.swift` |
+| Modified | `foxgitaTests/PracticeStoreTests.swift` |
+| Modified (extra, required) | `foxgita/Services/PracticeRepository.swift` |
 
-Commit scoped to these four paths. Unrelated dirty files left unstaged (`VideoAnalysisView`, `ReviewJobRunner`, architecture html, `Localizable.xcstrings`, deleted media-review docs, `ReviewJobRunnerTests`). `project.pbxproj` not edited (`PBXFileSystemSynchronizedRootGroup`).
+Committed all five. The extra file is required for attach/query/GC: InMemory `recording(id:)` now searches `PracticeItem.recordings`; protocol gained `practiceItemsIncludingDeleted()`; InMemory `removePracticeItem(id:)` implements cascade for tests.
 
-## Implementation notes
+## TDD Evidence
 
-- `NextSessionSheet` matches the brief: consent gate → `durationSync?.syncActive` → `memoryStore.reload()` → HTTP generate → local citation → preview. Close while generating cancels and returns to duration; disappear cancels and `chooseDisabled()` if the consent sheet is up.
-- Recommend chip sits after「拍摄/照片」and before the duration divider. Both chips disable when either nested sheet is presented. Missing credentials toast reuses the existing copy.
-- `foxgitaApp` stores `private let durationPreferenceSync` and assigns `self.durationPreferenceSync = durationPreferenceSync` next to `self.memoryStore`. Body injects `.environment(\.durationPreferenceSync, durationPreferenceSync)` next to `.environment(coordinator)`.
-- TECHNICAL.md Services tree lists `DurationPreferenceSync` / `NextSessionClient` / `NextSessionGenerator` / `NextSessionCitation` after `AICandidateSync`. MemoryItem write-policy paragraph appends `practice.next_session` 1.0.0 + confirm-before-save + duration upsert + local citation.
+### RED (APIs missing)
 
-## Tests
-
-Destination: `platform=iOS Simulator,name=iPhone 17`.
-
-### Full suite (Step 4)
+Command:
 
 ```bash
 xcodebuild -project foxgita.xcodeproj -scheme foxgita \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -only-testing:foxgitaTests test
+  -only-testing:foxgitaTests/RecordingStoreTests \
+  -only-testing:foxgitaTests/PracticeStoreTests \
+  test
 ```
 
-**Result:** compile succeeded (`NextSessionSheet` / `RecommendSheet` / `foxgitaApp` compiled). Full run **TEST FAILED** — 259 tests / 41 suites / 4 issues, all in the known `MockURLProtocol.handler` collision:
+Failing output (compile-time RED):
 
-- `VisionPracticeClientTests.generateDraftUnauthorized`
-- `VisionPracticeClientTests.generateDraftInvalidJSONContent`
-- `VisionPracticeClientTests.generateDraftRetriesWithoutResponseFormat`
-- `NextSessionClientTests.generateDraftUnregisteredSkillSendsNoRequest`
-
-Did not change `MockURLProtocol`.
-
-### Isolated re-runs
-
-```bash
-xcodebuild … -only-testing:foxgitaTests/NextSessionClientTests test
-# TEST SUCCEEDED — 6 tests in 1 suite
-
-xcodebuild … -only-testing:foxgitaTests/VisionPracticeClientTests test
-# TEST SUCCEEDED — 10 tests in 1 suite
+```
+RecordingStoreTests.swift:46:41: error: type 'RecordingStore' has no member 'referencedFileNames'
+RecordingStoreTests.swift:90:41: error: type 'RecordingStore' has no member 'referencedFileNames'
+Testing cancelled because the build failed.
+** TEST FAILED **
 ```
 
-Running the two suites in one `xcodebuild` invocation still flakes (crossed handlers). Separate invocations pass.
+Exit code 65. Production types were not changed until this RED was captured.
 
-Manual smoke (not a gate): 加号 → 安排今日 → 选 20 → 生成 → 预览改一步 → 加入今日练习 → 详情打开；关闭预览后首页无新任务.
+### GREEN (same command after implementations)
+
+```
+✔ Test attachRecordingDoesNotCreateSession() passed
+✔ Test deletingPracticeItemCascadesItsRecordings() passed
+✔ Test legacySessionRecordingsRemainReadable() passed
+✔ Test attachRecordingMissingFileDoesNotWrite() passed
+✔ Test gcOrphanRecordingsKeepsPracticeItemClips() passed
+✔ Test referencedFileNamesIncludePracticeItemAndSessionRecordings() passed
+✔ Test removeOrphansKeepsPracticeItemAndSessionClips() passed
+✔ Suite RecordingStoreTests passed after 0.133 seconds.
+✔ Suite PracticeStoreTests passed after 0.146 seconds.
+✔ Test run with 68 tests in 2 suites passed after 0.146 seconds.
+** TEST SUCCEEDED **
+```
+
+68 tests in 2 suites, all passing (existing tests plus 5 PracticeStore + 2 RecordingStore ownership/GC tests).
+
+## New tests
+
+| Test | Behavior |
+|---|---|
+| `attachRecordingDoesNotCreateSession` | Item clip has nil session; no new PracticeSession; `practiceReviewContext` is `.practiceItem` |
+| `deletingPracticeItemCascadesItsRecordings` | Hard-remove item drops lookup of its recordings |
+| `legacySessionRecordingsRemainReadable` | Session clip still readable; context is `.legacySession` |
+| `attachRecordingMissingFileDoesNotWrite` | Missing file throws `.fileMissing`; no row |
+| `gcOrphanRecordingsKeepsPracticeItemClips` | Launch-style GC keeps item clip, deletes orphan |
+| `referencedFileNamesIncludePracticeItemAndSessionRecordings` | Helper unions both relationships |
+| `removeOrphansKeepsPracticeItemAndSessionClips` | Disk GC respects the helper set |
 
 ## Self-review
 
-- Generate path has no `createFromAIDraft`. Confirm builds a trimmed draft and writes once.
-- Consent `ensureDecided()` runs before `syncActive` and HTTP.
-- Duration chips 15/20/30 plus 5–60 stepper; default from `NextSessionDuration.resolved`.
-- Preview citation is `NextSessionCitation.line` from `memoryStore.items`, not model text.
-- No V8 / old prompt edits / 3-session planner.
+- Completeness: new write is item-only; review distinguishes item vs legacy session; MediaReviewContext payload kept; GC covers both relationships; InMemory lookup + cascade equivalent; legacy session path unchanged.
+- YAGNI: no migration of old session clips; no empty session; no pbxproj/strings.
+- TDD: compile-time RED then GREEN on the same two-suite command.
 
 ## Concerns
 
-Full `foxgitaTests` is flaky because `NextSessionClientTests` and `VisionPracticeClientTests` share `MockURLProtocol.handler`. Isolated re-runs pass. Out of scope for this task.
-
-## Next Steps (out of scope)
-
-None for Spec 6 UI wiring. Manual smoke remains a human check.
+- **Extra file:** `PracticeRepository.swift` was required and included in the commit (InMemory `recording(id:)` previously searched sessions only; GC needs `practiceItemsIncludingDeleted()` so soft-deleted items do not lose files). Brief listed four files; correctness required the fifth.
+- Cascade is hard-delete of the item object (`removePracticeItem`), not `deletedAt`. Soft-delete keeps the RecordingRef row and the on-disk clip.
+- `PracticeItem` has no `steps`; item `MediaReviewContext.steps` is `[]`. BPM/time signature use optional item fields (`?? 0` / `?? ""`).
+- Tests exercise InMemory only. SwiftData cascade is the schema `deleteRule: .cascade` on `PracticeItem.recordings`.
 
 ---
 
-## Review fix (Task 5 findings)
+## Review fix: fail-closed recording GC
 
-**Status:** FIXED
+**Status:** FIXED  
+**Commit message:** `fix: fail closed when recording GC cannot load rows`
 
-**Commit message:** `Fix next-session consent gating and step row identity.`
+`gcOrphanRecordings()` treated a failed `sessions()` / `practiceItemsIncludingDeleted()` fetch as `[]`, which could delete item-owned clips on launch. It now returns 0 and skips `removeOrphans` if either fetch fails. InMemory gained a `fetchError` hook so the getters can throw.
 
-### Changes
+Left as Minor: cascade via `removePracticeItem` vs `softDelete`; `attachRecording` not bumping `updatedAt`.
 
-1. **Consent gate** — `consentedItems` is `memoryStore.items` only when `memoryStore.consent == .enabled`, else `[]`. Duration default uses `parsePreference(consentedItems)` (nil when not enabled). Citation uses the same list, so disabled/undecided shows「通用建议，还没有可参考的练习记忆」.
-2. **Step identity** — preview rows use `EditStep` (`UUID` + `text`) instead of `ForEach(editSteps.indices, id: \.self)`. applyDraft / confirm / add / delete use the wrapper.
-3. **Minor** — `docs/TECHNICAL.md` SkillRegistryTests row now mentions the fourth skill `practice.next_session` 1.0.0.
+### Covering tests
 
-### Tests
+`foxgitaTests/PracticeStoreTests.swift`  
+`foxgitaTests/RecordingStoreTests.swift`
 
-Destination: `platform=iOS Simulator,name=iPhone 17`.
+### Command
 
 ```bash
 xcodebuild -project foxgita.xcodeproj -scheme foxgita \
   -destination 'platform=iOS Simulator,name=iPhone 17' \
-  -only-testing:foxgitaTests/NextSessionCitationTests \
-  -only-testing:foxgitaTests/NextSessionGeneratorTests test
+  -only-testing:foxgitaTests/RecordingStoreTests \
+  -only-testing:foxgitaTests/PracticeStoreTests test
 ```
 
-**Result:** **TEST SUCCEEDED** — 5 tests / 2 suites.
+### Output
 
-- `NextSessionCitationTests` passed (3 tests)
-- `NextSessionGeneratorTests` passed (2 tests)
-
-App target compiled as part of the test build (`CodeSign …/foxgita.app`). Sheet type-checks.
+```
+✔ Test gcOrphanRecordingsKeepsPracticeItemClips() passed after 0.127 seconds.
+✔ Test gcOrphanRecordingsReturnsZeroWhenFetchFails() passed after 0.127 seconds.
+✔ Suite RecordingStoreTests passed after 0.127 seconds.
+✔ Suite PracticeStoreTests passed after 0.154 seconds.
+✔ Test run with 69 tests in 2 suites passed after 0.154 seconds.
+** TEST SUCCEEDED **
+```

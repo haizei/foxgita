@@ -165,8 +165,9 @@ final class PracticeStore {
     /// recorded and then abandoned by leaving the practice screen.
     @discardableResult
     func gcOrphanRecordings() -> Int {
-        let sessions = (try? repository.sessions()) ?? []
-        let items = (try? repository.practiceItemsIncludingDeleted()) ?? []
+        guard let sessions = try? repository.sessions(),
+              let items = try? repository.practiceItemsIncludingDeleted()
+        else { return 0 }
         let referenced = RecordingStore.referencedFileNames(
             practiceItems: items,
             sessions: sessions

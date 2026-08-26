@@ -225,6 +225,7 @@ final class InMemoryPracticeRepository: PracticeRepository {
     private var pendingPracticeItems: [PracticeItem] = []
 
     var saveError: StoreError?
+    var fetchError: StoreError?
     private(set) var saveCount = 0
 
     func tasks() throws -> [TaskItem] {
@@ -245,7 +246,8 @@ final class InMemoryPracticeRepository: PracticeRepository {
     }
 
     func sessions() throws -> [PracticeSession] {
-        storedSessions.filter { $0.deletedAt == nil }.sorted { $0.endedAt > $1.endedAt }
+        if let fetchError { throw fetchError }
+        return storedSessions.filter { $0.deletedAt == nil }.sorted { $0.endedAt > $1.endedAt }
     }
 
     func session(id: String) throws -> PracticeSession? {
@@ -275,7 +277,8 @@ final class InMemoryPracticeRepository: PracticeRepository {
     func insertPracticeItem(_ item: PracticeItem) throws { pendingPracticeItems.append(item) }
 
     func practiceItemsIncludingDeleted() throws -> [PracticeItem] {
-        storedPracticeItems
+        if let fetchError { throw fetchError }
+        return storedPracticeItems
     }
 
     func removePracticeItem(id: UUID) {
