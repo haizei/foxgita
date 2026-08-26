@@ -43,6 +43,21 @@ final class PracticeStore {
 
     func clearError() { lastError = nil }
 
+    static func snapshot(from item: PracticeItem) -> PracticeItemSnapshot {
+        PracticeItemSnapshot(
+            id: item.id,
+            practiceDayKey: item.practiceDayKey,
+            createdAt: item.createdAt,
+            title: item.title,
+            durationSeconds: item.durationSeconds,
+            isDeleted: item.deletedAt != nil
+        )
+    }
+
+    func practiceItemSnapshots(profileId: UUID) throws -> [PracticeItemSnapshot] {
+        try repository.practiceItems(profileId: profileId).map(Self.snapshot(from:))
+    }
+
     // MARK: - Launch
 
     func prepare() {

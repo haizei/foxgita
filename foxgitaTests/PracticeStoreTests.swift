@@ -856,4 +856,119 @@ struct PracticeStoreTests {
         #expect(second != sid)
         #expect(try repo.sessions().count == 2)
     }
+
+    // MARK: - PracticeItem repository contract
+
+    private func makePracticeItem(
+        id: UUID = UUID(),
+        profileId: UUID,
+        dayKey: String = "2026-08-26",
+        title: String = "开放弦",
+        durationSeconds: Int = 60,
+        deletedAt: Date? = nil
+    ) -> PracticeItem {
+        PracticeItem(
+            id: id,
+            profileId: profileId,
+            practiceDayKey: dayKey,
+            title: title,
+            categoryRaw: PracticeCategory.left.rawValue,
+            durationSeconds: durationSeconds,
+            deletedAt: deletedAt
+        )
+    }
+
+    @Test func practiceItemsIsolateByProfile() throws {
+        let (_, repo, _) = makeStore(seeded: true)
+        let profileA = UUID()
+        let profileB = UUID()
+        try repo.insertPracticeItem(makePracticeItem(profileId: profileA, title: "A"))
+        try repo.insertPracticeItem(makePracticeItem(profileId: profileB, title: "B"))
+        try repo.save()
+
+        let itemsA = try repo.practiceItems(profileId: profileA)
+        let itemsB = try repo.practiceItems(profileId: profileB)
+        #expect(itemsA.map(\.title) == ["A"])
+        #expect(itemsB.map(\.title) == ["B"])
+        #expect(try repo.practiceItems(profileId: UUID()).isEmpty)
+    }
+
+    @Test func practiceItemFetchByIdRequiresMatchingLiveProfile() throws {
+        let (_, repo, _) = makeStore(seeded: true)
+        let profile = UUID()
+        let other = UUID()
+        let id = UUID()
+        try repo.insertPracticeItem(makePracticeItem(id: id, profileId: profile, title: "抓取"))
+        try repo.save()
+
+        let found = try #require(try repo.practiceItem(id: id, profileId: profile))
+        #expect(found.title == "抓取")
+        #expect(try repo.practiceItem(id: id, profileId: other) == nil)
+        #expect(try repo.practiceItem(id: UUID(), profileId: profile) == nil)
+    }
+
+    @Test func practiceItemsExcludeSoftDeletedFromDefaultCollection() throws {
+        let (_, repo, _) = makeStore(seeded: true)
+        let profile = UUID()
+        let liveId = UUID()
+        let deletedId = UUID()
+        try repo.insertPracticeItem(makePracticeItem(id: liveId, profileId: profile, title: "在练"))
+        try repo.insertPracticeItem(
+            makePracticeItem(id: deletedId, profileId: profile, title: "已删", deletedAt: Date())
+        )
+        try repo.save()
+
+        let items = try repo.practiceItems(profileId: profile)
+        #expect(items.map(\.id) == [liveId])
+        #expect(try repo.practiceItem(id: liveId, profileId: profile) != nil)
+        #expect(try repo.practiceItem(id: deletedId, profileId: profile) == nil)
+    }
+
+    @Test func practiceItemsSameIdYieldsAtMostOne() throws {
+        let (_, repo, _) = makeStore(seeded: true)
+        let profile = UUID()
+        let id = UUID()
+        try repo.insertPracticeItem(makePracticeItem(id: id, profileId: profile, title: "第一次"))
+        try repo.insertPracticeItem(makePracticeItem(id: id, profileId: profile, title: "第二次"))
+        try repo.save()
+
+        let matches = try repo.practiceItems(profileId: profile).filter { $0.id == id }
+        #expect(matches.count == 1)
+        #expect(try repo.practiceItem(id: id, profileId: profile) != nil)
+    }
+
+    @Test func practiceItemSnapshotsMapModelThroughStoreAdapter() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        let profile = UUID()
+        let createdAt = Date(timeIntervalSince1970: 1_700_000_000)
+        let live = PracticeItem(
+            id: UUID(),
+            profileId: profile,
+            practiceDayKey: "2026-08-16",
+            title: "音阶",
+            categoryRaw: PracticeCategory.scale.rawValue,
+            durationSeconds: 90,
+            createdAt: createdAt,
+            updatedAt: createdAt
+        )
+        let deleted = makePracticeItem(profileId: profile, title: "墓碑", deletedAt: Date())
+        try repo.insertPracticeItem(live)
+        try repo.insertPracticeItem(deleted)
+        try repo.save()
+
+        let snapshots = try store.practiceItemSnapshots(profileId: profile)
+        #expect(snapshots.count == 1)
+        #expect(snapshots[0] == PracticeItemSnapshot(
+            id: live.id,
+            practiceDayKey: "2026-08-16",
+            createdAt: createdAt,
+            title: "音阶",
+            durationSeconds: 90,
+            isDeleted: false
+        ))
+
+        let deletedSnapshot = PracticeStore.snapshot(from: deleted)
+        #expect(deletedSnapshot.isDeleted)
+        #expect(deletedSnapshot.title == "墓碑")
+    }
 }
