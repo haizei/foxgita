@@ -201,6 +201,48 @@ struct StatsAggregatorTests {
         #expect(thisWeek.filter(\.practiced).map { calendar.component(.day, from: $0.date) } == [14])
     }
 
+    @Test func weekDaysFromCheckedInKeysMarksPracticeWithoutSessionCounts() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let tuesday25 = calendar.date(from: DateComponents(year: 2026, month: 8, day: 25))!
+        let now = calendar.date(from: DateComponents(year: 2026, month: 8, day: 26))!
+        let keys: Set<String> = ["2026-08-25"]
+
+        let days = StatsAggregator.weekDays(
+            checkedInDayKeys: keys,
+            containing: tuesday25,
+            now: now,
+            calendar: calendar
+        )
+        #expect(days.filter(\.practiced).map { calendar.component(.day, from: $0.date) } == [25])
+        #expect(!days.contains { calendar.component(.day, from: $0.date) == 26 && $0.practiced })
+    }
+
+    @Test func weekDaysFromCheckedInKeysTreatZeroDurationDayAsPracticed() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let tuesday25 = calendar.date(from: DateComponents(year: 2026, month: 8, day: 25))!
+        let keys = PracticeItemRules.checkedInDayKeys(in: [
+            PracticeItemSnapshot(
+                id: UUID(),
+                practiceDayKey: "2026-08-25",
+                createdAt: tuesday25,
+                title: "零时长",
+                durationSeconds: 0,
+                isDeleted: false
+            )
+        ])
+
+        let days = StatsAggregator.weekDays(
+            checkedInDayKeys: keys,
+            containing: tuesday25,
+            now: tuesday25,
+            calendar: calendar
+        )
+        #expect(keys == Set(["2026-08-25"]))
+        #expect(days.filter(\.practiced).map { calendar.component(.day, from: $0.date) } == [25])
+    }
+
     @Test func weekStartsAreMondaysEndingAtTheCurrentWeek() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!

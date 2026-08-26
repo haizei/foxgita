@@ -40,10 +40,7 @@ struct SegmentedPills: View {
 }
 
 struct StreakCard: View {
-    let streak: Int
-    let sessions: [PracticeSession]
-    let weekDone: Int
-    let isCurrentWeek: Bool
+    let checkedInDayKeys: Set<String>
     @Binding var selectedDay: Date
     @Binding var weekAnchor: Date
 
@@ -52,30 +49,13 @@ struct StreakCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("连续练习 \(streak) 天")
-                        .font(GitaFont.body(.bold))
-                        .foregroundStyle(GitaTheme.textPrimary)
-                    Text("稳稳地练，比猛练更长久")
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                        .frame(maxWidth: 180, alignment: .leading)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                Spacer(minLength: 8)
-                Text(isCurrentWeek ? "本周 \(weekDone)/7" : "该周 \(weekDone)/7")
-                    .font(GitaFont.caption(.medium))
-                    .foregroundStyle(GitaTheme.iconActive)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(GitaTheme.brand50)
-                    .clipShape(Capsule())
-            }
             TabView(selection: $weekAnchor) {
                 ForEach(weekStarts, id: \.self) { start in
                     weekStrip(
-                        days: StatsAggregator.weekDays(from: sessions, containing: start)
+                        days: StatsAggregator.weekDays(
+                            checkedInDayKeys: checkedInDayKeys,
+                            containing: start
+                        )
                     )
                     .tag(start)
                 }

@@ -85,6 +85,31 @@ enum StatsAggregator {
         }
     }
 
+    static func weekDays(
+        checkedInDayKeys: Set<String>,
+        containing weekDate: Date = .now,
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) -> [WeekDay] {
+        let labels = weekdaySymbols
+        let start = week(containing: weekDate, calendar: calendar).start
+        let today = calendar.startOfDay(for: now)
+        return (0..<7).map { offset in
+            let date = calendar.date(byAdding: .day, value: offset, to: start) ?? today
+            let practiced = checkedInDayKeys.contains(
+                PracticeDayKey.make(from: date, calendar: calendar)
+            )
+            return WeekDay(
+                date: date,
+                weekdayLabel: labels[offset],
+                dayNumber: calendar.component(.day, from: date),
+                isToday: calendar.isDate(date, inSameDayAs: today),
+                isFuture: date > today,
+                practiced: practiced
+            )
+        }
+    }
+
     static func dayTaskGroups(
         sessions: [PracticeSession],
         on day: Date,

@@ -24,3 +24,19 @@ enum PracticeItemRules {
         Set(items.filter { !$0.isDeleted }.map(\.practiceDayKey))
     }
 }
+
+struct PracticeHomeState: Equatable {
+    let selectedDayKey: String
+    let items: [PracticeItemSnapshot]
+    let totalDurationSeconds: Int
+    let checkedInDayKeys: Set<String>
+
+    static func make(selectedDayKey: String, allItems: [PracticeItemSnapshot]) -> Self {
+        PracticeHomeState(
+            selectedDayKey: selectedDayKey,
+            items: PracticeItemRules.items(for: selectedDayKey, in: allItems),
+            totalDurationSeconds: PracticeItemRules.totalDuration(for: selectedDayKey, in: allItems),
+            checkedInDayKeys: PracticeItemRules.checkedInDayKeys(in: allItems)
+        )
+    }
+}
