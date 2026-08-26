@@ -24,10 +24,19 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
-        XCTAssertTrue(app.staticTexts["今天还没加练习"].waitForExistence(timeout: 5))
+        let emptyToday = app.staticTexts["今天还没加练习"].exists
+        let hasPracticedRow = app.staticTexts.matching(
+            NSPredicate(format: "label CONTAINS '已练'")
+        ).firstMatch.exists
+        XCTAssertTrue(
+            emptyToday || hasPracticedRow,
+            "Home should show the empty-today copy or a daily item row, not templates"
+        )
         XCTAssertFalse(app.staticTexts["还没有练习"].exists)
         XCTAssertFalse(app.staticTexts["本周节奏"].exists)
         XCTAssertFalse(app.staticTexts["当周节奏"].exists)
+        XCTAssertFalse(app.staticTexts["本周次数"].exists)
+        XCTAssertFalse(app.staticTexts.matching(NSPredicate(format: "label CONTAINS '次本周'")).firstMatch.exists)
     }
 
     func testCreateCustomTaskOpensDetail() {
@@ -98,7 +107,7 @@ final class PracticeFlowUITests: XCTestCase {
         if app.buttons["返回"].waitForExistence(timeout: 1) {
             app.buttons["返回"].tap()
         }
-        let row = app.descendants(matching: .any)["\(name)，10 分钟，开始"].firstMatch
+        let row = app.descendants(matching: .any)["\(name)，已练 0 分钟"].firstMatch
         guard row.waitForExistence(timeout: 2) else { return }
         row.swipeLeft()
         let swipeDelete = app.buttons["删除"].firstMatch
