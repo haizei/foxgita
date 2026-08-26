@@ -8,7 +8,7 @@ struct AICandidateSyncTests {
     private func make(consent: MemoryConsentState = .enabled) throws -> (
         AICandidateSync, SwiftDataMemoryRepository, ModelContext, LocalProfile
     ) {
-        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let schema = Schema(versionedSchema: GitaSchemaV9.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -96,7 +96,7 @@ struct AICandidateSyncTests {
     private func makeWired(consent: MemoryConsentState = .enabled) throws -> (
         PracticeStore, SwiftDataMemoryRepository, SwiftDataPracticeRepository, LocalProfile
     ) {
-        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let schema = Schema(versionedSchema: GitaSchemaV9.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -242,7 +242,7 @@ struct AICandidateSyncTests {
     }
 
     @Test func memorySaveFailureDoesNotRollbackReview() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let schema = Schema(versionedSchema: GitaSchemaV9.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]

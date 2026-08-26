@@ -8,7 +8,7 @@ struct DurationPreferenceSyncTests {
     private func make(consent: MemoryConsentState = .enabled) throws -> (
         DurationPreferenceSync, SwiftDataMemoryRepository, ModelContext, LocalProfile
     ) {
-        let schema = Schema(versionedSchema: GitaSchemaV7.self)
+        let schema = Schema(versionedSchema: GitaSchemaV9.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
