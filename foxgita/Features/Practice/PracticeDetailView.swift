@@ -6,14 +6,67 @@
 import SwiftData
 import SwiftUI
 
+enum PracticeDetailMode: Equatable {
+    case editable
+    case historical
+}
+
+enum PracticeDetailState {
+    static func practiceRoute(itemId: UUID) -> PracticeRoute {
+        .detail(itemId: itemId)
+    }
+
+    static func practiceRoute(fromSheetSelection raw: String) -> PracticeRoute? {
+        guard let itemId = UUID(uuidString: raw) else { return nil }
+        return .detail(itemId: itemId)
+    }
+
+    static func mode(
+        practiceDayKey: String,
+        today: Date = Date(),
+        calendar: Calendar = .current
+    ) -> PracticeDetailMode {
+        practiceDayKey == PracticeDayKey.make(from: today, calendar: calendar)
+            ? .editable
+            : .historical
+    }
+
+    static func initialElapsedSeconds(storedDurationSeconds: Int) -> Int {
+        max(0, storedDurationSeconds)
+    }
+
+    static func isDirty(
+        elapsedSeconds: Int,
+        note: String,
+        storedDurationSeconds: Int,
+        storedNote: String
+    ) -> Bool {
+        max(0, elapsedSeconds) != max(0, storedDurationSeconds) || note != storedNote
+    }
+
+    static func shouldAutoSaveOnDisappear(mode: PracticeDetailMode, isDirty: Bool) -> Bool {
+        mode == .editable && isDirty
+    }
+
+    static func shouldAllowTimer(mode: PracticeDetailMode) -> Bool {
+        mode == .editable
+    }
+
+    static func loadedItem(
+        requestedId: UUID,
+        candidates: [PracticeItemSnapshot]
+    ) -> PracticeItemSnapshot? {
+        candidates.first { $0.id == requestedId && !$0.isDeleted }
+    }
+}
+
 struct PracticeDetailView: View {
-    let taskId: String
+    let itemId: UUID
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Environment(MemoryConsentCoordinator.self) private var consent
-    @Query private var tasks: [TaskItem]
-    @Query private var sessions: [PracticeSession]
+    @Query private var items: [PracticeItem]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
     private let llmCredentials = LLMCredentialsStore()
@@ -26,14 +79,14 @@ struct PracticeDetailView: View {
     @State private var practiceTimer = PracticeTimer()
     @State private var recorder = AudioRecorderService()
     @State private var video = VideoRecorderService()
-    @State private var steps: [String] = []
     @State private var noteText = ""
+    @State private var storedNote = ""
+    @State private var storedDurationSeconds = 0
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
     @State private var toast: String?
     @State private var isCompleting = false
-    @State private var openSessionId: String?
-    @State private var didRestoreSession = false
+    @State private var didLoadItem = false
     @State private var analysisRoute: VideoRoute?
     @State private var diagnosisRoute: VideoRoute?
     /// Set only by analysis `onReady`; presented from the analysis cover's `onDismiss`.
@@ -44,17 +97,31 @@ struct PracticeDetailView: View {
     @State private var videoPlayURL: URL?
     @FocusState private var noteFocused: Bool
 
-    init(taskId: String) {
-        self.taskId = taskId
-        _tasks = Query(filter: #Predicate<TaskItem> { $0.id == taskId && $0.deletedAt == nil })
-        let tid = taskId
-        _sessions = Query(filter: #Predicate<PracticeSession> { $0.taskId == tid && $0.deletedAt == nil })
+    init(itemId: UUID) {
+        self.itemId = itemId
+        let identifier = itemId
+        _items = Query(filter: #Predicate<PracticeItem> { $0.id == identifier && $0.deletedAt == nil })
     }
 
-    private var task: TaskItem? { tasks.first }
+    private var item: PracticeItem? { items.first }
+
+    private var mode: PracticeDetailMode {
+        guard let item else { return .historical }
+        return PracticeDetailState.mode(practiceDayKey: item.practiceDayKey)
+    }
+
+    private var isDirty: Bool {
+        PracticeDetailState.isDirty(
+            elapsedSeconds: practiceTimer.elapsedSec,
+            note: noteText,
+            storedDurationSeconds: storedDurationSeconds,
+            storedNote: storedNote
+        )
+    }
 
     private var visibleClips: [RecordingRef] {
-        let descriptors = sessions.flatMap(\.recordings).map {
+        guard let item else { return [] }
+        let descriptors = item.recordings.map {
             PracticeClipDescriptor(
                 id: $0.id, fileName: $0.fileName, createdAt: $0.createdAt, deletedAt: $0.deletedAt
             )
@@ -63,55 +130,22 @@ struct PracticeDetailView: View {
             clips: descriptors, videoMode: toolMode == .video
         )
         let byId = Dictionary(
-            sessions.flatMap(\.recordings).map { ($0.id, $0) },
+            item.recordings.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
         )
         return visible.compactMap { byId[$0.id] }
     }
 
-    private var resumeState: ResumeState {
-        let sessionRows = sessions.map { session in
-            ResumeSession(
-                id: session.id,
-                endedAt: session.endedAt,
-                bpm: session.bpm,
-                noteText: session.noteText,
-                deletedAt: session.deletedAt,
-                durationSec: session.durationSec,
-                recordingCount: session.recordings.filter { $0.deletedAt == nil }.count,
-                startedAt: session.startedAt
-            )
-        }
-        let recordingRows = sessions.flatMap(\.recordings).map {
-            ResumeRecording(
-                id: $0.id,
-                createdAt: $0.createdAt,
-                deletedAt: $0.deletedAt,
-                reviewNextAction: $0.reviewNextAction
-            )
-        }
-        return PracticeResumeQuery.resume(
-            sessions: sessionRows,
-            recordings: recordingRows,
-            defaultBpm: task?.defaultBpm ?? 80,
-            skippedSessionId: PracticeResumeSkipStore.skippedSessionId(taskId: taskId)
-        )
-    }
-
     /// Anything worth losing a confirmation tap over.
     private var hasUnsavedWork: Bool {
-        practiceTimer.elapsedSec > 0
-            || !recorder.pending.isEmpty
-            || !video.pending.isEmpty
-            || !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || openSessionId != nil
+        isDirty || !recorder.pending.isEmpty || !video.pending.isEmpty
     }
 
     var body: some View {
         ZStack {
             PageBackground()
-            if let task {
-                content(task)
+            if let item {
+                content(item)
             } else {
                 Text("任务不存在").foregroundStyle(GitaTheme.textSecondary)
             }
@@ -126,35 +160,33 @@ struct PracticeDetailView: View {
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
-            guard let task else { return }
-            if !didRestoreSession {
-                didRestoreSession = true
-                metronome.setBpm(resumeState.bpm)
-                if let sid = resumeState.openSessionId {
-                    openSessionId = sid
-                    noteText = resumeState.noteText
-                    practiceTimer.restore(
-                        elapsedSec: resumeState.durationSec,
-                        startedAt: resumeState.startedAt
-                    )
-                }
-                steps = task.steps.isEmpty ? [String(localized: "新步骤")] : task.steps
+            guard let item else { return }
+            if !didLoadItem {
+                didLoadItem = true
+                noteText = item.note
+                storedNote = item.note
+                storedDurationSeconds = PracticeDetailState.initialElapsedSeconds(
+                    storedDurationSeconds: item.durationSeconds
+                )
+                practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
+                metronome.setBpm(item.bpm ?? 80)
             }
             AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
                 metronome.stop()
                 practiceTimer.pause()
-                if recorder.isRecording { recorder.stop(label: task.title) }
+                if recorder.isRecording { recorder.stop(label: item.title) }
             }
         }
         .onDisappear {
             AudioSessionCoordinator.shared.onInterruption = nil
             practiceTimer.pause()
             metronome.stop()
-            if recorder.isRecording { recorder.stop(label: task?.title ?? "") }
+            if recorder.isRecording { recorder.stop(label: item?.title ?? "") }
             player.stop()
             videoPlayURL = nil
-            if let task {
-                persistVisit(task: task)
+            if let item {
+                persistPending(item: item)
+                saveItemIfNeeded(item)
             }
             recorder.discardPending()
             for clip in video.takeAll() {
@@ -180,8 +212,8 @@ struct PracticeDetailView: View {
                     set: { if !$0 { video.dismiss() } }
                 ),
                 onPicked: { url in
-                    video.ingest(tempURL: url, label: task?.title ?? "")
-                    if let task { persistPending(task: task) }
+                    video.ingest(tempURL: url, label: item?.title ?? "")
+                    if let item { persistPending(item: item) }
                 },
                 onCancel: { video.dismiss() }
             )
@@ -190,18 +222,18 @@ struct PracticeDetailView: View {
     }
 
     @ViewBuilder
-    private func content(_ task: TaskItem) -> some View {
+    private func content(_ item: PracticeItem) -> some View {
         VStack(spacing: 0) {
             HStack {
                 Button("返回") { requestExit() }
                     .font(.system(size: 14))
                     .foregroundStyle(GitaTheme.textSecondary)
                     .frame(minWidth: 40, alignment: .leading)
-                Text(task.title)
+                Text(item.title)
                     .font(.system(size: 20, weight: .bold))
                     .lineLimit(1)
                     .frame(maxWidth: .infinity)
-                Button("完成") { complete(task) }
+                Button("完成") { complete(item) }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(GitaTheme.brand500)
                     .frame(minWidth: 40, alignment: .trailing)
@@ -217,14 +249,14 @@ struct PracticeDetailView: View {
                 }
             }) {
                 VideoSourceView(
-                    taskTitle: task.title,
+                    taskTitle: item.title,
                     onDismiss: { isSourcePresented = false },
                     onStartCamera: {
                         pendingCamera = true
                         isSourcePresented = false
                     },
                     onImported: { clip in
-                        persist(audioClip(clip), task: task)
+                        persist(audioClip(clip), item: item)
                         isSourcePresented = false
                     },
                     onToast: { show($0) }
@@ -233,30 +265,21 @@ struct PracticeDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if !AIPracticePresentation.isAIGenerated(subtitle: task.subtitle) {
+                    if let timeSig = item.timeSignature, !timeSig.isEmpty {
                         HStack {
-                            Text(task.subtitle)
                             Spacer()
-                            Text(task.timeSig)
+                            Text(timeSig)
                         }
                         .font(.system(size: 12))
                         .foregroundStyle(GitaTheme.textSecondary)
                     }
 
-                    if let line = PracticeResumeQuery.focusLine(state: resumeState) {
-                        Text(line)
-                            .font(GitaFont.caption())
-                            .foregroundStyle(GitaTheme.textSecondary)
-                            .accessibilityLabel(Text(line))
-                    }
-
                     metronomeCard
-                    timerCard(task)
-                    stepsCard
-                    toolsRow(task)
+                    timerCard
+                    toolsRow(item)
 
                     if recorder.isRecording {
-                        recordingActivePanel(task)
+                        recordingActivePanel(item)
                     }
 
                     if toolMode == .note {
@@ -265,6 +288,7 @@ struct PracticeDetailView: View {
                                 .font(.system(size: 14))
                                 .lineLimit(3...6)
                                 .focused($noteFocused)
+                                .disabled(mode == .historical)
                             Text("记录一点感受，下次继续从这里开始")
                                 .font(.system(size: 12))
                                 .foregroundStyle(GitaTheme.textSecondary)
@@ -276,10 +300,10 @@ struct PracticeDetailView: View {
                     }
 
                     if toolMode != .note {
-                        clipList(task)
+                        clipList(item)
                     }
 
-                    Button { complete(task) } label: {
+                    Button { complete(item) } label: {
                         Text("完成本次练习")
                             .font(.system(size: 16, weight: .semibold))
                             .foregroundStyle(GitaTheme.brandOn)
@@ -300,7 +324,7 @@ struct PracticeDetailView: View {
             .fullScreenCover(item: $diagnosisRoute) { route in
                 VideoDiagnosisView(
                     recordingId: route.id,
-                    taskTitle: task.title,
+                    taskTitle: item.title,
                     onClose: { diagnosisRoute = nil }
                 )
             }
@@ -313,7 +337,7 @@ struct PracticeDetailView: View {
         }) { route in
             VideoAnalysisView(
                 recordingId: route.id,
-                taskTitle: task.title,
+                taskTitle: item.title,
                 durationSec: route.durationSec,
                 onDismiss: { analysisRoute = nil },
                 onReady: {
@@ -360,18 +384,15 @@ struct PracticeDetailView: View {
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
     }
 
-    private func timerCard(_ task: TaskItem) -> some View {
+    private var timerCard: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(practiceTimer.display)
                     .font(GitaFont.timer())
-                Text("目标 \(task.targetMin):00")
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textSecondary)
             }
             Spacer()
             Button("RESET") {
-                resetTrip(task)
+                resetTrip()
             }
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(GitaTheme.textSecondary)
@@ -379,6 +400,7 @@ struct PracticeDetailView: View {
             .frame(minHeight: 38)
             .background(GitaTheme.bgSubtle)
             .clipShape(Capsule())
+            .disabled(mode == .historical)
 
             Button(practiceTimer.isRunning ? "暂停" : "开始") { togglePlay() }
                 .font(.system(size: 14, weight: .semibold))
@@ -387,6 +409,7 @@ struct PracticeDetailView: View {
                 .padding(.vertical, 11)
                 .background(GitaTheme.brand500)
                 .clipShape(Capsule())
+                .disabled(mode == .historical)
         }
         .padding(16)
         .frame(minHeight: 100)
@@ -395,47 +418,7 @@ struct PracticeDetailView: View {
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
     }
 
-    private var stepsCard: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("练习步骤").font(.system(size: 18, weight: .bold))
-                Spacer()
-                Button("新增步骤") { steps.append(String(localized: "新步骤")) }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(GitaTheme.brand500)
-            }
-            .padding(.bottom, 8)
-            ForEach(Array(steps.enumerated()), id: \.offset) { index, _ in
-                HStack(spacing: 10) {
-                    Text("\(index + 1)")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(GitaTheme.brand500)
-                        .frame(minWidth: 28, minHeight: 28)
-                        .background(GitaTheme.brand50)
-                        .clipShape(Circle())
-                    TextField("步骤", text: binding(index))
-                        .font(.system(size: 14))
-                    if let minutes = AIPracticePresentation.stepParts(steps[index]).minutes {
-                        Text("\(minutes) 分钟")
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textSecondary)
-                    }
-                    if steps.count > 1 {
-                        Button("删除") { steps.remove(at: index) }
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textTertiary)
-                    }
-                }
-                .padding(.vertical, 10)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-    }
-
-    private func toolsRow(_ task: TaskItem) -> some View {
+    private func toolsRow(_ item: PracticeItem) -> some View {
         HStack(spacing: 10) {
             tool(
                 title: recorder.isRecording ? String(localized: "录音中") : String(localized: "录音"),
@@ -446,27 +429,27 @@ struct PracticeDetailView: View {
                 Task {
                     if toolMode != .audio {
                         if recorder.isRecording {
-                            recorder.stop(label: task.title)
-                            persistPending(task: task)
+                            recorder.stop(label: item.title)
+                            persistPending(item: item)
                         }
                         toolMode = .audio
                         return
                     }
                     if recorder.isRecording {
-                        recorder.stop(label: task.title)
-                        persistPending(task: task)
+                        recorder.stop(label: item.title)
+                        persistPending(item: item)
                     } else {
                         player.stop()
                         videoPlayURL = nil
-                        await recorder.start(label: task.title)
+                        await recorder.start(label: item.title)
                     }
                 }
             }
             tool(title: String(localized: "写笔记"), systemImage: "square.and.pencil", on: toolMode == .note) {
                 noteFocused = false
                 if recorder.isRecording {
-                    recorder.stop(label: task.title)
-                    persistPending(task: task)
+                    recorder.stop(label: item.title)
+                    persistPending(item: item)
                 }
                 toolMode = .note
             }
@@ -477,8 +460,8 @@ struct PracticeDetailView: View {
             ) {
                 noteFocused = false
                 if recorder.isRecording {
-                    recorder.stop(label: task.title)
-                    persistPending(task: task)
+                    recorder.stop(label: item.title)
+                    persistPending(item: item)
                 }
                 if toolMode != .video {
                     toolMode = .video
@@ -491,7 +474,7 @@ struct PracticeDetailView: View {
         }
     }
 
-    private func clipList(_ task: TaskItem) -> some View {
+    private func clipList(_ item: PracticeItem) -> some View {
         VStack(spacing: 10) {
             if visibleClips.isEmpty {
                 VStack(spacing: 8) {
@@ -513,7 +496,7 @@ struct PracticeDetailView: View {
                 .padding(.vertical, 40)
             } else {
                 ForEach(visibleClips, id: \.id) { rec in
-                    clipCard(rec, taskTitle: task.title)
+                    clipCard(rec, taskTitle: item.title)
                 }
             }
         }
@@ -674,7 +657,7 @@ struct PracticeDetailView: View {
         present()
     }
 
-    private func recordingActivePanel(_ task: TaskItem) -> some View {
+    private func recordingActivePanel(_ item: PracticeItem) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
                 Circle()
@@ -715,8 +698,8 @@ struct PracticeDetailView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    recorder.stop(label: task.title)
-                    persistPending(task: task)
+                    recorder.stop(label: item.title)
+                    persistPending(item: item)
                 } label: {
                     Text("停止")
                         .font(.system(size: 14, weight: .semibold))
@@ -789,14 +772,8 @@ struct PracticeDetailView: View {
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
-    private func binding(_ index: Int) -> Binding<String> {
-        Binding(
-            get: { index < steps.count ? steps[index] : "" },
-            set: { if index < steps.count { steps[index] = $0 } }
-        )
-    }
-
     private func togglePlay() {
+        guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
         noteFocused = false
         if practiceTimer.isRunning {
             practiceTimer.pause()
@@ -815,9 +792,10 @@ struct PracticeDetailView: View {
         noteFocused = false
         practiceTimer.pause()
         metronome.stop()
-        if let task {
-            if recorder.isRecording { recorder.stop(label: task.title) }
-            persistVisit(task: task)
+        if let item {
+            if recorder.isRecording { recorder.stop(label: item.title) }
+            persistPending(item: item)
+            saveItemIfNeeded(item)
         }
         leave()
     }
@@ -833,27 +811,22 @@ struct PracticeDetailView: View {
         )
     }
 
-    private func persist(_ clip: AudioRecorderService.Clip, task: TaskItem) {
+    private func persist(_ clip: AudioRecorderService.Clip, item: PracticeItem) {
+        guard mode == .editable else { return }
         guard FileManager.default.fileExists(atPath: clip.url.path) else {
             show(String(localized: MediaReviewMedia.isVideo(fileName: clip.fileName) ? "录像没保存" : "录音没保存"))
             return
         }
-        let end = Date()
-        let elapsed = practiceTimer.elapsedSec
-        let start = practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed))
-        let sid: String?
-        if let open = openSessionId {
-            sid = store.appendRecording(sessionId: open, clip: clip) ? open : nil
-        } else {
-            sid = store.beginOpenSession(
-                taskId: task.id, steps: steps, note: noteText,
-                startedAt: start, endedAt: end, durationSec: elapsed,
-                bpm: metronome.bpm, clip: clip
-            )
+        let recording = RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes,
+            durationSec: clip.durationSec, createdAt: clip.createdAt, label: clip.label
+        )
+        do {
+            try store.attachRecording(recording, toPracticeItemId: item.id)
+        } catch {
+            show(store.lastError?.localizedDescription ?? error.localizedDescription)
+            return
         }
-        guard let sid else { return }
-        openSessionId = sid
-        clearSkipIfResumed(taskId: task.id, sessionId: sid)
         recorder.detach(clip.id)
         video.detach(clip.id)
         if llmCredentials.isConfigured(baseURL: llmBaseURL, model: llmModel) {
@@ -870,101 +843,65 @@ struct PracticeDetailView: View {
         }
     }
 
-    private func persistPending(task: TaskItem) {
-        for clip in recorder.pending { persist(clip, task: task) }
-        for clip in video.pending { persist(audioClip(clip), task: task) }
+    private func persistPending(item: PracticeItem) {
+        guard mode == .editable else { return }
+        for clip in recorder.pending { persist(clip, item: item) }
+        for clip in video.pending { persist(audioClip(clip), item: item) }
     }
 
-    private func saveOpenSession(task: TaskItem) -> Bool {
-        guard let openSessionId else { return false }
-        let end = Date()
-        return store.updateOpenSession(
-            sessionId: openSessionId,
-            steps: steps,
-            note: noteText,
-            endedAt: end,
-            durationSec: practiceTimer.elapsedSec,
-            bpm: metronome.bpm
-        )
-    }
-
-    @discardableResult
-    private func persistVisit(task: TaskItem) -> String? {
-        persistPending(task: task)
-        if let open = openSessionId {
-            guard saveOpenSession(task: task) else { return nil }
-            clearSkipIfResumed(taskId: task.id, sessionId: open)
-            return open
+    private func saveItemIfNeeded(_ item: PracticeItem) {
+        guard PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: isDirty) else {
+            return
         }
-        let leftover = recorder.consume() + video.takeAll().map { audioClip($0) }
-        let note = noteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let elapsed = practiceTimer.elapsedSec
-        let hasRecord = elapsed > 0 || !note.isEmpty || !leftover.isEmpty
-        if hasRecord {
-            let end = Date()
-            let savedId = store.finishSession(
-                taskId: task.id, steps: steps, note: noteText,
-                startedAt: practiceTimer.startedAt ?? end.addingTimeInterval(TimeInterval(-elapsed)),
-                endedAt: end, durationSec: elapsed, bpm: metronome.bpm, recordings: leftover
+        do {
+            try store.savePracticeItem(
+                id: item.id,
+                durationSeconds: practiceTimer.elapsedSec,
+                note: noteText,
+                now: Date()
             )
-            if let savedId {
-                openSessionId = savedId
-                clearSkipIfResumed(taskId: task.id, sessionId: savedId)
-                return savedId
-            }
+            storedDurationSeconds = max(0, practiceTimer.elapsedSec)
+            storedNote = noteText
+        } catch {
+            show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
-        store.updateTaskPracticeState(task.id, steps: steps, bpm: metronome.bpm)
-        return nil
     }
 
-    private func resetTrip(_ task: TaskItem) {
+    private func resetTrip() {
+        guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
         noteFocused = false
         practiceTimer.pause()
         metronome.stop()
-        if recorder.isRecording { recorder.stop(label: task.title) }
-        let sealedId = persistVisit(task: task) ?? openSessionId ?? resumeState.openSessionId
-        if let sealedId {
-            PracticeResumeSkipStore.skip(taskId: task.id, sessionId: sealedId)
-        }
-        practiceTimer.reset()
-        noteText = ""
-        openSessionId = nil
+        practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
+        noteText = storedNote
     }
 
-    private func clearSkipIfResumed(taskId: String, sessionId: String) {
-        if PracticeResumeSkipStore.skippedSessionId(taskId: taskId) != sessionId {
-            PracticeResumeSkipStore.clear(taskId: taskId)
-        }
-    }
-
-    private func complete(_ task: TaskItem) {
+    private func complete(_ item: PracticeItem) {
         guard !isCompleting else { return }
         noteFocused = false
         isCompleting = true
-        if recorder.isRecording { recorder.stop(label: task.title) }
+        if recorder.isRecording { recorder.stop(label: item.title) }
         practiceTimer.pause()
         metronome.stop()
         player.stop()
         videoPlayURL = nil
+        persistPending(item: item)
+        saveItemIfNeeded(item)
+        if mode == .historical {
+            router.practicePath.removeAll()
+            return
+        }
         let hadContent = hasUnsavedWork
-        let stepsChanged = steps != task.steps
-        let hadNote = !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        let savedId = persistVisit(task: task)
-        if let savedId {
+            || storedDurationSeconds > 0
+            || !storedNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !item.recordings.filter({ $0.deletedAt == nil }).isEmpty
+        if hadContent {
             Haptics.success()
-            router.returnPracticeToToday = true
-            router.practicePath.removeAll()
-            return
+        } else {
+            router.practiceToast = String(localized: "这次没有留下记录")
         }
-        if !hadContent {
-            if !stepsChanged && !hadNote {
-                router.practiceToast = String(localized: "这次没有留下记录")
-            }
-            router.returnPracticeToToday = true
-            router.practicePath.removeAll()
-            return
-        }
-        isCompleting = false
+        router.returnPracticeToToday = true
+        router.practicePath.removeAll()
     }
 
     private func show(_ message: String) {

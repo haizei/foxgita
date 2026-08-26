@@ -138,13 +138,16 @@ struct PracticeView: View {
             .navigationBarHidden(true)
             .navigationDestination(for: PracticeRoute.self) { route in
                 switch route {
-                case .detail(let id): PracticeDetailView(taskId: id)
+                case .detail(let id): PracticeDetailView(itemId: id)
                 }
             }
             .sheet(isPresented: $showSheet) {
-                guard let taskId = pendingTaskId else { return }
+                guard let raw = pendingTaskId else { return }
                 pendingTaskId = nil
-                router.practicePath.append(.detail(taskId: taskId))
+                guard let route = PracticeDetailState.practiceRoute(fromSheetSelection: raw) else {
+                    return
+                }
+                router.practicePath.append(route)
             } content: {
                 RecommendSheet(selection: $pendingTaskId)
             }
@@ -170,7 +173,7 @@ struct PracticeView: View {
                     selectedDayKey: todayKey, allItems: allSnapshots
                 ).items
                 guard let first = todayItems.first else { return }
-                router.practicePath = [.detail(taskId: first.id.uuidString)]
+                router.practicePath = [.detail(itemId: first.id)]
             }
             .onChange(of: router.returnPracticeToToday) { _, requested in
                 guard requested else { return }
@@ -213,7 +216,7 @@ struct PracticeView: View {
                     minutes: minutesFromSeconds(item.durationSeconds),
                     category: category(for: item)
                 ) {
-                    router.practicePath.append(.detail(taskId: item.id.uuidString))
+                    router.practicePath.append(.detail(itemId: item.id))
                 }
             }
         }

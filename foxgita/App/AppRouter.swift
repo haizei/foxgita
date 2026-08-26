@@ -11,7 +11,7 @@ enum MainTab: Hashable {
 }
 
 enum PracticeRoute: Hashable {
-    case detail(taskId: String)
+    case detail(itemId: UUID)
 }
 
 enum RecordRoute: Hashable {
