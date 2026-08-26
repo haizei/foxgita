@@ -16,6 +16,22 @@ struct MediaReviewContext: Equatable, Sendable {
     var note: String
 }
 
+enum PracticeItemSource: String {
+    case custom
+    case recommend
+    case photo
+    case next
+}
+
+struct PracticeItemInput {
+    let title: String
+    let category: PracticeCategory
+    let source: PracticeItemSource
+    let originId: String?
+    let bpm: Int?
+    let timeSignature: String?
+}
+
 /// Command layer. Views read through `@Query` for free reactivity and write
 /// only through here, so every invariant and every error path lives in one
 /// place. Failures surface as `lastError` for the toast to pick up.
@@ -56,6 +72,49 @@ final class PracticeStore {
 
     func practiceItemSnapshots(profileId: UUID) throws -> [PracticeItemSnapshot] {
         try repository.practiceItems(profileId: profileId).map(Self.snapshot(from:))
+    }
+
+    func createPracticeItem(input: PracticeItemInput, now: Date, calendar: Calendar) throws -> PracticeItem {
+        let profileId = try requireProfileUUID()
+        let item = PracticeItem(
+            id: UUID(),
+            profileId: profileId,
+            practiceDayKey: PracticeDayKey.make(from: now, calendar: calendar),
+            title: input.title,
+            categoryRaw: input.category.rawValue,
+            durationSeconds: 0,
+            bpm: input.bpm,
+            timeSignature: input.timeSignature,
+            note: "",
+            sourceRaw: input.source.rawValue,
+            originId: input.originId,
+            createdAt: now,
+            updatedAt: now
+        )
+        do {
+            try repository.insertPracticeItem(item)
+            try persistPracticeItemChanges()
+            return item
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            throw lastError ?? .saveFailed
+        }
+    }
+
+    func savePracticeItem(id: UUID, durationSeconds: Int, note: String, now: Date) throws {
+        let item = try requireLivePracticeItem(id: id)
+        item.durationSeconds = max(0, durationSeconds)
+        item.note = note
+        item.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func softDeletePracticeItem(id: UUID, now: Date) throws {
+        let item = try requireLivePracticeItem(id: id)
+        item.deletedAt = now
+        item.updatedAt = now
+        try persistPracticeItemChanges()
     }
 
     // MARK: - Launch
@@ -618,6 +677,33 @@ final class PracticeStore {
             return nil
         }
         return id
+    }
+
+    private func requireProfileUUID() throws -> UUID {
+        guard let raw = requireProfileId(), let id = UUID(uuidString: raw) else {
+            throw lastError ?? .saveFailed
+        }
+        return id
+    }
+
+    private func requireLivePracticeItem(id: UUID) throws -> PracticeItem {
+        let profileId = try requireProfileUUID()
+        guard let item = try repository.practiceItem(id: id, profileId: profileId) else {
+            lastError = .notFound
+            throw StoreError.notFound
+        }
+        return item
+    }
+
+    private func persistPracticeItemChanges() throws {
+        do {
+            try repository.save()
+            lastError = nil
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            throw lastError ?? .saveFailed
+        }
     }
 
     private func applyCandidateFocus(

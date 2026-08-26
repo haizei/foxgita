@@ -971,4 +971,199 @@ struct PracticeStoreTests {
         #expect(deletedSnapshot.isDeleted)
         #expect(deletedSnapshot.title == "墓碑")
     }
+
+    // MARK: - PracticeItem create and absolute save
+
+    private func makeInput(
+        title: String = "开放弦",
+        category: PracticeCategory = .left,
+        source: PracticeItemSource = .custom,
+        originId: String? = "origin-1",
+        bpm: Int? = 80,
+        timeSignature: String? = "4/4"
+    ) -> PracticeItemInput {
+        PracticeItemInput(
+            title: title,
+            category: category,
+            source: source,
+            originId: originId,
+            bpm: bpm,
+            timeSignature: timeSignature
+        )
+    }
+
+    private func activeProfileId(_ repo: InMemoryPracticeRepository) throws -> UUID {
+        let profile = try #require(try repo.activeProfile())
+        return try #require(UUID(uuidString: profile.id))
+    }
+
+    @Test func createPracticeItemPersistsImmediatelyWithoutLegacyCompanions() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 21, calendar: cal)
+        let tasksBefore = try repo.tasks().count
+        let sessionsBefore = try repo.sessions().count
+
+        let created = try store.createPracticeItem(input: makeInput(), now: now, calendar: cal)
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.id == created.id)
+        #expect(fetched.profileId == profileId)
+        #expect(fetched.title == "开放弦")
+        #expect(fetched.categoryRaw == PracticeCategory.left.rawValue)
+        #expect(fetched.sourceRaw == PracticeItemSource.custom.rawValue)
+        #expect(fetched.originId == "origin-1")
+        #expect(fetched.bpm == 80)
+        #expect(fetched.timeSignature == "4/4")
+        #expect(fetched.durationSeconds == 0)
+        #expect(fetched.note == "")
+        #expect(fetched.practiceDayKey == PracticeDayKey.make(from: now, calendar: cal))
+        #expect(fetched.createdAt == now)
+        #expect(fetched.updatedAt == now)
+        #expect(fetched.deletedAt == nil)
+        #expect(try repo.practiceItems(profileId: profileId).map(\.id) == [created.id])
+        #expect(try repo.tasks().count == tasksBefore)
+        #expect(try repo.sessions().count == sessionsBefore)
+    }
+
+    @Test func savePracticeItem600TwiceStays600() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+
+        try store.savePracticeItem(id: created.id, durationSeconds: 600, note: "第一遍", now: date(2026, 8, 26, 11, calendar: cal))
+        try store.savePracticeItem(id: created.id, durationSeconds: 600, note: "第二遍", now: date(2026, 8, 26, 12, calendar: cal))
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.durationSeconds == 600)
+        #expect(fetched.note == "第二遍")
+        #expect(try repo.practiceItems(profileId: profileId).filter { $0.id == created.id }.count == 1)
+    }
+
+    @Test func savePracticeItemDoesNotChangePracticeDayKey() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let createdAt = date(2026, 8, 26, 23, calendar: cal)
+        let created = try store.createPracticeItem(input: makeInput(), now: createdAt, calendar: cal)
+
+        try store.savePracticeItem(
+            id: created.id,
+            durationSeconds: 120,
+            note: "跨夜保存",
+            now: date(2026, 8, 27, 1, calendar: cal)
+        )
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.practiceDayKey == "2026-08-26")
+        #expect(fetched.practiceDayKey == PracticeDayKey.make(from: createdAt, calendar: cal))
+        #expect(fetched.durationSeconds == 120)
+    }
+
+    @Test func savePracticeItemClampsNegativeDurationToZero() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let now = date(2026, 8, 26, 15, calendar: cal)
+        let created = try store.createPracticeItem(input: makeInput(), now: now, calendar: cal)
+
+        try store.savePracticeItem(id: created.id, durationSeconds: -15, note: "无效计时", now: now)
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.durationSeconds == 0)
+        #expect(fetched.note == "无效计时")
+        #expect(fetched.updatedAt == now)
+        #expect(fetched.practiceDayKey == "2026-08-26")
+    }
+
+    @Test func repeatedSaveOnSameDetailOverwritesAndDoesNotAccumulate() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+
+        try store.savePracticeItem(id: created.id, durationSeconds: 180, note: "保存", now: date(2026, 8, 26, 11, calendar: cal))
+        try store.savePracticeItem(id: created.id, durationSeconds: 420, note: "再保存", now: date(2026, 8, 26, 12, calendar: cal))
+        try store.savePracticeItem(id: created.id, durationSeconds: 420, note: "再保存", now: date(2026, 8, 26, 12, calendar: cal))
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.durationSeconds == 420)
+        #expect(try repo.practiceItems(profileId: profileId).filter { $0.id == created.id }.count == 1)
+    }
+
+    @Test func onDisappearSaveAfterButtonSaveDoesNotAccumulate() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+        let now = date(2026, 8, 26, 14, calendar: cal)
+
+        try store.savePracticeItem(id: created.id, durationSeconds: 600, note: "点保存", now: now)
+        try store.savePracticeItem(id: created.id, durationSeconds: 600, note: "离开自动保存", now: now)
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.durationSeconds == 600)
+        #expect(fetched.note == "离开自动保存")
+        #expect(try repo.practiceItems(profileId: profileId).count == 1)
+    }
+
+    @Test func reenterThenSaveUsesStoredDurationAndDoesNotAccumulate() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+        try store.savePracticeItem(
+            id: created.id, durationSeconds: 600, note: "离开前", now: date(2026, 8, 26, 16, calendar: cal)
+        )
+
+        let reentered = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        let baseDuration = reentered.durationSeconds
+        try store.savePracticeItem(
+            id: reentered.id,
+            durationSeconds: baseDuration,
+            note: "重进后再保存",
+            now: date(2026, 8, 26, 17, calendar: cal)
+        )
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(baseDuration == 600)
+        #expect(fetched.durationSeconds == 600)
+        #expect(fetched.note == "重进后再保存")
+        #expect(try repo.practiceItems(profileId: profileId).filter { $0.id == created.id }.count == 1)
+    }
+
+    @Test func softDeletePracticeItemSetsDeletedAtAndHidesFromQueries() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(title: "待删"), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+        let deletedAt = date(2026, 8, 26, 18, calendar: cal)
+
+        try store.softDeletePracticeItem(id: created.id, now: deletedAt)
+
+        #expect(created.deletedAt == deletedAt)
+        #expect(try repo.practiceItem(id: created.id, profileId: profileId) == nil)
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+        #expect(PracticeStore.snapshot(from: created).isDeleted)
+    }
 }
