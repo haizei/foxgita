@@ -52,6 +52,14 @@ enum PracticeDetailState {
         mode == .editable
     }
 
+    static func shouldAllowCapture(mode: PracticeDetailMode) -> Bool {
+        mode == .editable
+    }
+
+    static func shouldAllowComplete(mode: PracticeDetailMode) -> Bool {
+        mode == .editable
+    }
+
     static func loadedItem(
         requestedId: UUID,
         candidates: [PracticeItemSnapshot]
@@ -237,6 +245,7 @@ struct PracticeDetailView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(GitaTheme.brand500)
                     .frame(minWidth: 40, alignment: .trailing)
+                    .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
             }
             .frame(minHeight: 56)
             .padding(.horizontal, 16)
@@ -314,6 +323,7 @@ struct PracticeDetailView: View {
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
+                    .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
@@ -418,6 +428,8 @@ struct PracticeDetailView: View {
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
     }
 
+    /// Historical items stay view-only: notes, existing clips, and review remain;
+    /// 录音 / 录视频 / import and the complete CTA must not start capture or persist.
     private func toolsRow(_ item: PracticeItem) -> some View {
         HStack(spacing: 10) {
             tool(
@@ -435,6 +447,7 @@ struct PracticeDetailView: View {
                         toolMode = .audio
                         return
                     }
+                    guard PracticeDetailState.shouldAllowCapture(mode: mode) else { return }
                     if recorder.isRecording {
                         recorder.stop(label: item.title)
                         persistPending(item: item)
@@ -445,6 +458,7 @@ struct PracticeDetailView: View {
                     }
                 }
             }
+            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode) && toolMode == .audio)
             tool(title: String(localized: "写笔记"), systemImage: "square.and.pencil", on: toolMode == .note) {
                 noteFocused = false
                 if recorder.isRecording {
@@ -467,10 +481,12 @@ struct PracticeDetailView: View {
                     toolMode = .video
                     return
                 }
+                guard PracticeDetailState.shouldAllowCapture(mode: mode) else { return }
                 player.stop()
                 videoPlayURL = nil
                 isSourcePresented = true
             }
+            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode) && toolMode == .video)
         }
     }
 
@@ -812,7 +828,7 @@ struct PracticeDetailView: View {
     }
 
     private func persist(_ clip: AudioRecorderService.Clip, item: PracticeItem) {
-        guard mode == .editable else { return }
+        guard PracticeDetailState.shouldAllowCapture(mode: mode) else { return }
         guard FileManager.default.fileExists(atPath: clip.url.path) else {
             show(String(localized: MediaReviewMedia.isVideo(fileName: clip.fileName) ? "录像没保存" : "录音没保存"))
             return
@@ -844,7 +860,7 @@ struct PracticeDetailView: View {
     }
 
     private func persistPending(item: PracticeItem) {
-        guard mode == .editable else { return }
+        guard PracticeDetailState.shouldAllowCapture(mode: mode) else { return }
         for clip in recorder.pending { persist(clip, item: item) }
         for clip in video.pending { persist(audioClip(clip), item: item) }
     }
@@ -877,6 +893,7 @@ struct PracticeDetailView: View {
     }
 
     private func complete(_ item: PracticeItem) {
+        guard PracticeDetailState.shouldAllowComplete(mode: mode) else { return }
         guard !isCompleting else { return }
         noteFocused = false
         isCompleting = true
@@ -887,10 +904,6 @@ struct PracticeDetailView: View {
         videoPlayURL = nil
         persistPending(item: item)
         saveItemIfNeeded(item)
-        if mode == .historical {
-            router.practicePath.removeAll()
-            return
-        }
         let hadContent = hasUnsavedWork
             || storedDurationSeconds > 0
             || !storedNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

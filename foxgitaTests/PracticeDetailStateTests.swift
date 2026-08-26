@@ -49,6 +49,8 @@ struct PracticeDetailStateTests {
         )
         #expect(mode == .editable)
         #expect(PracticeDetailState.shouldAllowTimer(mode: mode))
+        #expect(PracticeDetailState.shouldAllowCapture(mode: mode))
+        #expect(PracticeDetailState.shouldAllowComplete(mode: mode))
     }
 
     @Test func historicalDayIsReadOnly() {
@@ -60,6 +62,8 @@ struct PracticeDetailStateTests {
         )
         #expect(mode == .historical)
         #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowCapture(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowComplete(mode: mode))
         #expect(
             !PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: true)
         )
@@ -74,6 +78,8 @@ struct PracticeDetailStateTests {
             )
         )
         #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowCapture(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowComplete(mode: mode))
     }
 
     @Test func editableSavesWhenDirtyAndSkipsClean() {
