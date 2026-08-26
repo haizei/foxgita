@@ -16,6 +16,11 @@ struct MediaReviewContext: Equatable, Sendable {
     var note: String
 }
 
+enum PracticeReviewContext: Equatable, Sendable {
+    case practiceItem(UUID)
+    case legacySession(UUID)
+}
+
 enum PracticeItemSource: String {
     case custom
     case recommend
@@ -117,6 +122,22 @@ final class PracticeStore {
         try persistPracticeItemChanges()
     }
 
+    func attachRecording(_ recording: RecordingRef, toPracticeItemId itemId: UUID) throws {
+        guard RecordingStore.fileExists(fileName: recording.fileName) else {
+            lastError = .fileMissing
+            throw StoreError.fileMissing
+        }
+        let item = try requireLivePracticeItem(id: itemId)
+        recording.session = nil
+        if !item.recordings.contains(where: { $0.id == recording.id }) {
+            item.recordings.append(recording)
+        }
+        if recording.practiceItem == nil {
+            recording.practiceItem = item
+        }
+        try persistPracticeItemChanges()
+    }
+
     // MARK: - Launch
 
     func prepare() {
@@ -144,8 +165,12 @@ final class PracticeStore {
     /// recorded and then abandoned by leaving the practice screen.
     @discardableResult
     func gcOrphanRecordings() -> Int {
-        guard let sessions = try? repository.sessions() else { return 0 }
-        let referenced = Set(sessions.flatMap { $0.recordings.map(\.fileName) })
+        let sessions = (try? repository.sessions()) ?? []
+        let items = (try? repository.practiceItemsIncludingDeleted()) ?? []
+        let referenced = RecordingStore.referencedFileNames(
+            practiceItems: items,
+            sessions: sessions
+        )
         return RecordingStore.removeOrphans(referenced: referenced)
     }
 
@@ -560,7 +585,7 @@ final class PracticeStore {
                 rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
-                if let profileId = rec.session?.profileId, !profileId.isEmpty {
+                if let profileId = profileId(for: rec) {
                     pending = (profileId, recordingId, draft.focus)
                 }
             }
@@ -587,7 +612,7 @@ final class PracticeStore {
                 rec.videoFindings = draft.findings
                 rec.updatedAt = Date()
                 rec.syncState = .local
-                if let profileId = rec.session?.profileId, !profileId.isEmpty {
+                if let profileId = profileId(for: rec) {
                     pending = (profileId, recordingId, draft.focus)
                 }
             }
@@ -619,12 +644,32 @@ final class PracticeStore {
         }
     }
 
+    func practiceReviewContext(recordingId: String) -> PracticeReviewContext? {
+        guard let recording = try? repository.recording(id: recordingId) else { return nil }
+        if let item = practiceItemOwning(recording) {
+            return .practiceItem(item.id)
+        }
+        if let session = sessionOwning(recording), let sessionId = UUID(uuidString: session.id) {
+            return .legacySession(sessionId)
+        }
+        return nil
+    }
+
     func reviewContext(recordingId: String) -> MediaReviewContext? {
         guard let recording = try? repository.recording(id: recordingId) else { return nil }
-        let session = recording.session ?? (try? repository.sessions().first { session in
-            session.recordings.contains { $0.id == recordingId && $0.deletedAt == nil }
-        })
-        guard let session else { return nil }
+        if let item = practiceItemOwning(recording) {
+            return MediaReviewContext(
+                recordingId: recording.id,
+                fileName: recording.fileName,
+                durationSec: recording.durationSec,
+                taskTitle: item.title,
+                steps: [],
+                bpm: item.bpm ?? 0,
+                timeSig: item.timeSignature ?? "",
+                note: item.note
+            )
+        }
+        guard let session = sessionOwning(recording) else { return nil }
         return MediaReviewContext(
             recordingId: recording.id,
             fileName: recording.fileName,
@@ -704,6 +749,31 @@ final class PracticeStore {
             lastError = StoreError.from(error)
             throw lastError ?? .saveFailed
         }
+    }
+
+    private func practiceItemOwning(_ recording: RecordingRef) -> PracticeItem? {
+        if let item = recording.practiceItem { return item }
+        let items = (try? repository.practiceItemsIncludingDeleted()) ?? []
+        return items.first { item in
+            item.recordings.contains { $0.id == recording.id && $0.deletedAt == nil }
+        }
+    }
+
+    private func sessionOwning(_ recording: RecordingRef) -> PracticeSession? {
+        if let session = recording.session { return session }
+        return try? repository.sessions().first { session in
+            session.recordings.contains { $0.id == recording.id && $0.deletedAt == nil }
+        }
+    }
+
+    private func profileId(for recording: RecordingRef) -> String? {
+        if let item = practiceItemOwning(recording) {
+            return item.profileId.uuidString
+        }
+        if let profileId = sessionOwning(recording)?.profileId, !profileId.isEmpty {
+            return profileId
+        }
+        return nil
     }
 
     private func applyCandidateFocus(

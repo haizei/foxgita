@@ -1166,4 +1166,129 @@ struct PracticeStoreTests {
         #expect(try repo.practiceItems(profileId: profileId).isEmpty)
         #expect(PracticeStore.snapshot(from: created).isDeleted)
     }
+
+    // MARK: - Recording ownership on PracticeItem
+
+    @Test func attachRecordingDoesNotCreateSession() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let item = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+        let sessionsBefore = try repo.sessions().count
+        let clip = try writeClip(id: "item-new")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        let recording = RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes,
+            durationSec: clip.durationSec, createdAt: clip.createdAt, label: clip.label
+        )
+
+        try store.attachRecording(recording, toPracticeItemId: item.id)
+
+        #expect(try repo.sessions().count == sessionsBefore)
+        let stored = try #require(try repo.recording(id: clip.id))
+        #expect(stored.session == nil)
+        #expect(stored.practiceItem?.id == item.id)
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.recordings.map(\.id) == [clip.id])
+        #expect(store.practiceReviewContext(recordingId: clip.id) == .practiceItem(item.id))
+        let media = try #require(store.reviewContext(recordingId: clip.id))
+        #expect(media.taskTitle == item.title)
+        #expect(media.note == item.note)
+        #expect(media.fileName == clip.fileName)
+    }
+
+    @Test func deletingPracticeItemCascadesItsRecordings() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let cal = shanghai()
+        let item = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: cal), calendar: cal
+        )
+        let clip = try writeClip(id: "item-cascade")
+        defer { RecordingStore.delete(fileName: clip.fileName) }
+        let recording = RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes, durationSec: clip.durationSec
+        )
+        try store.attachRecording(recording, toPracticeItemId: item.id)
+        #expect(try repo.recording(id: clip.id) != nil)
+
+        repo.removePracticeItem(id: item.id)
+
+        #expect(try repo.recording(id: clip.id) == nil)
+        #expect(try repo.sessions().isEmpty)
+        #expect(store.practiceReviewContext(recordingId: clip.id) == nil)
+    }
+
+    @Test func legacySessionRecordingsRemainReadable() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        try seedActive(into: repo)
+        store.prepare()
+        let now = Date()
+        #expect(store.finishSession(
+            taskId: "warm", steps: ["慢速"], note: "旧笔记",
+            startedAt: now, endedAt: now, durationSec: 60, bpm: 80,
+            recordings: []
+        ) != nil)
+        let session = try repo.sessions()[0]
+        session.recordings.append(RecordingRef(id: "legacy-clip", fileName: "legacy.m4a", bytes: 1, durationSec: 12))
+        try repo.save()
+
+        let stored = try #require(try repo.recording(id: "legacy-clip"))
+        #expect(stored.practiceItem == nil)
+        let sessionId = try #require(UUID(uuidString: session.id))
+        #expect(store.practiceReviewContext(recordingId: "legacy-clip") == .legacySession(sessionId))
+        let media = try #require(store.reviewContext(recordingId: "legacy-clip"))
+        #expect(media.taskTitle == "指尖热身")
+        #expect(media.bpm == 80)
+        #expect(media.note == "旧笔记")
+        #expect(media.fileName == "legacy.m4a")
+    }
+
+    @Test func attachRecordingMissingFileDoesNotWrite() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let item = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: shanghai()), calendar: shanghai()
+        )
+        let recording = RecordingRef(
+            id: "missing-clip",
+            fileName: "missing-\(UUID().uuidString).m4a",
+            bytes: 1
+        )
+
+        #expect(throws: StoreError.fileMissing) {
+            try store.attachRecording(recording, toPracticeItemId: item.id)
+        }
+        #expect(store.lastError == .fileMissing)
+        #expect(try repo.recording(id: "missing-clip") == nil)
+        #expect(item.recordings.isEmpty)
+        #expect(try repo.sessions().isEmpty)
+    }
+
+    @Test func gcOrphanRecordingsKeepsPracticeItemClips() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let item = try store.createPracticeItem(
+            input: makeInput(), now: date(2026, 8, 26, calendar: shanghai()), calendar: shanghai()
+        )
+        let clip = try writeClip(id: "item-gc")
+        let orphanName = "orphan-\(UUID().uuidString).m4a"
+        try Data([0x01]).write(to: RecordingStore.url(for: orphanName))
+        defer {
+            RecordingStore.delete(fileName: clip.fileName)
+            RecordingStore.delete(fileName: orphanName)
+        }
+        let recording = RecordingRef(
+            id: clip.id, fileName: clip.fileName, bytes: clip.bytes, durationSec: clip.durationSec
+        )
+        try store.attachRecording(recording, toPracticeItemId: item.id)
+
+        let removed = store.gcOrphanRecordings()
+        #expect(removed >= 1)
+        #expect(RecordingStore.fileExists(fileName: clip.fileName))
+        #expect(!RecordingStore.fileExists(fileName: orphanName))
+        #expect(try repo.recording(id: clip.id) != nil)
+    }
 }

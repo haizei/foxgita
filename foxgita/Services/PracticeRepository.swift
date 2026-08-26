@@ -31,6 +31,7 @@ protocol PracticeRepository: AnyObject {
     func practiceItems(profileId: UUID) throws -> [PracticeItem]
     func practiceItem(id: UUID, profileId: UUID) throws -> PracticeItem?
     func insertPracticeItem(_ item: PracticeItem) throws
+    func practiceItemsIncludingDeleted() throws -> [PracticeItem]
 }
 
 enum StoreError: LocalizedError, Equatable {
@@ -157,6 +158,10 @@ final class SwiftDataPracticeRepository: PracticeRepository {
 
     func insertPracticeItem(_ item: PracticeItem) throws { context.insert(item) }
 
+    func practiceItemsIncludingDeleted() throws -> [PracticeItem] {
+        try context.fetch(FetchDescriptor<PracticeItem>())
+    }
+
     func removeAll() throws {
         try context.delete(model: RecordingRef.self)
         try context.delete(model: PracticeSession.self)
@@ -248,7 +253,11 @@ final class InMemoryPracticeRepository: PracticeRepository {
     }
 
     func recording(id: String) throws -> RecordingRef? {
-        storedSessions.lazy.flatMap(\.recordings).first { $0.id == id && $0.deletedAt == nil }
+        if let fromItem = storedPracticeItems.lazy.flatMap(\.recordings)
+            .first(where: { $0.id == id && $0.deletedAt == nil }) {
+            return fromItem
+        }
+        return storedSessions.lazy.flatMap(\.recordings).first { $0.id == id && $0.deletedAt == nil }
     }
 
     func add(_ task: TaskItem) throws { pendingTasks.append(task) }
@@ -264,6 +273,15 @@ final class InMemoryPracticeRepository: PracticeRepository {
     }
 
     func insertPracticeItem(_ item: PracticeItem) throws { pendingPracticeItems.append(item) }
+
+    func practiceItemsIncludingDeleted() throws -> [PracticeItem] {
+        storedPracticeItems
+    }
+
+    func removePracticeItem(id: UUID) {
+        storedPracticeItems.removeAll { $0.id == id }
+        pendingPracticeItems.removeAll { $0.id == id }
+    }
 
     func removeAll() throws {
         storedTasks = []

@@ -84,6 +84,18 @@ enum RecordingStore {
         }
     }
 
+    /// File names still pointed at by either a PracticeItem clip or a legacy
+    /// session clip. Launch GC uses this so new item recordings are not swept.
+    static func referencedFileNames(
+        practiceItems: [PracticeItem],
+        sessions: [PracticeSession]
+    ) -> Set<String> {
+        var names = Set<String>()
+        names.formUnion(practiceItems.flatMap { $0.recordings.map(\.fileName) })
+        names.formUnion(sessions.flatMap { $0.recordings.map(\.fileName) })
+        return names
+    }
+
     /// Deletes clips no `RecordingRef` points at — e.g. a recording made and
     /// then abandoned by leaving the practice screen without finishing.
     @discardableResult
