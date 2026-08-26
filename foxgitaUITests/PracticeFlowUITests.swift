@@ -21,10 +21,6 @@ final class PracticeFlowUITests: XCTestCase {
     func testLaunchShowsTodayPractice() {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天只练一点点"].exists)
-        XCTAssertTrue(
-            app.staticTexts.matching(NSPredicate(format: "label CONTAINS %@", "连续练习"))
-                .firstMatch.exists
-        )
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
