@@ -7,9 +7,43 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
     let title: String
     let durationSeconds: Int
     let isDeleted: Bool
+    let note: String
+    let recordingCount: Int
+    let categoryRaw: String
+
+    init(
+        id: UUID,
+        practiceDayKey: String,
+        createdAt: Date,
+        title: String,
+        durationSeconds: Int,
+        isDeleted: Bool,
+        note: String = "",
+        recordingCount: Int = 0,
+        categoryRaw: String = PracticeCategory.chord.rawValue
+    ) {
+        self.id = id
+        self.practiceDayKey = practiceDayKey
+        self.createdAt = createdAt
+        self.title = title
+        self.durationSeconds = durationSeconds
+        self.isDeleted = isDeleted
+        self.note = note
+        self.recordingCount = recordingCount
+        self.categoryRaw = categoryRaw
+    }
 }
 
 enum PracticeItemRules {
+    static func isEffective(_ item: PracticeItemSnapshot) -> Bool {
+        guard !item.isDeleted else { return false }
+        return PracticeRecordRules.isEffective(
+            durationSec: item.durationSeconds,
+            noteText: item.note,
+            recordingCount: item.recordingCount
+        )
+    }
+
     static func items(for dayKey: String, in items: [PracticeItemSnapshot]) -> [PracticeItemSnapshot] {
         items
             .filter { !$0.isDeleted && $0.practiceDayKey == dayKey }

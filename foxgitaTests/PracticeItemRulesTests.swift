@@ -98,4 +98,48 @@ struct PracticeItemRulesTests {
             PracticeItemRules.checkedInDayKeys(in: items) == Set(["2026-08-16", "2026-08-18"])
         )
     }
+
+    @Test func effectiveRequiresTimeNoteOrRecordingAndDropsDeleted() {
+        let t0 = date(year: 2026, month: 8, day: 16, hour: 8)
+        let empty = item(dayKey: "2026-08-16", createdAt: t0, durationSeconds: 0)
+        let timed = item(dayKey: "2026-08-16", createdAt: t0, durationSeconds: 60)
+        let noted = PracticeItemSnapshot(
+            id: UUID(),
+            practiceDayKey: "2026-08-16",
+            createdAt: t0,
+            title: "笔记",
+            durationSeconds: 0,
+            isDeleted: false,
+            note: "  有内容  ",
+            recordingCount: 0,
+            categoryRaw: PracticeCategory.chord.rawValue
+        )
+        let media = PracticeItemSnapshot(
+            id: UUID(),
+            practiceDayKey: "2026-08-16",
+            createdAt: t0,
+            title: "录音",
+            durationSeconds: 0,
+            isDeleted: false,
+            note: "",
+            recordingCount: 1,
+            categoryRaw: PracticeCategory.rhythm.rawValue
+        )
+        let deleted = PracticeItemSnapshot(
+            id: UUID(),
+            practiceDayKey: "2026-08-16",
+            createdAt: t0,
+            title: "删",
+            durationSeconds: 90,
+            isDeleted: true,
+            note: "x",
+            recordingCount: 1,
+            categoryRaw: PracticeCategory.song.rawValue
+        )
+        #expect(PracticeItemRules.isEffective(empty) == false)
+        #expect(PracticeItemRules.isEffective(timed))
+        #expect(PracticeItemRules.isEffective(noted))
+        #expect(PracticeItemRules.isEffective(media))
+        #expect(PracticeItemRules.isEffective(deleted) == false)
+    }
 }

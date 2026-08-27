@@ -71,7 +71,10 @@ final class PracticeStore {
             createdAt: item.createdAt,
             title: item.title,
             durationSeconds: item.durationSeconds,
-            isDeleted: item.deletedAt != nil
+            isDeleted: item.deletedAt != nil,
+            note: item.note,
+            recordingCount: item.recordings.count,
+            categoryRaw: item.categoryRaw
         )
     }
 
