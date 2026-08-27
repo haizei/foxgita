@@ -69,6 +69,32 @@ struct PracticeDetailStateTests {
         )
     }
 
+    @Test func recordEntryAllowsTimerOnPastDayWithoutChangingDayKey() {
+        let today = date(year: 2026, month: 8, day: 28, hour: 10)
+        let mode = PracticeDetailState.mode(
+            practiceDayKey: "2026-08-25",
+            today: today,
+            calendar: shanghaiCalendar,
+            allowPastDayEdits: true
+        )
+        #expect(mode == .editable)
+        #expect(PracticeDetailState.shouldAllowTimer(mode: mode))
+        #expect(PracticeDetailState.shouldAllowComplete(mode: mode))
+        #expect(PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: true))
+    }
+
+    @Test func practiceHomePastDayStaysReadOnly() {
+        let today = date(year: 2026, month: 8, day: 28, hour: 10)
+        let mode = PracticeDetailState.mode(
+            practiceDayKey: "2026-08-25",
+            today: today,
+            calendar: shanghaiCalendar,
+            allowPastDayEdits: false
+        )
+        #expect(mode == .historical)
+        #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
+    }
+
     @Test func historicalDoesNotAutoWriteEvenWhenDirty() {
         let mode = PracticeDetailMode.historical
         #expect(

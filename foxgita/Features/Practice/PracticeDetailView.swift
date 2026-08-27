@@ -24,9 +24,11 @@ enum PracticeDetailState {
     static func mode(
         practiceDayKey: String,
         today: Date = Date(),
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        allowPastDayEdits: Bool = false
     ) -> PracticeDetailMode {
-        practiceDayKey == PracticeDayKey.make(from: today, calendar: calendar)
+        if allowPastDayEdits { return .editable }
+        return practiceDayKey == PracticeDayKey.make(from: today, calendar: calendar)
             ? .editable
             : .historical
     }
@@ -70,6 +72,7 @@ enum PracticeDetailState {
 
 struct PracticeDetailView: View {
     let itemId: UUID
+    var allowPastDayEdits: Bool = false
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
@@ -105,8 +108,9 @@ struct PracticeDetailView: View {
     @State private var videoPlayURL: URL?
     @FocusState private var noteFocused: Bool
 
-    init(itemId: UUID) {
+    init(itemId: UUID, allowPastDayEdits: Bool = false) {
         self.itemId = itemId
+        self.allowPastDayEdits = allowPastDayEdits
         let identifier = itemId
         _items = Query(filter: #Predicate<PracticeItem> { $0.id == identifier && $0.deletedAt == nil })
     }
@@ -115,7 +119,10 @@ struct PracticeDetailView: View {
 
     private var mode: PracticeDetailMode {
         guard let item else { return .historical }
-        return PracticeDetailState.mode(practiceDayKey: item.practiceDayKey)
+        return PracticeDetailState.mode(
+            practiceDayKey: item.practiceDayKey,
+            allowPastDayEdits: allowPastDayEdits
+        )
     }
 
     private var isDirty: Bool {
