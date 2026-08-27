@@ -964,7 +964,10 @@ struct PracticeStoreTests {
             createdAt: createdAt,
             title: "音阶",
             durationSeconds: 90,
-            isDeleted: false
+            isDeleted: false,
+            note: "",
+            recordingCount: 0,
+            categoryRaw: PracticeCategory.scale.rawValue
         ))
 
         let deletedSnapshot = PracticeStore.snapshot(from: deleted)
