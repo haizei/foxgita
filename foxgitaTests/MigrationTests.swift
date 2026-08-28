@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V9 migration plan
-/// (V2→V3→…→V9) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V10 migration plan
+/// (V2→V3→…→V10) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -54,11 +54,11 @@ struct MigrationTests {
             try context.save()
         }
 
-        // --- Phase 2: reopen under V8 + migration plan --------------------
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        // --- Phase 2: reopen under V10 + migration plan -------------------
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
 
@@ -114,10 +114,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -155,10 +155,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let recordings = try ModelContext(container).fetch(FetchDescriptor<RecordingRef>())
         #expect(recordings.count == 1)
@@ -201,10 +201,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -251,10 +251,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -287,10 +287,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let context = ModelContext(container)
         let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -335,10 +335,10 @@ struct MigrationTests {
         let profileId = UUID()
 
         do {
-            let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-            let config = ModelConfiguration(schema: v9Schema, url: url)
+            let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+            let config = ModelConfiguration(schema: v10Schema, url: url)
             let container = try ModelContainer(
-                for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+                for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
             )
             let context = ModelContext(container)
             let tasks = try context.fetch(FetchDescriptor<TaskItem>())
@@ -370,10 +370,10 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
-        let config = ModelConfiguration(schema: v9Schema, url: url)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
-            for: v9Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
         )
         let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
         #expect(items.count == 1)
@@ -383,5 +383,45 @@ struct MigrationTests {
         #expect(items[0].title == "今日练习")
         #expect(items[0].durationSeconds == 180)
         #expect(items[0].note == "V9 笔记")
+    }
+
+    @Test func v9StoreMigratesToV10PreservingPracticeItemWithNilProjectId() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v9-v10-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let itemId = UUID()
+        let profileId = UUID()
+
+        do {
+            let v9Schema = Schema(versionedSchema: GitaSchemaV9.self)
+            let config = ModelConfiguration(schema: v9Schema, url: url)
+            let container = try ModelContainer(for: v9Schema, configurations: [config])
+            let context = ModelContext(container)
+            context.insert(
+                GitaSchemaV9.PracticeItem(
+                    id: itemId,
+                    profileId: profileId,
+                    practiceDayKey: "2026-08-28",
+                    title: "挂项目",
+                    categoryRaw: PracticeCategory.chord.rawValue,
+                    durationSeconds: 0
+                )
+            )
+            try context.save()
+        }
+
+        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let config = ModelConfiguration(schema: v10Schema, url: url)
+        let container = try ModelContainer(
+            for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
+        #expect(items.count == 1)
+        #expect(items[0].id == itemId)
+        #expect(items[0].profileId == profileId)
+        #expect(items[0].practiceDayKey == "2026-08-28")
+        #expect(items[0].title == "挂项目")
+        #expect(items[0].projectId == nil)
     }
 }
