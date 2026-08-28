@@ -138,4 +138,13 @@ struct ProjectRulesTests {
         #expect(ProjectRules.projectName(id: id, in: projects) == "知足")
         #expect(ProjectRules.projectName(id: UUID(), in: projects) == nil)
     }
+
+    @Test func lastEvidenceNilWhenOnlyIneffectiveItems() {
+        let pid = UUID()
+        let items = [
+            PracticeItemSnapshot(id: UUID(), practiceDayKey: "2026-08-28", createdAt: Date(), title: "空", durationSeconds: 0, isDeleted: false, projectId: pid)
+        ]
+        #expect(ProjectRules.lastEvidence(projectId: pid, in: items) == nil)
+        #expect(ProjectRules.totalSeconds(projectId: pid, in: items) == 0)
+    }
 }

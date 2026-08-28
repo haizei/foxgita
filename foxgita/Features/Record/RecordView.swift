@@ -127,8 +127,8 @@ struct RecordView: View {
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
                 case .projectCreate:
                     ProjectEditorView(mode: .create)
-                case .projectDetail:
-                    Text("项目详情")
+                case .projectDetail(let id):
+                    ProjectDetailView(projectId: id)
                 case .projectEdit(let id):
                     ProjectEditorView(mode: .edit(id))
                 }
