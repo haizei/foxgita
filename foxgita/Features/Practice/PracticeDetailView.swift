@@ -163,6 +163,18 @@ struct PracticeDetailView: View {
         isDirty || !recorder.pending.isEmpty || !video.pending.isEmpty
     }
 
+    /// True while this detail's route is still on either stack (including when covered
+    /// by `.projectCreate` on `recordPath`).
+    private var isItemStillOnNavigationStack: Bool {
+        router.practicePath.contains {
+            if case .detail(let id) = $0 { return id == itemId }
+            return false
+        } || router.recordPath.contains {
+            if case .practiceDetail(let id) = $0 { return id == itemId }
+            return false
+        }
+    }
+
     var body: some View {
         ZStack {
             PageBackground()
@@ -215,9 +227,21 @@ struct PracticeDetailView: View {
                 saveItemIfNeeded(item)
                 queueProjectDeletedToastIfNeeded(for: item)
             }
-            recorder.discardPending()
-            for clip in video.takeAll() {
-                RecordingStore.delete(fileName: clip.fileName)
+            // Pushing `.projectCreate` (or other routes) on top temporarily hides this
+            // detail; only discard in-progress media on a true stack exit.
+            if !isItemStillOnNavigationStack {
+                recorder.discardPending()
+                for clip in video.takeAll() {
+                    RecordingStore.delete(fileName: clip.fileName)
+                }
+            }
+        }
+        .onChange(of: item?.projectId) { _, newProjectId in
+            // Record-stack create-and-join updates projectId via setPracticeItemProject
+            // (not assignProject). Keep session in sync for mid-practice delete toast.
+            // Do not clear when projectId becomes nil — that would break the toast.
+            if let newProjectId {
+                sessionProjectId = newProjectId
             }
         }
         .onChange(of: recorder.lastError) { _, value in
