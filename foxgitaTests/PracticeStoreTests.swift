@@ -1643,4 +1643,51 @@ struct PracticeStoreTests {
         try repo.save()
         #expect(PracticeStore.snapshot(from: item).projectId == projectId)
     }
+
+    // MARK: - Project commands
+
+    @Test func createTodayPracticeItemUsesFocusTitleAndDoesNotMoveYesterday() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let cal = shanghai()
+        let yesterday = date(2026, 8, 27, calendar: cal)
+        let today = date(2026, 8, 28, calendar: cal)
+        let project = Project(profileId: profileId, name: "知足", goal: "完整弹唱", currentFocus: "副歌节奏")
+        try repo.insertProject(project)
+        try repo.save()
+        let old = try store.createPracticeItem(
+            input: PracticeItemInput(title: "昨天", category: .song, source: .custom, originId: nil, bpm: nil, timeSignature: nil),
+            now: yesterday,
+            calendar: cal
+        )
+        try store.setPracticeItemProject(id: old.id, projectId: project.id, now: yesterday)
+        let created = try store.createTodayPracticeItem(projectId: project.id, now: today, calendar: cal)
+        #expect(created.practiceDayKey == "2026-08-28")
+        #expect(created.projectId == project.id)
+        #expect(created.title == "副歌节奏")
+        #expect(created.id != old.id)
+        #expect(try repo.practiceItem(id: old.id, profileId: profileId)?.practiceDayKey == "2026-08-27")
+        #expect(try repo.practiceItem(id: old.id, profileId: profileId)?.durationSeconds == 0)
+    }
+
+    @Test func deleteProjectClearsItemProjectIdAndPin() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let project = Project(profileId: profileId, name: "知足", goal: "完整弹唱")
+        try repo.insertProject(project)
+        try repo.save()
+        try store.setPinnedProjectId(project.id)
+        let item = try store.createTodayPracticeItem(
+            projectId: project.id,
+            now: date(2026, 8, 28),
+            calendar: shanghai()
+        )
+        try store.deleteProject(id: project.id, now: date(2026, 8, 28, 12))
+        #expect(try repo.project(id: project.id, profileId: profileId) == nil)
+        #expect(try repo.projectsIncludingDeleted().first { $0.id == project.id }?.deletedAt != nil)
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == nil)
+        #expect(try repo.activeProfile()?.pinnedProjectId == nil)
+    }
 }

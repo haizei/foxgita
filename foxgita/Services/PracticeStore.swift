@@ -26,6 +26,7 @@ enum PracticeItemSource: String {
     case recommend
     case photo
     case next
+    case project
 }
 
 struct PracticeItemInput {
@@ -79,8 +80,167 @@ final class PracticeStore {
         )
     }
 
+    static func snapshot(from project: Project) -> ProjectSnapshot {
+        ProjectRules.snapshot(from: project)
+    }
+
     func practiceItemSnapshots(profileId: UUID) throws -> [PracticeItemSnapshot] {
         try repository.practiceItems(profileId: profileId).map(Self.snapshot(from:))
+    }
+
+    // MARK: - Projects
+
+    func createProject(
+        name: String,
+        goal: String,
+        kindRaw: String,
+        stageRaw: String,
+        currentFocus: String,
+        now: Date
+    ) throws -> Project {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !trimmedGoal.isEmpty else {
+            lastError = .invalidInput
+            throw StoreError.invalidInput
+        }
+        let profileId = try requireProfileUUID()
+        let project = Project(
+            profileId: profileId,
+            name: trimmedName,
+            goal: trimmedGoal,
+            kindRaw: kindRaw,
+            stageRaw: stageRaw,
+            currentFocus: currentFocus,
+            statusRaw: ProjectStatus.active.rawValue,
+            createdAt: now,
+            updatedAt: now
+        )
+        do {
+            try repository.insertProject(project)
+            try persistPracticeItemChanges()
+            return project
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            throw lastError ?? .saveFailed
+        }
+    }
+
+    func updateProject(
+        id: UUID,
+        name: String,
+        goal: String,
+        kindRaw: String,
+        stageRaw: String,
+        currentFocus: String,
+        now: Date
+    ) throws {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedName.isEmpty, !trimmedGoal.isEmpty else {
+            lastError = .invalidInput
+            throw StoreError.invalidInput
+        }
+        let project = try requireLiveProject(id: id)
+        project.name = trimmedName
+        project.goal = trimmedGoal
+        project.kindRaw = kindRaw
+        project.stageRaw = stageRaw
+        project.currentFocus = currentFocus
+        project.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func setProjectStatus(id: UUID, status: ProjectStatus, now: Date) throws {
+        let project = try requireLiveProject(id: id)
+        project.status = status
+        project.updatedAt = now
+        if status != .active,
+           let profile = try repository.activeProfile(),
+           profile.pinnedProjectId == id {
+            profile.pinnedProjectId = nil
+        }
+        try persistPracticeItemChanges()
+    }
+
+    func deleteProject(id: UUID, now: Date) throws {
+        let project = try requireLiveProject(id: id)
+        let profileId = project.profileId
+        project.deletedAt = now
+        project.updatedAt = now
+        let items = try repository.practiceItems(profileId: profileId)
+        for item in items where item.projectId == id {
+            item.projectId = nil
+            item.updatedAt = now
+        }
+        if let profile = try repository.activeProfile(), profile.pinnedProjectId == id {
+            profile.pinnedProjectId = nil
+        }
+        try persistPracticeItemChanges()
+    }
+
+    func setPinnedProjectId(_ id: UUID?) throws {
+        guard let profile = try repository.activeProfile() else {
+            lastError = .notFound
+            throw StoreError.notFound
+        }
+        if let id {
+            let profileId = try requireProfileUUID()
+            guard let project = try repository.project(id: id, profileId: profileId),
+                  project.status == .active else {
+                lastError = .notFound
+                throw StoreError.notFound
+            }
+        }
+        profile.pinnedProjectId = id
+        try persistPracticeItemChanges()
+    }
+
+    func setPracticeItemProject(id: UUID, projectId: UUID?, now: Date) throws {
+        let item = try requireLivePracticeItem(id: id)
+        item.projectId = projectId
+        item.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func createTodayPracticeItem(
+        projectId: UUID,
+        now: Date,
+        calendar: Calendar
+    ) throws -> PracticeItem {
+        let profileId = try requireProfileUUID()
+        guard let project = try repository.project(id: projectId, profileId: profileId),
+              project.status == .active else {
+            lastError = .notFound
+            throw StoreError.notFound
+        }
+        let title = ProjectRules.titleForNewPracticeItem(Self.snapshot(from: project))
+        let item = PracticeItem(
+            id: UUID(),
+            profileId: profileId,
+            practiceDayKey: PracticeDayKey.make(from: now, calendar: calendar),
+            title: title,
+            categoryRaw: PracticeCategory.song.rawValue,
+            durationSeconds: 0,
+            bpm: nil,
+            timeSignature: nil,
+            note: "",
+            sourceRaw: PracticeItemSource.project.rawValue,
+            originId: nil,
+            projectId: projectId,
+            createdAt: now,
+            updatedAt: now
+        )
+        do {
+            try repository.insertPracticeItem(item)
+            try persistPracticeItemChanges()
+            return item
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            throw lastError ?? .saveFailed
+        }
     }
 
     func createPracticeItem(input: PracticeItemInput, now: Date, calendar: Calendar) throws -> PracticeItem {
@@ -743,6 +903,15 @@ final class PracticeStore {
             throw StoreError.notFound
         }
         return item
+    }
+
+    private func requireLiveProject(id: UUID) throws -> Project {
+        let profileId = try requireProfileUUID()
+        guard let project = try repository.project(id: id, profileId: profileId) else {
+            lastError = .notFound
+            throw StoreError.notFound
+        }
+        return project
     }
 
     private func persistPracticeItemChanges() throws {

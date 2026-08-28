@@ -24,6 +24,21 @@ struct ProjectListState: Equatable {
 }
 
 enum ProjectRules {
+    static func snapshot(from project: Project) -> ProjectSnapshot {
+        ProjectSnapshot(
+            id: project.id,
+            profileId: project.profileId,
+            name: project.name,
+            goal: project.goal,
+            kindRaw: project.kindRaw,
+            stageRaw: project.stageRaw,
+            currentFocus: project.currentFocus,
+            status: project.status,
+            createdAt: project.createdAt,
+            isDeleted: project.deletedAt != nil
+        )
+    }
+
     static func currentProjectId(
         projects: [ProjectSnapshot],
         items: [PracticeItemSnapshot],
