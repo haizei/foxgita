@@ -131,4 +131,11 @@ struct ProjectRulesTests {
         #expect(ProjectRules.lastEvidence(projectId: pid, in: items)?.practiceDayKey == "2026-08-26")
         #expect(RecordMinutes.display(fromSeconds: 180) == 3)
     }
+
+    @Test func projectNameForTagIsNilWhenMissing() {
+        let id = UUID()
+        let projects = [ProjectSnapshot(id: id, profileId: UUID(), name: "知足", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", status: .active, createdAt: Date(), isDeleted: false)]
+        #expect(ProjectRules.projectName(id: id, in: projects) == "知足")
+        #expect(ProjectRules.projectName(id: UUID(), in: projects) == nil)
+    }
 }

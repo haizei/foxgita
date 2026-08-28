@@ -93,6 +93,11 @@ enum ProjectRules {
         associatedEffectiveItems(projectId: projectId, in: items).first
     }
 
+    static func projectName(id: UUID, in projects: [ProjectSnapshot]) -> String? {
+        guard let project = projects.first(where: { $0.id == id }), !project.isDeleted else { return nil }
+        return project.name
+    }
+
     private static func hasEffectiveActivity(_ project: ProjectSnapshot, items: [PracticeItemSnapshot]) -> Bool {
         !associatedEffectiveItems(projectId: project.id, in: items).isEmpty
     }

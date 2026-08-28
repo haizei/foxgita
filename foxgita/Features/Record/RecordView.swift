@@ -21,15 +21,19 @@ enum RecordPlayback {
 
 struct RecordView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(PracticeStore.self) private var store
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var practiceItems: [PracticeItem]
     @Query(filter: #Predicate<LocalProfile> { $0.isActive == true })
     private var profiles: [LocalProfile]
+    @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
+    private var projects: [Project]
 
     @State private var toast: String?
     @State private var player = AudioPlayerService()
     @State private var videoPlayURL: URL?
-    @State private var showProjectComingSoon = false
+    @State private var creatingTodayLock = false
+    @State private var endedExpanded = false
 
     private var calendar: Calendar { .current }
 
@@ -42,6 +46,21 @@ struct RecordView: View {
         return practiceItems
             .filter { $0.profileId == profileId }
             .map(PracticeStore.snapshot(from:))
+    }
+
+    private var profileProjects: [ProjectSnapshot] {
+        guard let profileId = currentProfileId else { return [] }
+        return projects
+            .filter { $0.profileId == profileId }
+            .map(ProjectRules.snapshot(from:))
+    }
+
+    private var projectListState: ProjectListState {
+        ProjectRules.listState(
+            projects: profileProjects,
+            items: allSnapshots,
+            pinnedProjectId: profiles.first?.pinnedProjectId
+        )
     }
 
     private var timeline: RecordTimelineState {
@@ -82,7 +101,10 @@ struct RecordView: View {
                     .allowsHitTesting(showPracticePane)
                     .overlay(alignment: .top) {
                         if !showPracticePane {
-                            projectPane
+                            ScrollView {
+                                projectPane
+                                    .padding(.bottom, 32)
+                            }
                         }
                     }
                 }
@@ -125,9 +147,6 @@ struct RecordView: View {
             .onDisappear {
                 player.stop()
                 videoPlayURL = nil
-            }
-            .alert("项目创建将在下一版开放", isPresented: $showProjectComingSoon) {
-                Button("知道了", role: .cancel) {}
             }
             .fullScreenCover(isPresented: Binding(
                 get: { videoPlayURL != nil },
@@ -227,14 +246,209 @@ struct RecordView: View {
         .padding(.vertical, 6)
     }
 
+    @ViewBuilder
     private var projectPane: some View {
-        emptyState(
-            title: String(localized: "用项目组织跨天目标"),
-            subtitle: String(localized: "项目把多天练习收在一起，方便你持续推进一首歌或一个阶段"),
-            actionTitle: String(localized: "创建项目")
-        ) {
-            showProjectComingSoon = true
+        let state = projectListState
+        if profileProjects.isEmpty {
+            emptyState(
+                title: String(localized: "用项目组织跨天目标"),
+                subtitle: String(localized: "项目把多天练习收在一起，方便你持续推进一首歌或一个阶段"),
+                actionTitle: String(localized: "创建项目")
+            ) {
+                router.recordPath.append(.projectCreate)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 16) {
+                if let current = state.current {
+                    currentProjectCard(current)
+                }
+                if !state.others.isEmpty {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(state.others.enumerated()), id: \.element.id) { index, project in
+                            otherProjectRow(project)
+                            if index < state.others.count - 1 {
+                                Divider()
+                                    .overlay(GitaTheme.borderSubtle)
+                                    .padding(.leading, 16)
+                            }
+                        }
+                    }
+                    .background(GitaTheme.bgSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+                    .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+                }
+                if !state.ended.isEmpty {
+                    endedProjectsSection(state.ended)
+                }
+            }
         }
+    }
+
+    private func currentProjectCard(_ project: ProjectSnapshot) -> some View {
+        let stage = project.stageRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let focus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+        let evidence = ProjectRules.lastEvidence(projectId: project.id, in: allSnapshots)
+        let totalMinutes = RecordMinutes.display(
+            fromSeconds: ProjectRules.totalSeconds(projectId: project.id, in: allSnapshots)
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Button {
+                openProjectDetail(project.id)
+            } label: {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(project.name)
+                        .font(GitaFont.headline())
+                        .foregroundStyle(GitaTheme.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Text(project.goal)
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .multilineTextAlignment(.leading)
+                    if !stage.isEmpty {
+                        Text(stage)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textTertiary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    if !focus.isEmpty {
+                        Text(focus)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .multilineTextAlignment(.leading)
+                    }
+                    if let evidence {
+                        Text(
+                            "\(RecordTimelineRules.dayTitle(dayKey: evidence.practiceDayKey, now: Date(), calendar: calendar)) · \(RecordMinutes.display(fromSeconds: evidence.durationSeconds)) 分钟"
+                        )
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .multilineTextAlignment(.leading)
+                    }
+                    Text("累计 \(totalMinutes) 分钟")
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textTertiary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                continuePractice(projectId: project.id)
+            } label: {
+                Text("继续练习")
+                    .font(GitaFont.callout(.bold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 40)
+                    .background(GitaTheme.brand500)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+    }
+
+    private func otherProjectRow(_ project: ProjectSnapshot) -> some View {
+        let subtitle: String = {
+            if let evidence = ProjectRules.lastEvidence(projectId: project.id, in: allSnapshots) {
+                return RecordTimelineRules.dayTitle(
+                    dayKey: evidence.practiceDayKey,
+                    now: Date(),
+                    calendar: calendar
+                )
+            }
+            return String(localized: "还没练习")
+        }()
+        return Button {
+            openProjectDetail(project.id)
+        } label: {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(project.name)
+                        .font(GitaFont.body(.bold))
+                        .foregroundStyle(GitaTheme.textPrimary)
+                        .multilineTextAlignment(.leading)
+                    Text(subtitle)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.iconSecondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func endedProjectsSection(_ ended: [ProjectSnapshot]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                endedExpanded.toggle()
+            } label: {
+                HStack {
+                    Text("已结束")
+                        .font(GitaFont.body(.semibold))
+                        .foregroundStyle(GitaTheme.textPrimary)
+                    Spacer()
+                    Image(systemName: endedExpanded ? "chevron.up" : "chevron.down")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(GitaTheme.iconSecondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if endedExpanded {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(ended.enumerated()), id: \.element.id) { index, project in
+                        endedProjectRow(project)
+                        if index < ended.count - 1 {
+                            Divider()
+                                .overlay(GitaTheme.borderSubtle)
+                                .padding(.leading, 16)
+                        }
+                    }
+                }
+                .background(GitaTheme.bgSurface)
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+                .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+            }
+        }
+    }
+
+    private func endedProjectRow(_ project: ProjectSnapshot) -> some View {
+        let statusLabel = project.status == .completed
+            ? String(localized: "已完成")
+            : String(localized: "暂不练习")
+        return Button {
+            openProjectDetail(project.id)
+        } label: {
+            HStack {
+                Text(project.name)
+                    .font(GitaFont.body(.bold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+                Text(statusLabel)
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(GitaTheme.iconSecondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func dayGroup(_ group: RecordTimelineDayGroup) -> some View {
@@ -268,6 +482,7 @@ struct RecordView: View {
     private func timelineRow(_ item: PracticeItemSnapshot) -> some View {
         let hasMedia = item.recordingCount > 0
         let accent = hasMedia ? nil : PracticeCategory(rawValue: item.categoryRaw)?.accent
+        let projectName = item.projectId.flatMap { ProjectRules.projectName(id: $0, in: profileProjects) }
         return HStack(spacing: 12) {
             if let accent {
                 Capsule()
@@ -289,31 +504,44 @@ struct RecordView: View {
                 .accessibilityLabel(Text("播放最近一条媒体"))
             }
 
-            Button {
-                openPractice(item)
-            } label: {
-                HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(timeLabel(item.createdAt))
+            VStack(alignment: .leading, spacing: 4) {
+                Button {
+                    openPractice(item)
+                } label: {
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(timeLabel(item.createdAt))
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
+                            Text(item.title)
+                                .font(GitaFont.body(.bold))
+                                .foregroundStyle(GitaTheme.textPrimary)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                        }
+                        Spacer(minLength: 0)
+                        Text("\(RecordMinutes.display(fromSeconds: item.durationSeconds)) 分钟")
                             .font(GitaFont.caption())
                             .foregroundStyle(GitaTheme.textSecondary)
-                        Text(item.title)
-                            .font(GitaFont.body(.bold))
-                            .foregroundStyle(GitaTheme.textPrimary)
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(GitaTheme.iconSecondary)
                     }
-                    Spacer(minLength: 0)
-                    Text("\(RecordMinutes.display(fromSeconds: item.durationSeconds)) 分钟")
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(GitaTheme.iconSecondary)
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
+
+                if let projectId = item.projectId, let projectName {
+                    Button {
+                        openProjectDetail(projectId)
+                    } label: {
+                        Text("项目：\(projectName)")
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textTertiary)
+                    }
+                    .buttonStyle(.plain)
+                }
             }
-            .buttonStyle(.plain)
         }
         .padding(.leading, 16)
         .padding(.trailing, 12)
@@ -394,6 +622,26 @@ struct RecordView: View {
             isToday: item.practiceDayKey == todayKey
         )
         router.recordPath.append(.practiceDetail(itemId: item.id))
+    }
+
+    private func openProjectDetail(_ id: UUID) {
+        guard !creatingTodayLock else { return }
+        router.recordPath.append(.projectDetail(projectId: id))
+    }
+
+    private func continuePractice(projectId id: UUID) {
+        guard !creatingTodayLock else { return }
+        creatingTodayLock = true
+        defer { creatingTodayLock = false }
+        RecordAnalytics.projectPracticeCreateTapped(projectId: id.uuidString)
+        do {
+            let item = try store.createTodayPracticeItem(projectId: id, now: Date(), calendar: calendar)
+            RecordAnalytics.projectPracticeCreated(projectId: id.uuidString, practiceItemId: item.id.uuidString, result: "success")
+            router.recordPath.append(.practiceDetail(itemId: item.id))
+        } catch {
+            RecordAnalytics.projectPracticeCreated(projectId: id.uuidString, practiceItemId: "", result: "failure")
+            showToast(String(localized: "创建失败，请重试"))
+        }
     }
 
     private func liveItem(id: UUID) -> PracticeItem? {
