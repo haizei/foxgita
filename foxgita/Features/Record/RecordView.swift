@@ -6,6 +6,19 @@
 import SwiftData
 import SwiftUI
 
+enum RecordPlayback {
+    /// Pause of the same id is not a failure. Start fails only when `playingIdAfter`
+    /// is not the clip we meant to start.
+    static func startFailed(
+        playingIdBefore: String?,
+        intendedId: String,
+        playingIdAfter: String?
+    ) -> Bool {
+        if playingIdBefore == intendedId { return false }
+        return playingIdAfter != intendedId
+    }
+}
+
 struct RecordView: View {
     @Environment(AppRouter.self) private var router
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
@@ -47,24 +60,33 @@ struct RecordView: View {
         )
     }
 
+    private var showPracticePane: Bool {
+        router.recordSegment == .practice
+    }
+
     var body: some View {
         @Bindable var router = router
         NavigationStack(path: $router.recordPath) {
             ZStack {
                 PageBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        header
-                        SegmentedPills(titles: ["练习", "项目"], selection: segmentIndex)
-                        if router.recordSegment == .practice {
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    SegmentedPills(titles: ["练习", "项目"], selection: segmentIndex)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 16) {
                             practicePane
-                        } else {
+                        }
+                        .padding(.bottom, 32)
+                    }
+                    .opacity(showPracticePane ? 1 : 0)
+                    .allowsHitTesting(showPracticePane)
+                    .overlay(alignment: .top) {
+                        if !showPracticePane {
                             projectPane
                         }
                     }
-                    .padding(.horizontal, GitaTheme.pagePadding)
-                    .padding(.bottom, 32)
                 }
+                .padding(.horizontal, GitaTheme.pagePadding)
 
                 if let toast {
                     VStack {
@@ -384,8 +406,13 @@ struct RecordView: View {
             }
         } else {
             videoPlayURL = nil
+            let playingIdBefore = player.playingId
             player.toggle(url: rec.fileURL, id: rec.id)
-            if player.playingId == nil {
+            if RecordPlayback.startFailed(
+                playingIdBefore: playingIdBefore,
+                intendedId: rec.id,
+                playingIdAfter: player.playingId
+            ) {
                 showToast(String(localized: "无法播放"))
             }
         }
