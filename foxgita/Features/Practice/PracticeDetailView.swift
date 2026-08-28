@@ -79,6 +79,8 @@ struct PracticeDetailView: View {
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Environment(MemoryConsentCoordinator.self) private var consent
     @Query private var items: [PracticeItem]
+    @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
+    private var projects: [Project]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
     private let llmCredentials = LLMCredentialsStore()
@@ -107,6 +109,7 @@ struct PracticeDetailView: View {
     @State private var pendingCamera = false
     @State private var player = AudioPlayerService()
     @State private var videoPlayURL: URL?
+    @State private var showCreateProjectSheet = false
     @FocusState private var noteFocused: Bool
 
     init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
@@ -219,7 +222,7 @@ struct PracticeDetailView: View {
         .onChange(of: store.lastError) { _, value in
             if let value { show(value.localizedDescription) }
         }
-        .fullScreenCover(isPresented: Binding(
+            .fullScreenCover(isPresented: Binding(
             get: { video.isPresenting },
             set: { if !$0 { video.dismiss() } }
         )) {
@@ -235,6 +238,12 @@ struct PracticeDetailView: View {
                 onCancel: { video.dismiss() }
             )
             .ignoresSafeArea()
+        }
+        .sheet(isPresented: $showCreateProjectSheet) {
+            ProjectEditorView(mode: .create, onCreated: { newId in
+                guard let item else { return }
+                assignProject(newId, to: item)
+            })
         }
     }
 
@@ -280,6 +289,10 @@ struct PracticeDetailView: View {
                     onToast: { show($0) }
                 )
             }
+
+            associationMenu(item)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
@@ -878,6 +891,7 @@ struct PracticeDetailView: View {
         guard PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: isDirty) else {
             return
         }
+        let hadProject = item.projectId != nil
         do {
             try store.savePracticeItem(
                 id: item.id,
@@ -887,6 +901,9 @@ struct PracticeDetailView: View {
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
+            if hadProject && item.projectId == nil {
+                show(String(localized: "项目已删除，本次练习已保存为独立练习"))
+            }
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -926,6 +943,81 @@ struct PracticeDetailView: View {
             router.returnPracticeToToday = true
         }
         router.dismissPracticeDetail(fromRecord: openedFromRecord)
+    }
+
+    private func activeProjects(for item: PracticeItem) -> [Project] {
+        projects
+            .filter { $0.profileId == item.profileId && $0.status == .active }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    @ViewBuilder
+    private func associationMenu(_ item: PracticeItem) -> some View {
+        let currentId = item.projectId
+        let candidates = activeProjects(for: item)
+        let label: String = {
+            if let currentId,
+               let name = candidates.first(where: { $0.id == currentId })?.name
+                ?? projects.first(where: { $0.id == currentId })?.name {
+                return name
+            }
+            return String(localized: "关联项目")
+        }()
+        HStack {
+            Menu {
+                if currentId == nil {
+                    Menu("加入现有项目") {
+                        ForEach(candidates, id: \.id) { project in
+                            Button(project.name) { assignProject(project.id, to: item) }
+                        }
+                    }
+                    Button("新建并加入") { startCreateAndJoin() }
+                } else {
+                    Menu("更换项目") {
+                        ForEach(candidates.filter { $0.id != currentId }, id: \.id) { project in
+                            Button(project.name) { assignProject(project.id, to: item) }
+                        }
+                    }
+                    Button("移出项目") { assignProject(nil, to: item) }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(label)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    private func startCreateAndJoin() {
+        if openedFromRecord {
+            router.pendingJoinPracticeItemId = itemId
+            router.recordPath.append(.projectCreate)
+        } else {
+            showCreateProjectSheet = true
+        }
+    }
+
+    private func assignProject(_ projectId: UUID?, to item: PracticeItem) {
+        let from = item.projectId?.uuidString ?? ""
+        do {
+            try store.setPracticeItemProject(id: item.id, projectId: projectId, now: Date())
+            if projectId != nil && item.projectId == nil {
+                show(String(localized: "项目已删除，本次练习已保存为独立练习"))
+                RecordAnalytics.practiceProjectChanged(fromProjectId: from, toProjectId: "")
+            } else {
+                RecordAnalytics.practiceProjectChanged(
+                    fromProjectId: from,
+                    toProjectId: item.projectId?.uuidString ?? ""
+                )
+            }
+        } catch {
+            show(store.lastError?.localizedDescription ?? error.localizedDescription)
+        }
     }
 
     private func show(_ message: String) {

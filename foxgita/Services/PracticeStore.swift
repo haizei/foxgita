@@ -199,7 +199,15 @@ final class PracticeStore {
 
     func setPracticeItemProject(id: UUID, projectId: UUID?, now: Date) throws {
         let item = try requireLivePracticeItem(id: id)
-        item.projectId = projectId
+        if let projectId {
+            if (try repository.project(id: projectId, profileId: item.profileId)) == nil {
+                item.projectId = nil
+            } else {
+                item.projectId = projectId
+            }
+        } else {
+            item.projectId = nil
+        }
         item.updatedAt = now
         try persistPracticeItemChanges()
     }
@@ -276,6 +284,10 @@ final class PracticeStore {
         item.durationSeconds = max(0, durationSeconds)
         item.note = note
         item.updatedAt = now
+        if let projectId = item.projectId,
+           (try repository.project(id: projectId, profileId: item.profileId)) == nil {
+            item.projectId = nil
+        }
         try persistPracticeItemChanges()
     }
 

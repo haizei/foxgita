@@ -1701,4 +1701,31 @@ struct PracticeStoreTests {
         #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == nil)
         #expect(try repo.activeProfile()?.pinnedProjectId == nil)
     }
+
+    @Test func setPracticeItemProjectOnlyWritesProjectId() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let item = try store.createPracticeItem(
+            input: PracticeItemInput(title: "独立", category: .chord, source: .custom, originId: nil, bpm: nil, timeSignature: nil),
+            now: date(2026, 8, 28, calendar: cal),
+            calendar: cal
+        )
+        let profileId = item.profileId
+        let a = Project(profileId: profileId, name: "A", goal: "ga")
+        let b = Project(profileId: profileId, name: "B", goal: "gb")
+        try repo.insertProject(a)
+        try repo.insertProject(b)
+        try repo.save()
+        try store.savePracticeItem(id: item.id, durationSeconds: 90, note: "n", now: date(2026, 8, 28, 11, calendar: cal))
+        try store.setPracticeItemProject(id: item.id, projectId: a.id, now: date(2026, 8, 28, 12, calendar: cal))
+        try store.setPracticeItemProject(id: item.id, projectId: b.id, now: date(2026, 8, 28, 13, calendar: cal))
+        let live = try #require(try repo.practiceItem(id: item.id, profileId: profileId))
+        #expect(live.projectId == b.id)
+        #expect(live.practiceDayKey == "2026-08-28")
+        #expect(live.durationSeconds == 90)
+        #expect(live.note == "n")
+        try store.setPracticeItemProject(id: item.id, projectId: nil, now: date(2026, 8, 28, 14, calendar: cal))
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == nil)
+    }
 }

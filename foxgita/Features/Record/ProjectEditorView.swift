@@ -13,10 +13,14 @@ enum ProjectEditorMode: Equatable {
 
 struct ProjectEditorView: View {
     let mode: ProjectEditorMode
+    var onCreated: ((UUID) -> Void)? = nil
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
     @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
     private var projects: [Project]
+    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
+    private var practiceItems: [PracticeItem]
     @State private var name = ""
     @State private var goal = ""
     @State private var kindRaw = ""
@@ -29,7 +33,7 @@ struct ProjectEditorView: View {
         ZStack {
             PageBackground()
             VStack(alignment: .leading, spacing: 16) {
-                Button("关闭") { router.recordPath.removeLast() }
+                Button("关闭") { close() }
                 Text(mode == .create ? "创建项目" : "编辑项目").font(GitaFont.title())
                 TextField("项目名称", text: $name)
                 TextField("完成目标", text: $goal)
@@ -60,21 +64,51 @@ struct ProjectEditorView: View {
         currentFocus = project.currentFocus
     }
 
+    private func close() {
+        router.pendingJoinPracticeItemId = nil
+        if onCreated != nil {
+            dismiss()
+        } else if !router.recordPath.isEmpty {
+            router.recordPath.removeLast()
+        }
+    }
+
     private func save() {
         do {
             switch mode {
             case .create:
-                _ = try store.createProject(
+                let project = try store.createProject(
                     name: name, goal: goal, kindRaw: kindRaw, stageRaw: stageRaw,
                     currentFocus: currentFocus, now: Date()
                 )
+                if let onCreated {
+                    onCreated(project.id)
+                    dismiss()
+                } else {
+                    if let joinId = router.pendingJoinPracticeItemId {
+                        let from = practiceItems.first { $0.id == joinId }?.projectId?.uuidString ?? ""
+                        try store.setPracticeItemProject(id: joinId, projectId: project.id, now: Date())
+                        RecordAnalytics.practiceProjectChanged(
+                            fromProjectId: from,
+                            toProjectId: project.id.uuidString
+                        )
+                        router.pendingJoinPracticeItemId = nil
+                    }
+                    if !router.recordPath.isEmpty {
+                        router.recordPath.removeLast()
+                    }
+                }
             case .edit(let id):
                 try store.updateProject(
                     id: id, name: name, goal: goal, kindRaw: kindRaw, stageRaw: stageRaw,
                     currentFocus: currentFocus, now: Date()
                 )
+                if onCreated != nil {
+                    dismiss()
+                } else if !router.recordPath.isEmpty {
+                    router.recordPath.removeLast()
+                }
             }
-            router.recordPath.removeLast()
         } catch {
             self.error = String(localized: "保存失败，请重试")
         }
