@@ -101,6 +101,8 @@ struct PracticeDetailView: View {
     @State private var toast: String?
     @State private var isCompleting = false
     @State private var didLoadItem = false
+    /// Live project associated when this detail session started (or last explicit join/switch).
+    @State private var sessionProjectId: UUID?
     @State private var analysisRoute: VideoRoute?
     @State private var diagnosisRoute: VideoRoute?
     /// Set only by analysis `onReady`; presented from the analysis cover's `onDismiss`.
@@ -190,6 +192,10 @@ struct PracticeDetailView: View {
                 )
                 practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
                 metronome.setBpm(item.bpm ?? 80)
+                if let projectId = item.projectId,
+                   projects.contains(where: { $0.id == projectId }) {
+                    sessionProjectId = projectId
+                }
             }
             AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
                 metronome.stop()
@@ -207,6 +213,7 @@ struct PracticeDetailView: View {
             if let item {
                 persistPending(item: item)
                 saveItemIfNeeded(item)
+                queueProjectDeletedToastIfNeeded(for: item)
             }
             recorder.discardPending()
             for clip in video.takeAll() {
@@ -834,6 +841,7 @@ struct PracticeDetailView: View {
             if recorder.isRecording { recorder.stop(label: item.title) }
             persistPending(item: item)
             saveItemIfNeeded(item)
+            queueProjectDeletedToastIfNeeded(for: item)
         }
         leave()
     }
@@ -891,7 +899,6 @@ struct PracticeDetailView: View {
         guard PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: isDirty) else {
             return
         }
-        let hadProject = item.projectId != nil
         do {
             try store.savePracticeItem(
                 id: item.id,
@@ -901,12 +908,18 @@ struct PracticeDetailView: View {
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
-            if hadProject && item.projectId == nil {
-                show(String(localized: "项目已删除，本次练习已保存为独立练习"))
-            }
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
+    }
+
+    /// Spec §6.5: project vanished mid-practice → independent save + toast that survives dismiss.
+    /// Skips explicit 移出/更换 (session id cleared or still points at a live project).
+    private func queueProjectDeletedToastIfNeeded(for item: PracticeItem) {
+        guard let sessionProjectId else { return }
+        guard item.projectId == nil else { return }
+        guard !projects.contains(where: { $0.id == sessionProjectId }) else { return }
+        router.practiceToast = String(localized: "项目已删除，本次练习已保存为独立练习")
     }
 
     private func resetTrip() {
@@ -930,13 +943,14 @@ struct PracticeDetailView: View {
         videoPlayURL = nil
         persistPending(item: item)
         saveItemIfNeeded(item)
+        queueProjectDeletedToastIfNeeded(for: item)
         let hadContent = hasUnsavedWork
             || storedDurationSeconds > 0
             || !storedNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             || !item.recordings.filter({ $0.deletedAt == nil }).isEmpty
         if hadContent {
             Haptics.success()
-        } else {
+        } else if router.practiceToast == nil {
             router.practiceToast = String(localized: "这次没有留下记录")
         }
         if !openedFromRecord {
@@ -1006,6 +1020,8 @@ struct PracticeDetailView: View {
         let from = item.projectId?.uuidString ?? ""
         do {
             try store.setPracticeItemProject(id: item.id, projectId: projectId, now: Date())
+            // Track explicit leave/switch so mid-practice delete toast is not confused with them.
+            sessionProjectId = item.projectId
             if projectId != nil && item.projectId == nil {
                 show(String(localized: "项目已删除，本次练习已保存为独立练习"))
                 RecordAnalytics.practiceProjectChanged(fromProjectId: from, toProjectId: "")
