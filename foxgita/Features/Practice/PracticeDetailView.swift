@@ -824,7 +824,7 @@ struct PracticeDetailView: View {
     }
 
     private func leave() {
-        router.practicePath.removeAll()
+        router.dismissPracticeDetail()
     }
 
     private func audioClip(_ clip: VideoRecorderService.Clip) -> AudioRecorderService.Clip {
@@ -920,8 +920,12 @@ struct PracticeDetailView: View {
         } else {
             router.practiceToast = String(localized: "这次没有留下记录")
         }
-        router.returnPracticeToToday = true
-        router.practicePath.removeAll()
+        if case .practiceDetail = router.recordPath.last {
+            router.dismissPracticeDetail()
+        } else {
+            router.returnPracticeToToday = true
+            router.dismissPracticeDetail()
+        }
     }
 
     private func show(_ message: String) {

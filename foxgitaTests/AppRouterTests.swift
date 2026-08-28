@@ -64,4 +64,30 @@ struct AppRouterTests {
         #expect(router.recordPath.isEmpty)
         #expect(router.recordFocusDayKey == nil)
     }
+
+    @Test func dismissPracticeDetailPopsRecordPathAndLeavesPracticePath() {
+        let router = AppRouter()
+        let itemId = UUID()
+        router.practicePath = [.detail(itemId: itemId)]
+        router.recordPath = [.history(.calendar), .practiceDetail(itemId: itemId)]
+        router.returnPracticeToToday = false
+
+        router.dismissPracticeDetail()
+
+        #expect(router.recordPath == [.history(.calendar)])
+        #expect(router.practicePath == [.detail(itemId: itemId)])
+        #expect(router.returnPracticeToToday == false)
+    }
+
+    @Test func dismissPracticeDetailClearsPracticePathWhenRecordIsEmpty() {
+        let router = AppRouter()
+        let itemId = UUID()
+        router.practicePath = [.detail(itemId: itemId)]
+        router.recordPath = []
+
+        router.dismissPracticeDetail()
+
+        #expect(router.practicePath.isEmpty)
+        #expect(router.recordPath.isEmpty)
+    }
 }

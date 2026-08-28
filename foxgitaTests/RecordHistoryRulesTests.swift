@@ -59,6 +59,19 @@ struct RecordHistoryRulesTests {
         #expect(cells.first { $0.dayKey == "2026-08-28" }?.isFuture == true)
     }
 
+    @Test func calendarShowsZeroMinutesOnNoteOnlyEffectiveDay() {
+        let now = date(year: 2026, month: 8, day: 27, hour: 12)
+        let items = [
+            item(dayKey: "2026-08-21", createdAt: now, title: "只记", durationSeconds: 0, note: "一句"),
+            item(dayKey: "2026-08-20", createdAt: now, title: "空", durationSeconds: 0),
+        ]
+        let cells = RecordHistoryRules.calendarCells(
+            monthContaining: now, now: now, calendar: shanghaiCalendar, effectiveItems: items.filter(PracticeItemRules.isEffective)
+        )
+        #expect(cells.first { $0.dayKey == "2026-08-21" }?.minutesLabel == "0m")
+        #expect(cells.first { $0.dayKey == "2026-08-20" }?.minutesLabel == "·")
+    }
+
     @Test func daySummaryJoinsTitlesNewestFirstAndDedupsTypes() {
         let t1 = date(year: 2026, month: 8, day: 27, hour: 9, minute: 24)
         let t2 = date(year: 2026, month: 8, day: 27, hour: 9, minute: 2)

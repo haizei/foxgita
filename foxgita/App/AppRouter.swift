@@ -59,4 +59,13 @@ final class AppRouter {
             recordPath = []
         }
     }
+
+    /// Record-opened detail lives on `recordPath`. Practice-home still clears `practicePath`.
+    func dismissPracticeDetail() {
+        if case .practiceDetail = recordPath.last {
+            recordPath.removeLast()
+            return
+        }
+        practicePath.removeAll()
+    }
 }

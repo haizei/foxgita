@@ -80,8 +80,8 @@ enum RecordHistoryRules {
         return dates.map { date in
             let start = calendar.startOfDay(for: date)
             let key = PracticeDayKey.make(from: start, calendar: calendar)
-            let seconds = secondsByDay[key] ?? 0
-            let label = seconds > 0 ? "\(RecordMinutes.display(fromSeconds: seconds))m" : "·"
+            let seconds = secondsByDay[key]
+            let label = seconds.map { "\(RecordMinutes.display(fromSeconds: $0))m" } ?? "·"
             return RecordCalendarCell(
                 dayKey: key,
                 dayNumber: calendar.component(.day, from: date),

@@ -975,6 +975,26 @@ struct PracticeStoreTests {
         #expect(deletedSnapshot.title == "墓碑")
     }
 
+    @Test func snapshotRecordingCountIgnoresSoftDeletedMedia() {
+        let profile = UUID()
+        let live = RecordingRef(id: "live", fileName: "live.m4a", bytes: 1, durationSec: 8)
+        let deletedOnMixed = RecordingRef(id: "gone-mixed", fileName: "gone-mixed.m4a", bytes: 1, durationSec: 8)
+        deletedOnMixed.deletedAt = Date()
+        let mixed = makePracticeItem(profileId: profile, durationSeconds: 0)
+        mixed.note = ""
+        mixed.recordings = [live, deletedOnMixed]
+        #expect(PracticeStore.snapshot(from: mixed).recordingCount == 1)
+
+        let onlyDeletedClip = RecordingRef(id: "gone-only", fileName: "gone-only.m4a", bytes: 1, durationSec: 8)
+        onlyDeletedClip.deletedAt = Date()
+        let onlyDeleted = makePracticeItem(profileId: profile, durationSeconds: 0)
+        onlyDeleted.note = ""
+        onlyDeleted.recordings = [onlyDeletedClip]
+        let snapshot = PracticeStore.snapshot(from: onlyDeleted)
+        #expect(snapshot.recordingCount == 0)
+        #expect(PracticeItemRules.isEffective(snapshot) == false)
+    }
+
     // MARK: - PracticeItem create and absolute save
 
     private func makeInput(
