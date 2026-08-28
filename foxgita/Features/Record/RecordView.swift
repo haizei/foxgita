@@ -102,7 +102,13 @@ struct RecordView: View {
                 case .history(let segment):
                     HistoryView(initialSegment: segment)
                 case .practiceDetail(let itemId):
-                    PracticeDetailView(itemId: itemId, allowPastDayEdits: true)
+                    PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
+                case .projectCreate:
+                    Text("创建项目")
+                case .projectDetail:
+                    Text("项目详情")
+                case .projectEdit:
+                    Text("编辑项目")
                 }
             }
             .onAppear {

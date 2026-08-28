@@ -103,4 +103,22 @@ struct AppRouterTests {
         #expect(router.practicePath.isEmpty)
         #expect(router.recordPath == [.practiceDetail(itemId: leftoverId)])
     }
+
+    @Test func recordRouteCarriesProjectPages() {
+        let id = UUID()
+        #expect(RecordRoute.projectDetail(projectId: id) == .projectDetail(projectId: id))
+        var path: [RecordRoute] = [.projectCreate, .projectDetail(projectId: id), .projectEdit(projectId: id)]
+        path.append(.practiceDetail(itemId: id))
+        #expect(path.last == .practiceDetail(itemId: id))
+    }
+
+    @Test func dismissFromRecordLeavesPracticeHomeWhenOpenedFromRecordIsFalse() {
+        let router = AppRouter()
+        let itemId = UUID()
+        router.recordPath = [.practiceDetail(itemId: itemId)]
+        router.practicePath = [.detail(itemId: itemId)]
+        router.dismissPracticeDetail(fromRecord: false)
+        #expect(router.practicePath.isEmpty)
+        #expect(router.recordPath == [.practiceDetail(itemId: itemId)])
+    }
 }

@@ -73,6 +73,7 @@ enum PracticeDetailState {
 struct PracticeDetailView: View {
     let itemId: UUID
     var allowPastDayEdits: Bool = false
+    var openedFromRecord: Bool = false
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
@@ -108,9 +109,10 @@ struct PracticeDetailView: View {
     @State private var videoPlayURL: URL?
     @FocusState private var noteFocused: Bool
 
-    init(itemId: UUID, allowPastDayEdits: Bool = false) {
+    init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
         self.itemId = itemId
         self.allowPastDayEdits = allowPastDayEdits
+        self.openedFromRecord = openedFromRecord
         let identifier = itemId
         _items = Query(filter: #Predicate<PracticeItem> { $0.id == identifier && $0.deletedAt == nil })
     }
@@ -824,7 +826,7 @@ struct PracticeDetailView: View {
     }
 
     private func leave() {
-        router.dismissPracticeDetail(fromRecord: allowPastDayEdits)
+        router.dismissPracticeDetail(fromRecord: openedFromRecord)
     }
 
     private func audioClip(_ clip: VideoRecorderService.Clip) -> AudioRecorderService.Clip {
@@ -920,10 +922,10 @@ struct PracticeDetailView: View {
         } else {
             router.practiceToast = String(localized: "这次没有留下记录")
         }
-        if !allowPastDayEdits {
+        if !openedFromRecord {
             router.returnPracticeToToday = true
         }
-        router.dismissPracticeDetail(fromRecord: allowPastDayEdits)
+        router.dismissPracticeDetail(fromRecord: openedFromRecord)
     }
 
     private func show(_ message: String) {

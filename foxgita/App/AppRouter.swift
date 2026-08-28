@@ -25,6 +25,9 @@ enum PracticeRoute: Hashable {
 enum RecordRoute: Hashable {
     case history(RecordHistorySegment)
     case practiceDetail(itemId: UUID)
+    case projectCreate
+    case projectDetail(projectId: UUID)
+    case projectEdit(projectId: UUID)
 }
 
 @Observable
@@ -60,7 +63,7 @@ final class AppRouter {
         }
     }
 
-    /// Dismisses the stack that opened this detail. `fromRecord` is `allowPastDayEdits`.
+    /// Dismisses the stack that opened this detail. `fromRecord` is `openedFromRecord`.
     func dismissPracticeDetail(fromRecord: Bool) {
         if fromRecord {
             if case .practiceDetail = recordPath.last {
