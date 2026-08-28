@@ -1646,6 +1646,17 @@ struct PracticeStoreTests {
 
     // MARK: - Project commands
 
+    @Test func createProjectRejectsBlankNameAndGoal() throws {
+        let (store, _, _) = makeStore()
+        store.prepare()
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(name: "  ", goal: "目标", kindRaw: "", stageRaw: "", currentFocus: "", now: Date())
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(name: "知足", goal: "  ", kindRaw: "", stageRaw: "", currentFocus: "", now: Date())
+        }
+    }
+
     @Test func createTodayPracticeItemUsesFocusTitleAndDoesNotMoveYesterday() throws {
         let (store, repo, _) = makeStore()
         store.prepare()
