@@ -128,4 +128,31 @@ struct RecordHistoryRulesTests {
         #expect(!week.days.contains { $0.dayKey == "2026-08-28" })
         #expect(week.days.contains { $0.dayKey == "2026-08-25" })
     }
+
+    @Test func returningFromCalendarUsesFocusedDayWeek() {
+        let calendar = shanghaiCalendar
+        let focus = "2026-08-25"
+        let currentWeek = StatsAggregator.week(
+            containing: date(year: 2026, month: 8, day: 27, hour: 10),
+            calendar: calendar
+        )
+        let focusDate = RecordTimelineRules.date(fromDayKey: focus, calendar: calendar)!
+        let target = StatsAggregator.week(containing: focusDate, calendar: calendar)
+        #expect(PracticeDayKey.make(from: currentWeek.start, calendar: calendar) == "2026-08-24")
+        #expect(PracticeDayKey.make(from: target.start, calendar: calendar) == "2026-08-24")
+        let june = RecordTimelineRules.date(fromDayKey: "2026-06-30", calendar: calendar)!
+        #expect(PracticeDayKey.make(from: StatsAggregator.week(containing: june, calendar: calendar).start, calendar: calendar) == "2026-06-29")
+        #expect(
+            PracticeDayKey.make(
+                from: RecordHistoryRules.weekStart(forDayKey: focus, calendar: calendar)!,
+                calendar: calendar
+            ) == "2026-08-24"
+        )
+        #expect(
+            PracticeDayKey.make(
+                from: RecordHistoryRules.weekStart(forDayKey: "2026-06-30", calendar: calendar)!,
+                calendar: calendar
+            ) == "2026-06-29"
+        )
+    }
 }

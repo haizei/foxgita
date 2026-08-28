@@ -99,8 +99,8 @@ struct RecordView: View {
             .navigationBarHidden(true)
             .navigationDestination(for: RecordRoute.self) { route in
                 switch route {
-                case .history:
-                    HistoryView()
+                case .history(let segment):
+                    HistoryView(initialSegment: segment)
                 case .practiceDetail(let itemId):
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true)
                 }
@@ -110,6 +110,11 @@ struct RecordView: View {
             }
             .onChange(of: router.recordSegment) { _, _ in
                 emitViewOpened()
+            }
+            .onChange(of: router.recordPath) { oldPath, newPath in
+                if containsHistory(oldPath) && !containsHistory(newPath) {
+                    snapWeekFromFocusedDay()
+                }
             }
             .onDisappear {
                 player.stop()
@@ -354,6 +359,20 @@ struct RecordView: View {
             calendar: calendar
         )
         router.recordWeekStart = next.start
+    }
+
+    private func containsHistory(_ path: [RecordRoute]) -> Bool {
+        path.contains { route in
+            if case .history = route { return true }
+            return false
+        }
+    }
+
+    private func snapWeekFromFocusedDay() {
+        guard let key = router.recordFocusDayKey,
+              let start = RecordHistoryRules.weekStart(forDayKey: key, calendar: calendar)
+        else { return }
+        router.recordWeekStart = start
     }
 
     private func openCalendarForToday() {
