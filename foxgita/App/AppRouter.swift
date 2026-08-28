@@ -7,7 +7,15 @@ import Foundation
 import Observation
 
 enum MainTab: Hashable {
-    case practice, record, history, settings
+    case practice, record, settings
+}
+
+enum RecordHomeSegment: Hashable {
+    case practice, project
+}
+
+enum RecordHistorySegment: Hashable {
+    case calendar, stats
 }
 
 enum PracticeRoute: Hashable {
@@ -15,7 +23,8 @@ enum PracticeRoute: Hashable {
 }
 
 enum RecordRoute: Hashable {
-    case detail(taskId: String)
+    case history(RecordHistorySegment)
+    case practiceDetail(itemId: UUID)
 }
 
 @Observable
@@ -23,6 +32,9 @@ final class AppRouter {
     var selectedTab: MainTab = .practice
     var practicePath: [PracticeRoute] = []
     var recordPath: [RecordRoute] = []
+    var recordSegment: RecordHomeSegment = .practice
+    var recordWeekStart: Date = StatsAggregator.week().start
+    var recordFocusDayKey: String?
     /// Raised when a reminder notification is tapped. `PracticeView` resolves it
     /// to today's first task, since only it holds the task query.
     var openTodayFirstPractice = false
@@ -35,5 +47,16 @@ final class AppRouter {
 
     func clearJustCompleted() {
         lastCompletedSessionId = nil
+    }
+
+    func openRecord(dayKey: String?) {
+        selectedTab = .record
+        if let dayKey, !dayKey.isEmpty {
+            recordFocusDayKey = dayKey
+            recordPath = [.history(.calendar)]
+        } else {
+            recordFocusDayKey = nil
+            recordPath = []
+        }
     }
 }

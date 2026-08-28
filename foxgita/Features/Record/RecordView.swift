@@ -54,7 +54,7 @@ struct RecordView: View {
                             }
                             Spacer()
                             Button("数据统计") {
-                                router.selectedTab = .history
+                                router.recordPath.append(.history(.stats))
                             }
                             .font(.system(size: 14))
                             .foregroundStyle(GitaTheme.textSecondary)
@@ -95,7 +95,9 @@ struct RecordView: View {
                         } else {
                             ForEach(filtered) { item in
                                 RecordRowCard(aggregate: item) {
-                                    router.recordPath.append(.detail(taskId: item.id))
+                                    if let itemId = UUID(uuidString: item.id) {
+                                        router.recordPath.append(.practiceDetail(itemId: itemId))
+                                    }
                                 }
                             }
                         }
@@ -107,7 +109,12 @@ struct RecordView: View {
             .navigationBarHidden(true)
             .navigationDestination(for: RecordRoute.self) { route in
                 switch route {
-                case .detail(let id): RecordDetailView(taskId: id)
+                case .history:
+                    // Task 6 wires calendar/stats destinations.
+                    EmptyView()
+                case .practiceDetail(let itemId):
+                    // Temporary bridge until Task 6 replaces legacy task detail.
+                    RecordDetailView(taskId: itemId.uuidString)
                 }
             }
         }

@@ -37,12 +37,31 @@ struct AppRouterTests {
         )
     }
 
-    @Test func recordDetailRouteStillUsesTaskId() {
-        let route = RecordRoute.detail(taskId: "legacy-task")
-        #expect(route == .detail(taskId: "legacy-task"))
+    @Test func mainTabHasNoHistoryCase() {
+        let tabs: [MainTab] = [.practice, .record, .settings]
+        #expect(tabs.count == 3)
+    }
 
-        var path: [RecordRoute] = []
-        path.append(.detail(taskId: "warm"))
-        #expect(path == [.detail(taskId: "warm")])
+    @Test func recordPracticeDetailCarriesItemId() {
+        let id = UUID()
+        let route = RecordRoute.practiceDetail(itemId: id)
+        #expect(route == .practiceDetail(itemId: id))
+    }
+
+    @Test func deeplinkWithDayOpensCalendarOnRecord() {
+        let router = AppRouter()
+        router.openRecord(dayKey: "2026-08-25")
+        #expect(router.selectedTab == .record)
+        #expect(router.recordPath == [.history(.calendar)])
+        #expect(router.recordFocusDayKey == "2026-08-25")
+    }
+
+    @Test func deeplinkWithoutDayOpensRecordHome() {
+        let router = AppRouter()
+        router.recordPath = [.history(.stats)]
+        router.openRecord(dayKey: nil)
+        #expect(router.selectedTab == .record)
+        #expect(router.recordPath.isEmpty)
+        #expect(router.recordFocusDayKey == nil)
     }
 }

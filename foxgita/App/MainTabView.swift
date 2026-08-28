@@ -17,9 +17,6 @@ struct MainTabView: View {
             RecordView()
                 .tabItem { Label("记录", systemImage: "list.bullet.rectangle") }
                 .tag(MainTab.record)
-            HistoryView()
-                .tabItem { Label("历史", systemImage: "calendar") }
-                .tag(MainTab.history)
             SettingsView()
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(MainTab.settings)
