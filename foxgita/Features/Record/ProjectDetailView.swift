@@ -78,7 +78,9 @@ struct ProjectDetailView: View {
                             if !snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                                 focusSection(snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines))
                             }
-                            createTodayButton
+                            if snapshot.status == .active {
+                                createTodayButton
+                            }
                             totalsAndTrajectory
                         }
                         .padding(.horizontal, GitaTheme.pagePadding)
