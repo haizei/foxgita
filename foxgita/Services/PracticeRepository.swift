@@ -32,6 +32,11 @@ protocol PracticeRepository: AnyObject {
     func practiceItem(id: UUID, profileId: UUID) throws -> PracticeItem?
     func insertPracticeItem(_ item: PracticeItem) throws
     func practiceItemsIncludingDeleted() throws -> [PracticeItem]
+
+    func projects(profileId: UUID) throws -> [Project]
+    func project(id: UUID, profileId: UUID) throws -> Project?
+    func insertProject(_ project: Project) throws
+    func projectsIncludingDeleted() throws -> [Project]
 }
 
 enum StoreError: LocalizedError, Equatable {
@@ -162,11 +167,37 @@ final class SwiftDataPracticeRepository: PracticeRepository {
         try context.fetch(FetchDescriptor<PracticeItem>())
     }
 
+    func projects(profileId: UUID) throws -> [Project] {
+        let pid = profileId
+        return try context.fetch(
+            FetchDescriptor<Project>(
+                predicate: #Predicate { $0.profileId == pid && $0.deletedAt == nil }
+            )
+        )
+    }
+
+    func project(id: UUID, profileId: UUID) throws -> Project? {
+        let projectId = id
+        let pid = profileId
+        return try context.fetch(
+            FetchDescriptor<Project>(
+                predicate: #Predicate { $0.id == projectId && $0.profileId == pid && $0.deletedAt == nil }
+            )
+        ).first
+    }
+
+    func insertProject(_ project: Project) throws { context.insert(project) }
+
+    func projectsIncludingDeleted() throws -> [Project] {
+        try context.fetch(FetchDescriptor<Project>())
+    }
+
     func removeAll() throws {
         try context.delete(model: RecordingRef.self)
         try context.delete(model: PracticeSession.self)
         try context.delete(model: TaskItem.self)
         try context.delete(model: PracticeItem.self)
+        try context.delete(model: Project.self)
     }
 
     func save() throws {
@@ -220,9 +251,11 @@ final class InMemoryPracticeRepository: PracticeRepository {
     private(set) var storedSessions: [PracticeSession] = []
     private(set) var storedProfiles: [LocalProfile] = []
     private(set) var storedPracticeItems: [PracticeItem] = []
+    private(set) var storedProjects: [Project] = []
     private var pendingTasks: [TaskItem] = []
     private var pendingSessions: [PracticeSession] = []
     private var pendingPracticeItems: [PracticeItem] = []
+    private var pendingProjects: [Project] = []
 
     var saveError: StoreError?
     var fetchError: StoreError?
@@ -281,6 +314,21 @@ final class InMemoryPracticeRepository: PracticeRepository {
         return storedPracticeItems
     }
 
+    func projects(profileId: UUID) throws -> [Project] {
+        storedProjects.filter { $0.profileId == profileId && $0.deletedAt == nil }
+    }
+
+    func project(id: UUID, profileId: UUID) throws -> Project? {
+        storedProjects.first { $0.id == id && $0.profileId == profileId && $0.deletedAt == nil }
+    }
+
+    func insertProject(_ project: Project) throws { pendingProjects.append(project) }
+
+    func projectsIncludingDeleted() throws -> [Project] {
+        if let fetchError { throw fetchError }
+        return storedProjects
+    }
+
     func removePracticeItem(id: UUID) {
         storedPracticeItems.removeAll { $0.id == id }
         pendingPracticeItems.removeAll { $0.id == id }
@@ -290,9 +338,11 @@ final class InMemoryPracticeRepository: PracticeRepository {
         storedTasks = []
         storedSessions = []
         storedPracticeItems = []
+        storedProjects = []
         pendingTasks = []
         pendingSessions = []
         pendingPracticeItems = []
+        pendingProjects = []
     }
 
     func save() throws {
@@ -309,15 +359,24 @@ final class InMemoryPracticeRepository: PracticeRepository {
                 storedPracticeItems.append(item)
             }
         }
+        for project in pendingProjects {
+            if let index = storedProjects.firstIndex(where: { $0.id == project.id }) {
+                storedProjects[index] = project
+            } else {
+                storedProjects.append(project)
+            }
+        }
         pendingTasks = []
         pendingSessions = []
         pendingPracticeItems = []
+        pendingProjects = []
     }
 
     func rollback() {
         pendingTasks = []
         pendingSessions = []
         pendingPracticeItems = []
+        pendingProjects = []
     }
 
     func activeProfile() throws -> LocalProfile? {

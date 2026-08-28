@@ -6,12 +6,13 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV9.TaskItem
-typealias PracticeSession = GitaSchemaV9.PracticeSession
-typealias RecordingRef = GitaSchemaV9.RecordingRef
-typealias LocalProfile = GitaSchemaV9.LocalProfile
-typealias MemoryItem = GitaSchemaV9.MemoryItem
-typealias PracticeItem = GitaSchemaV9.PracticeItem
+typealias TaskItem = GitaSchemaV10.TaskItem
+typealias PracticeSession = GitaSchemaV10.PracticeSession
+typealias RecordingRef = GitaSchemaV10.RecordingRef
+typealias LocalProfile = GitaSchemaV10.LocalProfile
+typealias MemoryItem = GitaSchemaV10.MemoryItem
+typealias PracticeItem = GitaSchemaV10.PracticeItem
+typealias Project = GitaSchemaV10.Project
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -712,13 +713,14 @@ enum StepCoding {
 /// V5 → V6 adds profileId, LocalProfile, and MemoryItem;
 /// V6 → V7 adds LocalProfile.memoryConsentState;
 /// V7 → V8 adds TaskItem.originKey;
-/// V8 → V9 adds PracticeItem and optional RecordingRef.practiceItem.
+/// V8 → V9 adds PracticeItem and optional RecordingRef.practiceItem;
+/// V9 → V10 adds Project, PracticeItem.projectId, LocalProfile.pinnedProjectId.
 enum GitaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
             GitaSchemaV2.self, GitaSchemaV3.self, GitaSchemaV4.self,
             GitaSchemaV5.self, GitaSchemaV6.self, GitaSchemaV7.self,
-            GitaSchemaV8.self, GitaSchemaV9.self,
+            GitaSchemaV8.self, GitaSchemaV9.self, GitaSchemaV10.self,
         ]
     }
 
@@ -731,6 +733,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV6.self, toVersion: GitaSchemaV7.self),
             .lightweight(fromVersion: GitaSchemaV7.self, toVersion: GitaSchemaV8.self),
             .lightweight(fromVersion: GitaSchemaV8.self, toVersion: GitaSchemaV9.self),
+            .lightweight(fromVersion: GitaSchemaV9.self, toVersion: GitaSchemaV10.self),
         ]
     }
 }

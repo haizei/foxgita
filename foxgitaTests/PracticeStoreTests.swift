@@ -1624,4 +1624,23 @@ struct PracticeStoreTests {
         )
         #expect(created.sourceRaw == PracticeItemSource.next.rawValue)
     }
+
+    @Test func snapshotIncludesProjectId() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let projectId = UUID()
+        let item = PracticeItem(
+            id: UUID(),
+            profileId: profileId,
+            practiceDayKey: "2026-08-28",
+            title: "挂项目",
+            categoryRaw: PracticeCategory.chord.rawValue,
+            durationSeconds: 0,
+            projectId: projectId
+        )
+        try repo.insertPracticeItem(item)
+        try repo.save()
+        #expect(PracticeStore.snapshot(from: item).projectId == projectId)
+    }
 }

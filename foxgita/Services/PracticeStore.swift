@@ -72,6 +72,7 @@ final class PracticeStore {
             title: item.title,
             durationSeconds: item.durationSeconds,
             isDeleted: item.deletedAt != nil,
+            projectId: item.projectId,
             note: item.note,
             recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
             categoryRaw: item.categoryRaw
