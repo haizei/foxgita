@@ -7,6 +7,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
     let title: String
     let durationSeconds: Int
     let isDeleted: Bool
+    let projectId: UUID?
     let note: String
     let recordingCount: Int
     let categoryRaw: String
@@ -18,6 +19,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         title: String,
         durationSeconds: Int,
         isDeleted: Bool,
+        projectId: UUID? = nil,
         note: String = "",
         recordingCount: Int = 0,
         categoryRaw: String = PracticeCategory.chord.rawValue
@@ -28,6 +30,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         self.title = title
         self.durationSeconds = durationSeconds
         self.isDeleted = isDeleted
+        self.projectId = projectId
         self.note = note
         self.recordingCount = recordingCount
         self.categoryRaw = categoryRaw
