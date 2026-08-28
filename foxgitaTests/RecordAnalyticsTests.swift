@@ -26,4 +26,22 @@ struct RecordAnalyticsTests {
         ])
         #expect(captured[2].1["is_today"] == "false")
     }
+
+    @Test func projectEventsMatchSpecKeys() {
+        var captured: [(String, [String: String])] = []
+        RecordAnalytics.sink = { captured.append(($0, $1)) }
+        defer { RecordAnalytics.sink = nil }
+        RecordAnalytics.projectViewOpened(projectId: "p1", hasEvidence: true)
+        RecordAnalytics.projectPracticeCreateTapped(projectId: "p1")
+        RecordAnalytics.projectPracticeCreated(projectId: "p1", practiceItemId: "i1", result: "success")
+        RecordAnalytics.practiceProjectChanged(fromProjectId: "p1", toProjectId: "")
+        #expect(captured.map(\.0) == [
+            "project_view_opened",
+            "project_practice_create_tapped",
+            "project_practice_created",
+            "practice_project_changed",
+        ])
+        #expect(captured[0].1["has_evidence"] == "true")
+        #expect(captured[3].1["to_project_id"] == "")
+    }
 }

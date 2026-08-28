@@ -19,4 +19,27 @@ enum RecordAnalytics {
             ["practice_item_id": itemId, "practice_day": practiceDay, "is_today": isToday ? "true" : "false"]
         )
     }
+
+    static func projectViewOpened(projectId: String, hasEvidence: Bool) {
+        sink?("project_view_opened", ["project_id": projectId, "has_evidence": hasEvidence ? "true" : "false"])
+    }
+
+    static func projectPracticeCreateTapped(projectId: String) {
+        sink?("project_practice_create_tapped", ["project_id": projectId])
+    }
+
+    static func projectPracticeCreated(projectId: String, practiceItemId: String, result: String) {
+        sink?("project_practice_created", [
+            "project_id": projectId,
+            "practice_item_id": practiceItemId,
+            "result": result,
+        ])
+    }
+
+    static func practiceProjectChanged(fromProjectId: String, toProjectId: String) {
+        sink?("practice_project_changed", [
+            "from_project_id": fromProjectId,
+            "to_project_id": toProjectId,
+        ])
+    }
 }
