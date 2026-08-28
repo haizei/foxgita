@@ -72,7 +72,7 @@ struct AppRouterTests {
         router.recordPath = [.history(.calendar), .practiceDetail(itemId: itemId)]
         router.returnPracticeToToday = false
 
-        router.dismissPracticeDetail()
+        router.dismissPracticeDetail(fromRecord: true)
 
         #expect(router.recordPath == [.history(.calendar)])
         #expect(router.practicePath == [.detail(itemId: itemId)])
@@ -85,9 +85,22 @@ struct AppRouterTests {
         router.practicePath = [.detail(itemId: itemId)]
         router.recordPath = []
 
-        router.dismissPracticeDetail()
+        router.dismissPracticeDetail(fromRecord: false)
 
         #expect(router.practicePath.isEmpty)
         #expect(router.recordPath.isEmpty)
+    }
+
+    @Test func dismissFromPracticeHomeLeavesLeftoverRecordDetail() {
+        let router = AppRouter()
+        let homeId = UUID()
+        let leftoverId = UUID()
+        router.practicePath = [.detail(itemId: homeId)]
+        router.recordPath = [.practiceDetail(itemId: leftoverId)]
+
+        router.dismissPracticeDetail(fromRecord: false)
+
+        #expect(router.practicePath.isEmpty)
+        #expect(router.recordPath == [.practiceDetail(itemId: leftoverId)])
     }
 }

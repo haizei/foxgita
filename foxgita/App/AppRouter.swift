@@ -60,10 +60,12 @@ final class AppRouter {
         }
     }
 
-    /// Record-opened detail lives on `recordPath`. Practice-home still clears `practicePath`.
-    func dismissPracticeDetail() {
-        if case .practiceDetail = recordPath.last {
-            recordPath.removeLast()
+    /// Dismisses the stack that opened this detail. `fromRecord` is `allowPastDayEdits`.
+    func dismissPracticeDetail(fromRecord: Bool) {
+        if fromRecord {
+            if case .practiceDetail = recordPath.last {
+                recordPath.removeLast()
+            }
             return
         }
         practicePath.removeAll()
