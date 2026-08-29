@@ -15,7 +15,9 @@ struct ProjectRulesTests {
         status: ProjectStatus = .active,
         createdAt: Date,
         isDeleted: Bool = false,
-        currentFocus: String = "副歌节奏"
+        currentFocus: String = "副歌节奏",
+        stageVersionItemId: UUID? = nil,
+        finalVersionItemId: UUID? = nil
     ) -> ProjectSnapshot {
         ProjectSnapshot(
             id: id,
@@ -27,25 +29,32 @@ struct ProjectRulesTests {
             currentFocus: currentFocus,
             status: status,
             createdAt: createdAt,
-            isDeleted: isDeleted
+            isDeleted: isDeleted,
+            stageVersionItemId: stageVersionItemId,
+            finalVersionItemId: finalVersionItemId
         )
     }
 
     private func item(
+        id: UUID = UUID(),
         projectId: UUID?,
         dayKey: String,
         createdAt: Date,
         durationSeconds: Int,
-        isDeleted: Bool = false
+        isDeleted: Bool = false,
+        note: String = "",
+        recordingCount: Int = 0
     ) -> PracticeItemSnapshot {
         PracticeItemSnapshot(
-            id: UUID(),
+            id: id,
             practiceDayKey: dayKey,
             createdAt: createdAt,
             title: "练",
             durationSeconds: durationSeconds,
             isDeleted: isDeleted,
-            projectId: projectId
+            projectId: projectId,
+            note: note,
+            recordingCount: recordingCount
         )
     }
 
@@ -134,7 +143,7 @@ struct ProjectRulesTests {
 
     @Test func projectNameForTagIsNilWhenMissing() {
         let id = UUID()
-        let projects = [ProjectSnapshot(id: id, profileId: UUID(), name: "知足", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", status: .active, createdAt: Date(), isDeleted: false)]
+        let projects = [ProjectSnapshot(id: id, profileId: UUID(), name: "知足", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", status: .active, createdAt: Date(), isDeleted: false, stageVersionItemId: nil, finalVersionItemId: nil)]
         #expect(ProjectRules.projectName(id: id, in: projects) == "知足")
         #expect(ProjectRules.projectName(id: UUID(), in: projects) == nil)
     }
@@ -146,5 +155,75 @@ struct ProjectRulesTests {
         ]
         #expect(ProjectRules.lastEvidence(projectId: pid, in: items) == nil)
         #expect(ProjectRules.totalSeconds(projectId: pid, in: items) == 0)
+    }
+
+    @Test func versionSlotResolvedEvenWhenItemIsNoLongerEffective() {
+        let projectId = UUID()
+        let itemId = UUID()
+        let t0 = date(2026, 8, 20)
+        let items = [
+            item(
+                id: itemId,
+                projectId: projectId,
+                dayKey: "2026-08-20",
+                createdAt: t0,
+                durationSeconds: 0
+            ),
+        ]
+        let slot = ProjectRules.versionSlot(itemId: itemId, projectId: projectId, in: items)
+        guard case .resolved(let snap) = slot else {
+            Issue.record("expected resolved"); return
+        }
+        #expect(snap.id == itemId)
+        #expect(ProjectRules.showsVersionPill(itemId: itemId, projectId: projectId, in: items))
+    }
+
+    @Test func versionSlotStaleWhenItemMissingDeletedOrWrongProject() {
+        let projectId = UUID()
+        let other = UUID()
+        let t0 = date(2026, 8, 20)
+        let missing = ProjectRules.versionSlot(itemId: UUID(), projectId: projectId, in: [])
+        #expect(missing == .stale)
+        let deletedId = UUID()
+        let deleted = [
+            item(id: deletedId, projectId: projectId, dayKey: "2026-08-20", createdAt: t0, durationSeconds: 60, isDeleted: true),
+        ]
+        #expect(ProjectRules.versionSlot(itemId: deletedId, projectId: projectId, in: deleted) == .stale)
+        #expect(!ProjectRules.showsVersionPill(itemId: deletedId, projectId: projectId, in: deleted))
+        let movedId = UUID()
+        let moved = [
+            item(id: movedId, projectId: other, dayKey: "2026-08-20", createdAt: t0, durationSeconds: 60),
+        ]
+        #expect(ProjectRules.versionSlot(itemId: movedId, projectId: projectId, in: moved) == .stale)
+        #expect(ProjectRules.versionSlot(itemId: nil, projectId: projectId, in: moved) == .empty)
+        #expect(!ProjectRules.showsVersionPill(itemId: nil, projectId: projectId, in: moved))
+    }
+
+    @Test func versionCandidatesAreEffectiveNewestFirstAndIncludeNoteOnly() {
+        let projectId = UUID()
+        let older = date(2026, 8, 20, 10)
+        let newer = date(2026, 8, 21, 10)
+        let olderId = UUID()
+        let noteOnly = UUID()
+        let withDuration = UUID()
+        let blank = UUID()
+        let otherProject = UUID()
+        let items = [
+            item(id: olderId, projectId: projectId, dayKey: "2026-08-21", createdAt: older, durationSeconds: 60),
+            item(id: withDuration, projectId: projectId, dayKey: "2026-08-20", createdAt: newer, durationSeconds: 30),
+            item(id: noteOnly, projectId: projectId, dayKey: "2026-08-19", createdAt: date(2026, 8, 22), durationSeconds: 0, note: "副歌抢拍"),
+            item(id: blank, projectId: projectId, dayKey: "2026-08-28", createdAt: date(2026, 8, 28), durationSeconds: 0),
+            item(id: otherProject, projectId: UUID(), dayKey: "2026-08-28", createdAt: date(2026, 8, 28), durationSeconds: 90),
+        ]
+        let candidates = ProjectRules.versionCandidates(projectId: projectId, in: items)
+        #expect(candidates.map(\.id) == [noteOnly, withDuration, olderId])
+    }
+
+    @Test func showsThisTimeCardWhenActiveOrEndedWithFocus() {
+        let t0 = date(2026, 8, 20)
+        #expect(ProjectRules.showsThisTimeCard(project(status: .active, createdAt: t0, currentFocus: "")))
+        #expect(ProjectRules.showsThisTimeCard(project(status: .completed, createdAt: t0, currentFocus: "副歌节奏")))
+        #expect(!ProjectRules.showsThisTimeCard(project(status: .completed, createdAt: t0, currentFocus: "")))
+        #expect(!ProjectRules.showsThisTimeCard(project(status: .archived, createdAt: t0, currentFocus: "  ")))
     }
 }

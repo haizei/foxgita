@@ -15,12 +15,20 @@ struct ProjectSnapshot: Equatable, Identifiable {
     let status: ProjectStatus
     let createdAt: Date
     let isDeleted: Bool
+    let stageVersionItemId: UUID?
+    let finalVersionItemId: UUID?
 }
 
 struct ProjectListState: Equatable {
     var current: ProjectSnapshot?
     var others: [ProjectSnapshot]
     var ended: [ProjectSnapshot]
+}
+
+enum ProjectVersionSlot: Equatable {
+    case empty
+    case resolved(PracticeItemSnapshot)
+    case stale
 }
 
 enum ProjectRules {
@@ -35,7 +43,9 @@ enum ProjectRules {
             currentFocus: project.currentFocus,
             status: project.status,
             createdAt: project.createdAt,
-            isDeleted: project.deletedAt != nil
+            isDeleted: project.deletedAt != nil,
+            stageVersionItemId: nil,
+            finalVersionItemId: nil
         )
     }
 
@@ -96,6 +106,40 @@ enum ProjectRules {
     static func projectName(id: UUID, in projects: [ProjectSnapshot]) -> String? {
         guard let project = projects.first(where: { $0.id == id }), !project.isDeleted else { return nil }
         return project.name
+    }
+
+    static func versionSlot(
+        itemId: UUID?,
+        projectId: UUID,
+        in items: [PracticeItemSnapshot]
+    ) -> ProjectVersionSlot {
+        guard let itemId else { return .empty }
+        guard let item = items.first(where: { $0.id == itemId }) else { return .stale }
+        guard !item.isDeleted, item.projectId == projectId else { return .stale }
+        return .resolved(item)
+    }
+
+    static func showsVersionPill(
+        itemId: UUID?,
+        projectId: UUID,
+        in items: [PracticeItemSnapshot]
+    ) -> Bool {
+        if case .resolved = versionSlot(itemId: itemId, projectId: projectId, in: items) {
+            return true
+        }
+        return false
+    }
+
+    static func versionCandidates(projectId: UUID, in items: [PracticeItemSnapshot]) -> [PracticeItemSnapshot] {
+        items
+            .filter { $0.projectId == projectId && PracticeItemRules.isEffective($0) }
+            .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    static func showsThisTimeCard(_ project: ProjectSnapshot) -> Bool {
+        if project.status == .active { return true }
+        let focus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !focus.isEmpty
     }
 
     private static func hasEffectiveActivity(_ project: ProjectSnapshot, items: [PracticeItemSnapshot]) -> Bool {
