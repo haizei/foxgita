@@ -56,4 +56,69 @@ enum RecordAnalytics {
             "practice_item_id": practiceItemId,
         ])
     }
+
+    static func projectEmptyViewed(source: String) {
+        sink?("project_empty_viewed", ["source": source])
+    }
+
+    static func projectSetupStarted(source: String, fromEmpty: Bool, hasExistingPractice: Bool) {
+        sink?("project_setup_started", [
+            "source": source,
+            "from_empty": fromEmpty ? "true" : "false",
+            "has_existing_practice": hasExistingPractice ? "true" : "false",
+        ])
+    }
+
+    static func projectSetupSubmitClicked(fromEmpty: Bool, hasFocus: Bool) {
+        sink?("project_setup_submit_clicked", [
+            "from_empty": fromEmpty ? "true" : "false",
+            "has_focus": hasFocus ? "true" : "false",
+        ])
+    }
+
+    static func projectSetupValidationFailed(fieldName: String, reason: String) {
+        sink?("project_setup_validation_failed", [
+            "field_name": fieldName,
+            "reason": reason,
+        ])
+    }
+
+    static func projectCreated(source: String, fromEmpty: Bool, hasFocus: Bool, durationMs: Int) {
+        sink?("project_created", [
+            "source": source,
+            "from_empty": fromEmpty ? "true" : "false",
+            "has_focus": hasFocus ? "true" : "false",
+            "duration_ms": String(durationMs),
+        ])
+    }
+
+    static func projectSetupAbandoned(fromEmpty: Bool, durationMs: Int) {
+        sink?("project_setup_abandoned", [
+            "from_empty": fromEmpty ? "true" : "false",
+            "duration_ms": String(durationMs),
+        ])
+    }
+
+    static func projectReadyViewed(projectId: String, hasFocus: Bool) {
+        sink?("project_ready_viewed", [
+            "project_id": projectId,
+            "has_focus": hasFocus ? "true" : "false",
+        ])
+    }
+
+    static func projectReadyActionClicked(action: String) {
+        sink?("project_ready_action_clicked", ["action": action])
+    }
+
+    static func projectFirstPracticeCreated(
+        projectId: String,
+        practiceItemId: String,
+        elapsedFromProjectCreation: Int
+    ) {
+        sink?("project_first_practice_created", [
+            "project_id": projectId,
+            "practice_item_id": practiceItemId,
+            "elapsed_from_project_creation": String(elapsedFromProjectCreation),
+        ])
+    }
 }

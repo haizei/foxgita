@@ -50,4 +50,46 @@ struct RecordAnalyticsTests {
         #expect(captured[4].1["practice_item_id"] == "i1")
         #expect(captured[5].1["practice_item_id"] == "")
     }
+
+    @Test func projectInitEventsMatchSpecKeys() {
+        var captured: [(String, [String: String])] = []
+        RecordAnalytics.sink = { captured.append(($0, $1)) }
+        defer { RecordAnalytics.sink = nil }
+        RecordAnalytics.projectEmptyViewed(source: "segment")
+        RecordAnalytics.projectSetupStarted(source: "empty", fromEmpty: true, hasExistingPractice: false)
+        RecordAnalytics.projectSetupSubmitClicked(fromEmpty: true, hasFocus: false)
+        RecordAnalytics.projectSetupValidationFailed(fieldName: "name", reason: "empty")
+        RecordAnalytics.projectCreated(source: "empty", fromEmpty: true, hasFocus: false, durationMs: 1200)
+        RecordAnalytics.projectSetupAbandoned(fromEmpty: true, durationMs: 800)
+        RecordAnalytics.projectReadyViewed(projectId: "p1", hasFocus: false)
+        RecordAnalytics.projectReadyActionClicked(action: "create_practice")
+        RecordAnalytics.projectFirstPracticeCreated(
+            projectId: "p1",
+            practiceItemId: "i1",
+            elapsedFromProjectCreation: 400
+        )
+        #expect(captured.map(\.0) == [
+            "project_empty_viewed",
+            "project_setup_started",
+            "project_setup_submit_clicked",
+            "project_setup_validation_failed",
+            "project_created",
+            "project_setup_abandoned",
+            "project_ready_viewed",
+            "project_ready_action_clicked",
+            "project_first_practice_created",
+        ])
+        #expect(captured[1].1 == [
+            "source": "empty",
+            "from_empty": "true",
+            "has_existing_practice": "false",
+        ])
+        #expect(captured[4].1["duration_ms"] == "1200")
+        #expect(captured[4].1["has_focus"] == "false")
+        #expect(captured[7].1["action"] == "create_practice")
+        #expect(captured[8].1["elapsed_from_project_creation"] == "400")
+        #expect(captured.allSatisfy { event in
+            event.1.values.allSatisfy { !$0.contains("知足") && !$0.contains("副歌") }
+        })
+    }
 }
