@@ -71,33 +71,27 @@ struct ProjectEditorView: View {
     var body: some View {
         ZStack {
             PageBackground()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    Button("关闭") { requestClose() }
-                    Text(mode == .create ? "创建项目" : "编辑项目")
-                        .font(GitaFont.title())
-                    field(
-                        title: "项目名称（必填）",
-                        text: $name,
-                        max: ProjectSetupRules.nameMax,
-                        error: nameError
-                    )
-                    field(
-                        title: "完成目标（必填）",
-                        text: $goal,
-                        max: ProjectSetupRules.goalMax,
-                        error: goalError
-                    )
-                    optionalSection
-                    if let error {
-                        Text(error).foregroundStyle(GitaTheme.brand500)
+            VStack(spacing: 0) {
+                editorHeader
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        requiredCard
+                        optionalSection
+                        if let error {
+                            Text(error)
+                                .font(GitaFont.callout())
+                                .foregroundStyle(GitaTheme.brand500)
+                        }
                     }
-                    Button(mode == .create ? "创建项目" : "保存") { save() }
-                        .disabled(!canSubmit || isSubmitting)
-                    Spacer(minLength: 0)
+                    .padding(.horizontal, GitaTheme.s24)
+                    .padding(.top, GitaTheme.s16)
+                    .padding(.bottom, 24)
                 }
-                .padding(GitaTheme.pagePadding)
+                .scrollDismissesKeyboard(.interactively)
             }
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            editorFooter
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
@@ -108,8 +102,65 @@ struct ProjectEditorView: View {
         }
     }
 
+    private var editorHeader: some View {
+        HStack {
+            Color.clear.frame(width: 24, height: 24)
+            Spacer(minLength: 0)
+            Text(mode == .create ? "创建项目" : "编辑项目")
+                .font(GitaFont.body(.bold))
+                .foregroundStyle(GitaTheme.textPrimary)
+            Spacer(minLength: 0)
+            Button(action: requestClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("关闭"))
+        }
+        .padding(.horizontal, GitaTheme.s24)
+        .frame(height: 56)
+    }
+
+    private var requiredCard: some View {
+        VStack(alignment: .leading, spacing: 13) {
+            field(
+                title: "项目名称 *",
+                placeholder: "学会《知足》",
+                text: $name,
+                max: ProjectSetupRules.nameMax,
+                emphasized: false,
+                minHeight: 48,
+                error: nameError
+            )
+            field(
+                title: "完成目标 *",
+                placeholder: "跟着原唱，稳定完成整首弹唱",
+                text: $goal,
+                max: ProjectSetupRules.goalMax,
+                emphasized: true,
+                minHeight: 62,
+                error: goalError
+            )
+        }
+        .padding(GitaTheme.s16)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+    }
+
     private var optionalSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("补充练习方向")
+                    .font(GitaFont.footnote(.bold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Spacer(minLength: 0)
+                Text("选填")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+            }
+
             HStack(spacing: 8) {
                 ForEach(ProjectSetupRules.kinds, id: \.self) { item in
                     let selected = ProjectSetupRules.trimmed(kind) == item
@@ -161,28 +212,67 @@ struct ProjectEditorView: View {
             }
 
             field(
-                title: "当前重点（选填）",
+                title: "当前重点",
+                placeholder: "主歌进入副歌时保持节奏",
                 text: $currentFocus,
                 max: ProjectSetupRules.focusMax,
+                emphasized: true,
+                minHeight: 52,
                 error: nil
             )
-            Text("下一次行动提示，不是待办")
+            Text("写下一次练习最值得关注的一件事，不是待办。")
                 .font(GitaFont.caption())
                 .foregroundStyle(GitaTheme.textSecondary)
         }
     }
 
+    private var editorFooter: some View {
+        Button(action: save) {
+            Text(mode == .create ? "创建项目" : "保存")
+                .font(GitaFont.body(.bold))
+                .foregroundStyle(GitaTheme.brandOn)
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(GitaTheme.brand500)
+                .clipShape(Capsule())
+                .opacity(canSubmit && !isSubmitting ? 1 : 0.72)
+        }
+        .buttonStyle(.plain)
+        .disabled(!canSubmit || isSubmitting)
+        .padding(.horizontal, GitaTheme.s24)
+        .padding(.top, 10)
+        .padding(.bottom, 26)
+        .background(GitaTheme.bgDefault)
+    }
+
     private func field(
         title: String,
+        placeholder: String,
         text: Binding<String>,
         max: Int,
+        emphasized: Bool,
+        minHeight: CGFloat,
         error: String?
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 7) {
             Text(title)
-                .font(GitaFont.caption())
-                .foregroundStyle(GitaTheme.textSecondary)
-            TextField(title, text: text)
+                .font(GitaFont.footnote(.medium))
+                .foregroundStyle(GitaTheme.textPrimary)
+            TextField(placeholder, text: text, axis: .vertical)
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .tint(GitaTheme.brand500)
+                .textFieldStyle(.plain)
+                .lineLimit(1...4)
+                .frame(minHeight: minHeight, alignment: .topLeading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(emphasized ? GitaTheme.brand50 : GitaTheme.bgSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: GitaTheme.radius12)
+                        .stroke(emphasized ? GitaTheme.brand50 : GitaTheme.borderSubtle, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
                 .onChange(of: text.wrappedValue) { _, newValue in
                     let clamped = ProjectSetupRules.clamp(newValue, max: max)
                     if clamped != newValue {
