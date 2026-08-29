@@ -23,6 +23,9 @@ struct ProjectDetailView: View {
     @State private var creatingTodayLock = false
     @State private var showCompleteConfirm = false
     @State private var showDeleteConfirm = false
+    @State private var pickerKind: ProjectVersionKind?
+    @State private var versionWriteLock = false
+    @State private var pendingClearKind: ProjectVersionKind?
 
     private var calendar: Calendar { .current }
 
@@ -53,10 +56,6 @@ struct ProjectDetailView: View {
         ProjectRules.lastEvidence(projectId: projectId, in: allSnapshots)
     }
 
-    private var trajectory: [PracticeItemSnapshot] {
-        ProjectRules.associatedEffectiveItems(projectId: projectId, in: allSnapshots)
-    }
-
     private var totalSeconds: Int {
         ProjectRules.totalSeconds(projectId: projectId, in: allSnapshots)
     }
@@ -75,13 +74,12 @@ struct ProjectDetailView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             identitySection(snapshot)
                             evidenceSection
-                            if !snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                focusSection(snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines))
+                            if ProjectRules.showsThisTimeCard(snapshot) {
+                                thisTimeSection(snapshot)
                             }
-                            if snapshot.status == .active {
-                                createTodayButton
-                            }
-                            totalsAndTrajectory
+                            versionSlotsSection(snapshot)
+                            trajectoryLink
+                            cumulativeLabel
                         }
                         .padding(.horizontal, GitaTheme.pagePadding)
                         .padding(.bottom, 32)
@@ -137,6 +135,33 @@ struct ProjectDetailView: View {
             Button("删除", role: .destructive) { deleteProject() }
             Button("取消", role: .cancel) {}
         }
+        .confirmationDialog(
+            "清除后不会删除这条练习或媒体。",
+            isPresented: Binding(
+                get: { pendingClearKind != nil },
+                set: { if !$0 { pendingClearKind = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("清除引用", role: .destructive) {
+                if let kind = pendingClearKind {
+                    applyVersion(kind: kind, itemId: nil)
+                }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .sheet(item: $pickerKind) { kind in
+            ProjectVersionPickerView(
+                projectId: projectId,
+                kind: kind,
+                selectedItemId: kind == .stage
+                    ? snapshot?.stageVersionItemId
+                    : snapshot?.finalVersionItemId,
+                candidates: ProjectRules.versionCandidates(projectId: projectId, in: allSnapshots)
+            ) { itemId in
+                applyVersion(kind: kind, itemId: itemId)
+            }
+        }
     }
 
     private var header: some View {
@@ -191,20 +216,48 @@ struct ProjectDetailView: View {
 
     private func identitySection(_ project: ProjectSnapshot) -> some View {
         let stage = project.stageRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        let showStagePill = ProjectRules.showsVersionPill(
+            itemId: project.stageVersionItemId,
+            projectId: project.id,
+            in: allSnapshots
+        )
+        let showFinalPill = ProjectRules.showsVersionPill(
+            itemId: project.finalVersionItemId,
+            projectId: project.id,
+            in: allSnapshots
+        )
         return VStack(alignment: .leading, spacing: 8) {
             Text(project.name)
                 .font(GitaFont.title())
                 .foregroundStyle(GitaTheme.textPrimary)
+            if !stage.isEmpty || showStagePill || showFinalPill {
+                ChipWrap(spacing: 8) {
+                    if !stage.isEmpty {
+                        identityPill(stage)
+                    }
+                    if showStagePill {
+                        identityPill("阶段成果")
+                    }
+                    if showFinalPill {
+                        identityPill("最终版本")
+                    }
+                }
+            }
             Text(project.goal)
                 .font(GitaFont.body())
                 .foregroundStyle(GitaTheme.textSecondary)
-            if !stage.isEmpty {
-                Text(stage)
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textTertiary)
-            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func identityPill(_ text: String) -> some View {
+        Text(text)
+            .font(GitaFont.caption())
+            .foregroundStyle(GitaTheme.brand500)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(GitaTheme.brand50)
+            .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -281,15 +334,28 @@ struct ProjectDetailView: View {
         .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
     }
 
-    private func focusSection(_ focus: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func thisTimeSection(_ snapshot: ProjectSnapshot) -> some View {
+        let focus = snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+        return VStack(alignment: .leading, spacing: 10) {
             Text("这次练什么")
                 .font(GitaFont.body(.semibold))
                 .foregroundStyle(GitaTheme.textPrimary)
-            Text(focus)
-                .font(GitaFont.body())
-                .foregroundStyle(GitaTheme.textSecondary)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 12) {
+                if !focus.isEmpty {
+                    Text(focus)
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                if snapshot.status == .active {
+                    createTodayButton
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GitaTheme.bgSurface)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+            .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
         }
     }
 
@@ -308,52 +374,117 @@ struct ProjectDetailView: View {
         .buttonStyle(.plain)
     }
 
-    private var totalsAndTrajectory: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("累计 \(RecordMinutes.display(fromSeconds: totalSeconds)) 分钟")
+    private func versionSlotsSection(_ snapshot: ProjectSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            versionSlotRow(
+                title: "阶段版本",
+                kind: .stage,
+                itemId: snapshot.stageVersionItemId,
+                projectId: snapshot.id
+            )
+            versionSlotRow(
+                title: "最终版本",
+                kind: .final,
+                itemId: snapshot.finalVersionItemId,
+                projectId: snapshot.id
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func versionSlotRow(
+        title: String,
+        kind: ProjectVersionKind,
+        itemId: UUID?,
+        projectId: UUID
+    ) -> some View {
+        let slot = ProjectRules.versionSlot(itemId: itemId, projectId: projectId, in: allSnapshots)
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
                 .font(GitaFont.body(.semibold))
                 .foregroundStyle(GitaTheme.textPrimary)
-
-            if !trajectory.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(trajectory.enumerated()), id: \.element.id) { index, item in
-                        Button {
-                            router.recordPath.append(.practiceDetail(itemId: item.id))
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(item.title)
-                                        .font(GitaFont.body(.bold))
-                                        .foregroundStyle(GitaTheme.textPrimary)
-                                        .multilineTextAlignment(.leading)
-                                    Text(
-                                        "\(RecordTimelineRules.dayTitle(dayKey: item.practiceDayKey, now: Date(), calendar: calendar)) · \(RecordMinutes.display(fromSeconds: item.durationSeconds)) 分钟"
-                                    )
-                                    .font(GitaFont.caption())
-                                    .foregroundStyle(GitaTheme.textSecondary)
-                                }
-                                Spacer(minLength: 0)
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(GitaTheme.iconSecondary)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 14)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-
-                        if index < trajectory.count - 1 {
-                            Divider()
-                                .overlay(GitaTheme.borderSubtle)
-                                .padding(.leading, 16)
-                        }
-                    }
+            switch slot {
+            case .empty:
+                Button(kind == .stage ? "选择阶段版本" : "选择最终版本") {
+                    pickerKind = kind
                 }
-                .background(GitaTheme.bgSurface)
-                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-                .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+                .font(GitaFont.callout(.semibold))
+                .foregroundStyle(GitaTheme.brand500)
+                .buttonStyle(.plain)
+            case .resolved(let item):
+                Button {
+                    router.recordPath.append(.practiceDetail(itemId: item.id))
+                } label: {
+                    evidenceBody(item)
+                }
+                .buttonStyle(.plain)
+                HStack(spacing: 16) {
+                    Button("更换") { pickerKind = kind }
+                    Button("清除引用") { pendingClearKind = kind }
+                }
+                .font(GitaFont.callout(.semibold))
+                .foregroundStyle(GitaTheme.brand500)
+                .buttonStyle(.plain)
+            case .stale:
+                Button {
+                    applyVersion(kind: kind, itemId: nil, thenPick: true)
+                } label: {
+                    Text("已失效，请重新选择")
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(16)
+                        .background(GitaTheme.bgSubtle)
+                        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+                }
+                .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var trajectoryLink: some View {
+        Button {
+            router.recordPath.append(.projectTrajectory(projectId: projectId))
+        } label: {
+            HStack {
+                Text("查看项目练习轨迹")
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+            }
+            .font(GitaFont.body())
+            .foregroundStyle(GitaTheme.brand500)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var cumulativeLabel: some View {
+        Text("累计 \(RecordMinutes.display(fromSeconds: totalSeconds)) 分钟")
+            .font(GitaFont.caption())
+            .foregroundStyle(GitaTheme.textSecondary)
+    }
+
+    private func applyVersion(kind: ProjectVersionKind, itemId: UUID?, thenPick: Bool = false) {
+        guard !versionWriteLock else { return }
+        versionWriteLock = true
+        defer { versionWriteLock = false }
+        do {
+            switch kind {
+            case .stage:
+                try store.setProjectStageVersion(projectId: projectId, itemId: itemId, now: Date())
+                RecordAnalytics.projectStageVersionChanged(
+                    projectId: projectId.uuidString,
+                    practiceItemId: itemId?.uuidString ?? ""
+                )
+            case .final:
+                try store.setProjectFinalVersion(projectId: projectId, itemId: itemId, now: Date())
+                RecordAnalytics.projectFinalVersionChanged(
+                    projectId: projectId.uuidString,
+                    practiceItemId: itemId?.uuidString ?? ""
+                )
+            }
+            pickerKind = thenPick ? kind : nil
+        } catch {
+            showToast(String(localized: "操作失败，请重试"))
         }
     }
 
@@ -460,5 +591,44 @@ struct ProjectDetailView: View {
             try? await Task.sleep(for: .seconds(2))
             if toast == message { toast = nil }
         }
+    }
+}
+
+private struct ChipWrap: Layout {
+    var spacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        arrange(in: proposal.replacingUnspecifiedDimensions().width, subviews: subviews).size
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let result = arrange(in: bounds.width, subviews: subviews)
+        for (subview, origin) in zip(subviews, result.origins) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private func arrange(in width: CGFloat, subviews: Subviews) -> (origins: [CGPoint], size: CGSize) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var maxX: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += rowHeight + spacing
+                rowHeight = 0
+            }
+            origins.append(CGPoint(x: x, y: y))
+            rowHeight = max(rowHeight, size.height)
+            x += size.width + spacing
+            maxX = max(maxX, x - spacing)
+        }
+        return (origins, CGSize(width: max(maxX, 0), height: y + rowHeight))
     }
 }
