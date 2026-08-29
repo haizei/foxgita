@@ -334,6 +334,61 @@ struct ProjectDetailView: View {
         .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
     }
 
+    @ViewBuilder
+    private func resolvedSlotCard(_ item: PracticeItemSnapshot) -> some View {
+        let note = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
+        HStack(alignment: .center, spacing: 10) {
+            if item.recordingCount > 0 {
+                Button {
+                    playNewestRecording(of: item)
+                } label: {
+                    Image(systemName: player.playingId == newestRecordingId(of: item) ? "pause.fill" : "play.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(width: 28, height: 28)
+                        .background(GitaTheme.brand50)
+                        .clipShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("播放最近一条媒体")
+            }
+            Button {
+                router.recordPath.append(.practiceDetail(itemId: item.id))
+            } label: {
+                Group {
+                    if item.recordingCount > 0 {
+                        Text("播放最近一条媒体")
+                            .font(GitaFont.body(.semibold))
+                            .foregroundStyle(GitaTheme.textPrimary)
+                    } else if !note.isEmpty {
+                        Text(note)
+                            .font(GitaFont.body())
+                            .foregroundStyle(GitaTheme.textPrimary)
+                    } else {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(item.title)
+                                .font(GitaFont.body(.bold))
+                                .foregroundStyle(GitaTheme.textPrimary)
+                            Text(
+                                "\(RecordTimelineRules.dayTitle(dayKey: item.practiceDayKey, now: Date(), calendar: calendar)) · \(RecordMinutes.display(fromSeconds: item.durationSeconds)) 分钟"
+                            )
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+    }
+
     private func thisTimeSection(_ snapshot: ProjectSnapshot) -> some View {
         let focus = snapshot.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
         return VStack(alignment: .leading, spacing: 10) {
@@ -412,12 +467,7 @@ struct ProjectDetailView: View {
                 .foregroundStyle(GitaTheme.brand500)
                 .buttonStyle(.plain)
             case .resolved(let item):
-                Button {
-                    router.recordPath.append(.practiceDetail(itemId: item.id))
-                } label: {
-                    evidenceBody(item)
-                }
-                .buttonStyle(.plain)
+                resolvedSlotCard(item)
                 HStack(spacing: 16) {
                     Button("更换") { pickerKind = kind }
                     Button("清除引用") { pendingClearKind = kind }
