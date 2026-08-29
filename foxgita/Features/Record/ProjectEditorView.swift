@@ -13,6 +13,7 @@ enum ProjectEditorMode: Equatable {
 
 struct ProjectEditorView: View {
     let mode: ProjectEditorMode
+    var fromEmpty: Bool = false
     var onCreated: ((UUID) -> Void)? = nil
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store

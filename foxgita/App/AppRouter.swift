@@ -25,10 +25,11 @@ enum PracticeRoute: Hashable {
 enum RecordRoute: Hashable {
     case history(RecordHistorySegment)
     case practiceDetail(itemId: UUID)
-    case projectCreate
+    case projectCreate(fromEmpty: Bool)
     case projectDetail(projectId: UUID)
     case projectEdit(projectId: UUID)
     case projectTrajectory(projectId: UUID)
+    case projectReady(projectId: UUID)
 }
 
 @Observable
@@ -63,6 +64,14 @@ final class AppRouter {
         } else {
             recordFocusDayKey = nil
             recordPath = []
+        }
+    }
+
+    func replaceLastRecordRoute(_ route: RecordRoute) {
+        if recordPath.isEmpty {
+            recordPath.append(route)
+        } else {
+            recordPath[recordPath.count - 1] = route
         }
     }
 

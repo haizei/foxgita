@@ -106,12 +106,43 @@ struct AppRouterTests {
 
     @Test func recordRouteCarriesProjectPages() {
         let id = UUID()
-        #expect(RecordRoute.projectDetail(projectId: id) == .projectDetail(projectId: id))
-        var path: [RecordRoute] = [.projectCreate, .projectDetail(projectId: id), .projectEdit(projectId: id)]
+        #expect(RecordRoute.projectCreate(fromEmpty: true) == .projectCreate(fromEmpty: true))
+        #expect(RecordRoute.projectCreate(fromEmpty: false) != .projectCreate(fromEmpty: true))
+        #expect(RecordRoute.projectReady(projectId: id) == .projectReady(projectId: id))
+        var path: [RecordRoute] = [
+            .projectCreate(fromEmpty: true),
+            .projectDetail(projectId: id),
+            .projectEdit(projectId: id),
+        ]
         path.append(.practiceDetail(itemId: id))
         #expect(path.last == .practiceDetail(itemId: id))
         path.append(.projectTrajectory(projectId: id))
         #expect(path.last == .projectTrajectory(projectId: id))
+    }
+
+    @Test func replaceLastRecordRouteReplacesTop() {
+        let router = AppRouter()
+        let id = UUID()
+        router.recordPath = [.projectCreate(fromEmpty: true)]
+        router.replaceLastRecordRoute(.projectReady(projectId: id))
+        #expect(router.recordPath == [.projectReady(projectId: id)])
+    }
+
+    @Test func replaceLastRecordRouteAppendsWhenEmpty() {
+        let router = AppRouter()
+        let id = UUID()
+        router.replaceLastRecordRoute(.projectReady(projectId: id))
+        #expect(router.recordPath == [.projectReady(projectId: id)])
+    }
+
+    @Test func replaceReadyWithPracticeDetailLeavesListUnderneath() {
+        let router = AppRouter()
+        let projectId = UUID()
+        let itemId = UUID()
+        router.recordPath = [.projectReady(projectId: projectId)]
+        router.replaceLastRecordRoute(.practiceDetail(itemId: itemId))
+        router.dismissPracticeDetail(fromRecord: true)
+        #expect(router.recordPath.isEmpty)
     }
 
     @Test func dismissFromRecordLeavesPracticeHomeWhenOpenedFromRecordIsFalse() {

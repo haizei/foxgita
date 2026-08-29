@@ -1034,7 +1034,7 @@ struct PracticeDetailView: View {
     private func startCreateAndJoin() {
         if openedFromRecord {
             router.pendingJoinPracticeItemId = itemId
-            router.recordPath.append(.projectCreate)
+            router.recordPath.append(.projectCreate(fromEmpty: false))
         } else {
             showCreateProjectSheet = true
         }

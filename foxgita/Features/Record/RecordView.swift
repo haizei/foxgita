@@ -125,8 +125,10 @@ struct RecordView: View {
                     HistoryView(initialSegment: segment)
                 case .practiceDetail(let itemId):
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
-                case .projectCreate:
-                    ProjectEditorView(mode: .create)
+                case .projectCreate(let fromEmpty):
+                    ProjectEditorView(mode: .create, fromEmpty: fromEmpty)
+                case .projectReady(let id):
+                    ProjectReadyView(projectId: id)
                 case .projectDetail(let id):
                     ProjectDetailView(projectId: id)
                 case .projectEdit(let id):
@@ -257,14 +259,14 @@ struct RecordView: View {
                 subtitle: String(localized: "项目把多天练习收在一起，方便你持续推进一首歌或一个阶段"),
                 actionTitle: String(localized: "创建项目")
             ) {
-                router.recordPath.append(.projectCreate)
+                router.recordPath.append(.projectCreate(fromEmpty: true))
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Spacer(minLength: 0)
                     Button {
-                        router.recordPath.append(.projectCreate)
+                        router.recordPath.append(.projectCreate(fromEmpty: false))
                     } label: {
                         Text("创建项目")
                             .font(GitaFont.callout(.semibold))
