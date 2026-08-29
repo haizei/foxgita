@@ -9,8 +9,8 @@ import Testing
 
 @testable import foxgita
 
-/// Boots a V2 store on disk, then reopens it under the V10 migration plan
-/// (V2→V3→…→V10) and checks that user rows survive — the exact failure mode
+/// Boots a V2 store on disk, then reopens it under the V11 migration plan
+/// (V2→V3→…→V11) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
 @MainActor
 struct MigrationTests {
@@ -55,7 +55,7 @@ struct MigrationTests {
         }
 
         // --- Phase 2: reopen under V10 + migration plan -------------------
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -114,7 +114,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -155,7 +155,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -201,7 +201,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -251,7 +251,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -287,7 +287,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -335,7 +335,7 @@ struct MigrationTests {
         let profileId = UUID()
 
         do {
-            let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+            let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
             let config = ModelConfiguration(schema: v10Schema, url: url)
             let container = try ModelContainer(
                 for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -370,7 +370,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -411,7 +411,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -423,5 +423,40 @@ struct MigrationTests {
         #expect(items[0].practiceDayKey == "2026-08-28")
         #expect(items[0].title == "挂项目")
         #expect(items[0].projectId == nil)
+    }
+
+    @Test func v10ProjectMigratesToV11WithNilVersionIds() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v10-v11-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let projectId = UUID()
+        let profileId = UUID()
+        do {
+            let v10Schema = Schema(versionedSchema: GitaSchemaV10.self)
+            let config = ModelConfiguration(schema: v10Schema, url: url)
+            let container = try ModelContainer(for: v10Schema, configurations: [config])
+            let context = ModelContext(container)
+            let project = GitaSchemaV10.Project(
+                id: projectId,
+                profileId: profileId,
+                name: "知足",
+                goal: "完整弹唱"
+            )
+            context.insert(project)
+            try context.save()
+        }
+
+        let v11Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let config = ModelConfiguration(schema: v11Schema, url: url)
+        let container = try ModelContainer(
+            for: v11Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let projects = try ModelContext(container).fetch(FetchDescriptor<Project>())
+        #expect(projects.count == 1)
+        #expect(projects[0].id == projectId)
+        #expect(projects[0].name == "知足")
+        #expect(projects[0].stageVersionItemId == nil)
+        #expect(projects[0].finalVersionItemId == nil)
     }
 }

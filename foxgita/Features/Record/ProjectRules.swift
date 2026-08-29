@@ -44,8 +44,8 @@ enum ProjectRules {
             status: project.status,
             createdAt: project.createdAt,
             isDeleted: project.deletedAt != nil,
-            stageVersionItemId: nil,
-            finalVersionItemId: nil
+            stageVersionItemId: project.stageVersionItemId,
+            finalVersionItemId: project.finalVersionItemId,
         )
     }
 

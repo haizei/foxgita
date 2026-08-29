@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MemoryContextTests {
     private func makeLive() throws -> (LiveMemoryContext, SwiftDataMemoryRepository, LocalProfile) {
-        let schema = Schema(versionedSchema: GitaSchemaV10.self)
+        let schema = Schema(versionedSchema: GitaSchemaV11.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         let context = ModelContext(container)
