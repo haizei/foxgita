@@ -261,6 +261,18 @@ struct RecordView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    Spacer(minLength: 0)
+                    Button {
+                        router.recordPath.append(.projectCreate)
+                    } label: {
+                        Text("创建项目")
+                            .font(GitaFont.callout(.semibold))
+                            .foregroundStyle(GitaTheme.brand500)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("创建项目"))
+                }
                 if let current = state.current {
                     currentProjectCard(current)
                 }
