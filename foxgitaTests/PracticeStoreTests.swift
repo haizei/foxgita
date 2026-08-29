@@ -1657,6 +1657,81 @@ struct PracticeStoreTests {
         }
     }
 
+    @Test func createProjectRejectsOverlongFieldsAndTrimsFocus() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(
+                name: String(repeating: "啊", count: 41),
+                goal: "目标",
+                kindRaw: "song",
+                stageRaw: "x",
+                currentFocus: "",
+                now: Date()
+            )
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(
+                name: "知足",
+                goal: String(repeating: "啊", count: 121),
+                kindRaw: "",
+                stageRaw: "",
+                currentFocus: "",
+                now: Date()
+            )
+        }
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(
+                name: "知足",
+                goal: "目标",
+                kindRaw: "",
+                stageRaw: "",
+                currentFocus: String(repeating: "啊", count: 121),
+                now: Date()
+            )
+        }
+        let project = try store.createProject(
+            name: " 知足 ",
+            goal: " 完整弹唱 ",
+            kindRaw: "",
+            stageRaw: "",
+            currentFocus: " 副歌节奏 ",
+            now: Date()
+        )
+        #expect(project.name == "知足")
+        #expect(project.goal == "完整弹唱")
+        #expect(project.currentFocus == "副歌节奏")
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+    }
+
+    @Test func updateProjectClearsKindStageAndTrimsFocus() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let created = try store.createProject(
+            name: "知足",
+            goal: "目标",
+            kindRaw: "song",
+            stageRaw: "分段",
+            currentFocus: "旧",
+            now: Date()
+        )
+        try store.updateProject(
+            id: created.id,
+            name: "知足",
+            goal: "目标",
+            kindRaw: "",
+            stageRaw: "",
+            currentFocus: " 新重点 ",
+            now: Date()
+        )
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let live = try #require(try repo.project(id: created.id, profileId: profileId))
+        #expect(live.kindRaw == "")
+        #expect(live.stageRaw == "")
+        #expect(live.currentFocus == "新重点")
+    }
+
     @Test func createTodayPracticeItemUsesFocusTitleAndDoesNotMoveYesterday() throws {
         let (store, repo, _) = makeStore()
         store.prepare()

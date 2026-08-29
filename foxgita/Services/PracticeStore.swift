@@ -98,20 +98,22 @@ final class PracticeStore {
         currentFocus: String,
         now: Date
     ) throws -> Project {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty, !trimmedGoal.isEmpty else {
+        let prepared: ProjectSetupFields
+        switch ProjectSetupRules.prepare(name: name, goal: goal, currentFocus: currentFocus) {
+        case .success(let fields):
+            prepared = fields
+        case .failure:
             lastError = .invalidInput
             throw StoreError.invalidInput
         }
         let profileId = try requireProfileUUID()
         let project = Project(
             profileId: profileId,
-            name: trimmedName,
-            goal: trimmedGoal,
+            name: prepared.name,
+            goal: prepared.goal,
             kindRaw: kindRaw,
             stageRaw: stageRaw,
-            currentFocus: currentFocus,
+            currentFocus: prepared.currentFocus,
             statusRaw: ProjectStatus.active.rawValue,
             createdAt: now,
             updatedAt: now
@@ -136,18 +138,20 @@ final class PracticeStore {
         currentFocus: String,
         now: Date
     ) throws {
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedGoal = goal.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedName.isEmpty, !trimmedGoal.isEmpty else {
+        let prepared: ProjectSetupFields
+        switch ProjectSetupRules.prepare(name: name, goal: goal, currentFocus: currentFocus) {
+        case .success(let fields):
+            prepared = fields
+        case .failure:
             lastError = .invalidInput
             throw StoreError.invalidInput
         }
         let project = try requireLiveProject(id: id)
-        project.name = trimmedName
-        project.goal = trimmedGoal
+        project.name = prepared.name
+        project.goal = prepared.goal
         project.kindRaw = kindRaw
         project.stageRaw = stageRaw
-        project.currentFocus = currentFocus
+        project.currentFocus = prepared.currentFocus
         project.updatedAt = now
         try persistPracticeItemChanges()
     }
