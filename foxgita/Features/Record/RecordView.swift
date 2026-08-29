@@ -275,35 +275,7 @@ struct RecordView: View {
     private var projectPane: some View {
         let state = projectListState
         if profileProjects.isEmpty {
-            VStack(spacing: 12) {
-                Text("用项目保持目标和上次进度")
-                    .font(GitaFont.body(.bold))
-                    .foregroundStyle(GitaTheme.textPrimary)
-                    .multilineTextAlignment(.center)
-                Text("把多天练习收进同一个方向。不建项目也可以继续练习。")
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-                Button("创建第一个项目") {
-                    startProjectCreate(fromEmpty: true)
-                }
-                .font(GitaFont.callout(.bold))
-                .foregroundStyle(GitaTheme.brandOn)
-                .padding(.horizontal, 20)
-                .frame(height: 40)
-                .background(GitaTheme.brand500)
-                .clipShape(Capsule())
-                Button("不建项目也可以继续练习") {
-                    router.recordSegment = .practice
-                }
-                .font(GitaFont.caption())
-                .foregroundStyle(GitaTheme.textSecondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(16)
-            .padding(.vertical, 24)
-            .background(GitaTheme.bgSubtle)
-            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+            projectEmptyState
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -606,6 +578,76 @@ struct RecordView: View {
         .padding(.trailing, 12)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, minHeight: 72, alignment: .leading)
+    }
+
+    private var projectEmptyState: some View {
+        VStack(spacing: 16) {
+            VStack(spacing: 12) {
+                Text("跨天目标")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.brand500)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(GitaTheme.brand50)
+                    .clipShape(Capsule())
+
+                Text("把多天练习连成一个项目")
+                    .font(GitaFont.headline())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .multilineTextAlignment(.center)
+
+                Text("项目记录完成目标和当前重点，练习时间、笔记与媒体仍保存在每天的练习项里。")
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("• 看见上次练到哪里")
+                    Text("• 保存下一次的唯一重点")
+                    Text("• 从项目直接创建今天的练习")
+                }
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(GitaTheme.bgSubtle)
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+
+                Button {
+                    startProjectCreate(fromEmpty: true)
+                } label: {
+                    Text("创建第一个项目")
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.brandOn)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 13)
+                        .background(GitaTheme.brand500)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+
+                Button("暂不创建，继续自由练习") {
+                    router.recordSegment = .practice
+                }
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .padding(.vertical, 8)
+            }
+            .padding(.horizontal, 22)
+            .padding(.top, 24)
+            .padding(.bottom, 22)
+            .frame(maxWidth: .infinity)
+            .background(GitaTheme.bgSurface)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
+            .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
+
+            Text("创建项目不会改变已有练习，也不会要求所有练习都归入项目")
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     private func emptyState(

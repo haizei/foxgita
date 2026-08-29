@@ -24,33 +24,45 @@ struct ProjectReadyView: View {
     var body: some View {
         ZStack {
             PageBackground()
-            VStack(alignment: .leading, spacing: 16) {
-                Button("关闭") { returnToList() }
-                Text("项目已创建")
-                    .font(GitaFont.title())
-                if let project {
-                    Text(project.name)
-                        .font(GitaFont.body(.bold))
-                        .foregroundStyle(GitaTheme.textPrimary)
-                    Text(project.goal)
+            VStack(spacing: 0) {
+                VStack(spacing: 16) {
+                    readyHeader
+                    successHero
+                }
+                .padding(.horizontal, GitaTheme.pagePadding)
+                .background(GitaTheme.bgSurface)
+
+                VStack(spacing: 16) {
+                    if let project {
+                        createdProjectCard(project)
+                    }
+                    if let error {
+                        Text(error)
+                            .font(GitaFont.callout())
+                            .foregroundStyle(GitaTheme.brand500)
+                    }
+                    Spacer(minLength: 0)
+                    Button(action: createToday) {
+                        Text("创建今天的练习项")
+                            .font(GitaFont.body())
+                            .foregroundStyle(GitaTheme.brandOn)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 13)
+                            .background(GitaTheme.brand500)
+                            .clipShape(Capsule())
+                            .opacity(creatingLock || project == nil ? 0.4 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(creatingLock || project == nil)
+                    Button("先返回项目列表") { returnToList() }
                         .font(GitaFont.callout())
                         .foregroundStyle(GitaTheme.textSecondary)
-                    if ProjectSetupRules.showsReadyFocus(project.currentFocus) {
-                        Text(project.currentFocus)
-                            .font(GitaFont.callout())
-                            .foregroundStyle(GitaTheme.textPrimary)
-                    }
+                        .padding(.vertical, 10)
                 }
-                if let error {
-                    Text(error).foregroundStyle(GitaTheme.brand500)
-                }
-                Button("创建今天的练习项") { createToday() }
-                    .disabled(creatingLock || project == nil)
-                Button("返回项目列表") { returnToList() }
-                    .foregroundStyle(GitaTheme.textSecondary)
-                Spacer(minLength: 0)
+                .padding(.horizontal, GitaTheme.pagePadding)
+                .padding(.top, 16)
+                .padding(.bottom, 24)
             }
-            .padding(GitaTheme.pagePadding)
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
@@ -62,6 +74,95 @@ struct ProjectReadyView: View {
                 )
             }
         }
+    }
+
+    private var readyHeader: some View {
+        HStack {
+            Color.clear.frame(width: 28, height: 22)
+            Spacer(minLength: 0)
+            Text("项目已创建")
+                .font(GitaFont.title())
+                .foregroundStyle(GitaTheme.textPrimary)
+            Spacer(minLength: 0)
+            Button("完成", action: returnToList)
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.brand500)
+        }
+        .frame(height: 56)
+    }
+
+    private var successHero: some View {
+        VStack(spacing: 8) {
+            Text("✓")
+                .font(GitaFont.title())
+                .foregroundStyle(GitaTheme.brand500)
+                .frame(width: 64, height: 64)
+                .background(GitaTheme.brand50)
+                .clipShape(Circle())
+            Text("长期目标已经有了方向")
+                .font(GitaFont.headline())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .multilineTextAlignment(.center)
+            Text("接下来从一次真实练习开始")
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
+    }
+
+    private func createdProjectCard(_ project: Project) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(project.name)
+                    .font(GitaFont.title())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Spacer(minLength: 0)
+                if ProjectSetupRules.showsReadyStage(project.stageRaw) {
+                    Text(project.stageRaw)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(GitaTheme.bgSubtle)
+                        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+                }
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("完成目标")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.brand500)
+                Text(project.goal)
+                    .font(GitaFont.body())
+                    .foregroundStyle(GitaTheme.textPrimary)
+            }
+            if ProjectSetupRules.showsReadyFocus(project.currentFocus) {
+                GitaTheme.borderSubtle
+                    .frame(height: 1)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("第一次练什么")
+                        .font(GitaFont.callout())
+                        .foregroundStyle(GitaTheme.brand500)
+                    Text(project.currentFocus)
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.textPrimary)
+                    Text("会作为今天练习项的初始关注点")
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(GitaTheme.brand50)
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
     }
 
     private func returnToList() {
