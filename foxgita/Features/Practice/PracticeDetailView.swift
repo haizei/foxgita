@@ -1032,6 +1032,11 @@ struct PracticeDetailView: View {
     }
 
     private func startCreateAndJoin() {
+        RecordAnalytics.projectSetupStarted(
+            source: "join",
+            fromEmpty: false,
+            hasExistingPractice: true
+        )
         if openedFromRecord {
             router.pendingJoinPracticeItemId = itemId
             router.recordPath.append(.projectCreate(fromEmpty: false))

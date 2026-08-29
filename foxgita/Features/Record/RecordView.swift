@@ -83,6 +83,19 @@ struct RecordView: View {
         router.recordSegment == .practice
     }
 
+    private var hasExistingPractice: Bool {
+        allSnapshots.contains { PracticeItemRules.isEffective($0) }
+    }
+
+    private func startProjectCreate(fromEmpty: Bool) {
+        RecordAnalytics.projectSetupStarted(
+            source: fromEmpty ? "empty" : "list",
+            fromEmpty: fromEmpty,
+            hasExistingPractice: hasExistingPractice
+        )
+        router.recordPath.append(.projectCreate(fromEmpty: fromEmpty))
+    }
+
     var body: some View {
         @Bindable var router = router
         NavigationStack(path: $router.recordPath) {
@@ -259,14 +272,14 @@ struct RecordView: View {
                 subtitle: String(localized: "项目把多天练习收在一起，方便你持续推进一首歌或一个阶段"),
                 actionTitle: String(localized: "创建项目")
             ) {
-                router.recordPath.append(.projectCreate(fromEmpty: true))
+                startProjectCreate(fromEmpty: true)
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
                     Spacer(minLength: 0)
                     Button {
-                        router.recordPath.append(.projectCreate(fromEmpty: false))
+                        startProjectCreate(fromEmpty: false)
                     } label: {
                         Text("创建项目")
                             .font(GitaFont.callout(.semibold))
