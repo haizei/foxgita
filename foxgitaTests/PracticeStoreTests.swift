@@ -1728,4 +1728,122 @@ struct PracticeStoreTests {
         try store.setPracticeItemProject(id: item.id, projectId: nil, now: date(2026, 8, 28, 14, calendar: cal))
         #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == nil)
     }
+
+    @Test func setProjectVersionsReplaceAndClearWithoutTouchingItem() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let project = try store.createProject(
+            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        let a = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        try store.savePracticeItem(id: a.id, durationSeconds: 60, note: "a", now: date(2026, 8, 28, 11, calendar: cal))
+        let b = try store.createTodayPracticeItem(
+            projectId: project.id, now: date(2026, 8, 28, 12, calendar: cal), calendar: cal
+        )
+        try store.savePracticeItem(id: b.id, durationSeconds: 0, note: "b-note", now: date(2026, 8, 28, 13, calendar: cal))
+        try store.setProjectStageVersion(projectId: project.id, itemId: a.id, now: date(2026, 8, 28, 14, calendar: cal))
+        try store.setProjectFinalVersion(projectId: project.id, itemId: a.id, now: date(2026, 8, 28, 14, calendar: cal))
+        try store.setProjectStageVersion(projectId: project.id, itemId: b.id, now: date(2026, 8, 28, 15, calendar: cal))
+        let profileId = a.profileId
+        let live = try #require(try repo.project(id: project.id, profileId: profileId))
+        #expect(live.stageVersionItemId == b.id)
+        #expect(live.finalVersionItemId == a.id)
+        #expect(try repo.practiceItem(id: a.id, profileId: profileId)?.durationSeconds == 60)
+        try store.setProjectFinalVersion(projectId: project.id, itemId: nil, now: date(2026, 8, 28, 16, calendar: cal))
+        #expect(try repo.project(id: project.id, profileId: profileId)?.finalVersionItemId == nil)
+        #expect(try repo.project(id: project.id, profileId: profileId)?.stageVersionItemId == b.id)
+        #expect(try repo.practiceItem(id: a.id, profileId: profileId)?.note == "a")
+    }
+
+    @Test func setProjectVersionRejectsBlankItemAndWrongProject() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let project = try store.createProject(
+            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        let blank = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        #expect(throws: StoreError.invalidInput) {
+            try store.setProjectStageVersion(projectId: project.id, itemId: blank.id, now: now)
+        }
+        #expect(try repo.project(id: project.id, profileId: blank.profileId)?.stageVersionItemId == nil)
+        let other = try store.createProject(
+            name: "独立", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        try store.savePracticeItem(id: blank.id, durationSeconds: 30, note: "", now: date(2026, 8, 28, 11, calendar: cal))
+        #expect(throws: StoreError.invalidInput) {
+            try store.setProjectStageVersion(projectId: other.id, itemId: blank.id, now: now)
+        }
+    }
+
+    @Test func endedProjectCanSetVersionAndCreateTodayDoesNot() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let project = try store.createProject(
+            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        try store.savePracticeItem(id: item.id, durationSeconds: 40, note: "", now: date(2026, 8, 28, 11, calendar: cal))
+        try store.setProjectStatus(id: project.id, status: .completed, now: date(2026, 8, 28, 12, calendar: cal))
+        try store.setProjectFinalVersion(
+            projectId: project.id, itemId: item.id, now: date(2026, 8, 28, 13, calendar: cal)
+        )
+        #expect(try repo.project(id: project.id, profileId: item.profileId)?.finalVersionItemId == item.id)
+        #expect(try repo.project(id: project.id, profileId: item.profileId)?.stageVersionItemId == nil)
+    }
+
+    @Test func deletingOrMovingItemClearsVersionRefs() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let project = try store.createProject(
+            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        try store.savePracticeItem(id: item.id, durationSeconds: 50, note: "", now: date(2026, 8, 28, 11, calendar: cal))
+        try store.setProjectStageVersion(projectId: project.id, itemId: item.id, now: date(2026, 8, 28, 12, calendar: cal))
+        try store.setProjectFinalVersion(projectId: project.id, itemId: item.id, now: date(2026, 8, 28, 12, calendar: cal))
+        try store.softDeletePracticeItem(id: item.id, now: date(2026, 8, 28, 13, calendar: cal))
+        #expect(try repo.project(id: project.id, profileId: item.profileId)?.stageVersionItemId == nil)
+        #expect(try repo.project(id: project.id, profileId: item.profileId)?.finalVersionItemId == nil)
+        #expect(try repo.practiceItem(id: item.id, profileId: item.profileId) == nil)
+
+        let live = try store.createTodayPracticeItem(
+            projectId: project.id, now: date(2026, 8, 28, 14, calendar: cal), calendar: cal
+        )
+        try store.savePracticeItem(id: live.id, durationSeconds: 20, note: "n", now: date(2026, 8, 28, 15, calendar: cal))
+        try store.setProjectStageVersion(projectId: project.id, itemId: live.id, now: date(2026, 8, 28, 16, calendar: cal))
+        let other = try store.createProject(
+            name: "另一首", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        try store.setPracticeItemProject(id: live.id, projectId: other.id, now: date(2026, 8, 28, 17, calendar: cal))
+        #expect(try repo.project(id: project.id, profileId: live.profileId)?.stageVersionItemId == nil)
+        #expect(try repo.project(id: other.id, profileId: live.profileId)?.stageVersionItemId == nil)
+        #expect(try repo.practiceItem(id: live.id, profileId: live.profileId)?.projectId == other.id)
+        #expect(try repo.practiceItem(id: live.id, profileId: live.profileId)?.practiceDayKey == "2026-08-28")
+    }
+
+    @Test func deleteProjectLeavesVersionIdsOnTombstone() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let project = try store.createProject(
+            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+        )
+        let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        try store.savePracticeItem(id: item.id, durationSeconds: 30, note: "", now: date(2026, 8, 28, 11, calendar: cal))
+        try store.setProjectStageVersion(projectId: project.id, itemId: item.id, now: date(2026, 8, 28, 12, calendar: cal))
+        try store.deleteProject(id: project.id, now: date(2026, 8, 28, 13, calendar: cal))
+        let tombstone = try #require(try repo.projectsIncludingDeleted().first { $0.id == project.id })
+        #expect(tombstone.deletedAt != nil)
+        #expect(tombstone.stageVersionItemId == item.id)
+        #expect(try repo.practiceItem(id: item.id, profileId: item.profileId)?.projectId == nil)
+    }
 }

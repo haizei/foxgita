@@ -199,6 +199,7 @@ final class PracticeStore {
 
     func setPracticeItemProject(id: UUID, projectId: UUID?, now: Date) throws {
         let item = try requireLivePracticeItem(id: id)
+        let previous = item.projectId
         if let projectId {
             if (try repository.project(id: projectId, profileId: item.profileId)) == nil {
                 item.projectId = nil
@@ -208,8 +209,23 @@ final class PracticeStore {
         } else {
             item.projectId = nil
         }
+        if previous != item.projectId {
+            try clearVersionRefs(pointingTo: id, now: now)
+        }
         item.updatedAt = now
         try persistPracticeItemChanges()
+    }
+
+    func setProjectStageVersion(projectId: UUID, itemId: UUID?, now: Date) throws {
+        try setProjectVersion(projectId: projectId, itemId: itemId, now: now) { project, value in
+            project.stageVersionItemId = value
+        }
+    }
+
+    func setProjectFinalVersion(projectId: UUID, itemId: UUID?, now: Date) throws {
+        try setProjectVersion(projectId: projectId, itemId: itemId, now: now) { project, value in
+            project.finalVersionItemId = value
+        }
     }
 
     func createTodayPracticeItem(
@@ -295,6 +311,7 @@ final class PracticeStore {
         let item = try requireLivePracticeItem(id: id)
         item.deletedAt = now
         item.updatedAt = now
+        try clearVersionRefs(pointingTo: id, now: now)
         try persistPracticeItemChanges()
     }
 
@@ -924,6 +941,44 @@ final class PracticeStore {
             throw StoreError.notFound
         }
         return project
+    }
+
+    private func clearVersionRefs(pointingTo itemId: UUID, now: Date) throws {
+        let projects = try repository.projectsIncludingDeleted()
+        for project in projects {
+            var changed = false
+            if project.stageVersionItemId == itemId {
+                project.stageVersionItemId = nil
+                changed = true
+            }
+            if project.finalVersionItemId == itemId {
+                project.finalVersionItemId = nil
+                changed = true
+            }
+            if changed { project.updatedAt = now }
+        }
+    }
+
+    private func setProjectVersion(
+        projectId: UUID,
+        itemId: UUID?,
+        now: Date,
+        write: (Project, UUID?) -> Void
+    ) throws {
+        let project = try requireLiveProject(id: projectId)
+        if let itemId {
+            let item = try requireLivePracticeItem(id: itemId)
+            let snap = Self.snapshot(from: item)
+            guard snap.projectId == project.id, PracticeItemRules.isEffective(snap) else {
+                lastError = .invalidInput
+                throw StoreError.invalidInput
+            }
+            write(project, itemId)
+        } else {
+            write(project, nil)
+        }
+        project.updatedAt = now
+        try persistPracticeItemChanges()
     }
 
     private func persistPracticeItemChanges() throws {
