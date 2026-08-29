@@ -356,11 +356,7 @@ struct ProjectDetailView: View {
                 router.recordPath.append(.practiceDetail(itemId: item.id))
             } label: {
                 Group {
-                    if item.recordingCount > 0 {
-                        Text("播放最近一条媒体")
-                            .font(GitaFont.body(.semibold))
-                            .foregroundStyle(GitaTheme.textPrimary)
-                    } else if !note.isEmpty {
+                    if !note.isEmpty {
                         Text(note)
                             .font(GitaFont.body())
                             .foregroundStyle(GitaTheme.textPrimary)
