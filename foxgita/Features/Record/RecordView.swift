@@ -131,6 +131,8 @@ struct RecordView: View {
                     ProjectDetailView(projectId: id)
                 case .projectEdit(let id):
                     ProjectEditorView(mode: .edit(id))
+                case .projectTrajectory(let id):
+                    ProjectTrajectoryView(projectId: id)
                 }
             }
             .onAppear {

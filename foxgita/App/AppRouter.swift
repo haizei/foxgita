@@ -28,6 +28,7 @@ enum RecordRoute: Hashable {
     case projectCreate
     case projectDetail(projectId: UUID)
     case projectEdit(projectId: UUID)
+    case projectTrajectory(projectId: UUID)
 }
 
 @Observable

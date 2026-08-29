@@ -42,4 +42,18 @@ enum RecordAnalytics {
             "to_project_id": toProjectId,
         ])
     }
+
+    static func projectStageVersionChanged(projectId: String, practiceItemId: String) {
+        sink?("project_stage_version_changed", [
+            "project_id": projectId,
+            "practice_item_id": practiceItemId,
+        ])
+    }
+
+    static func projectFinalVersionChanged(projectId: String, practiceItemId: String) {
+        sink?("project_final_version_changed", [
+            "project_id": projectId,
+            "practice_item_id": practiceItemId,
+        ])
+    }
 }

@@ -35,13 +35,19 @@ struct RecordAnalyticsTests {
         RecordAnalytics.projectPracticeCreateTapped(projectId: "p1")
         RecordAnalytics.projectPracticeCreated(projectId: "p1", practiceItemId: "i1", result: "success")
         RecordAnalytics.practiceProjectChanged(fromProjectId: "p1", toProjectId: "")
+        RecordAnalytics.projectStageVersionChanged(projectId: "p1", practiceItemId: "i1")
+        RecordAnalytics.projectFinalVersionChanged(projectId: "p1", practiceItemId: "")
         #expect(captured.map(\.0) == [
             "project_view_opened",
             "project_practice_create_tapped",
             "project_practice_created",
             "practice_project_changed",
+            "project_stage_version_changed",
+            "project_final_version_changed",
         ])
         #expect(captured[0].1["has_evidence"] == "true")
         #expect(captured[3].1["to_project_id"] == "")
+        #expect(captured[4].1["practice_item_id"] == "i1")
+        #expect(captured[5].1["practice_item_id"] == "")
     }
 }

@@ -110,6 +110,8 @@ struct AppRouterTests {
         var path: [RecordRoute] = [.projectCreate, .projectDetail(projectId: id), .projectEdit(projectId: id)]
         path.append(.practiceDetail(itemId: id))
         #expect(path.last == .practiceDetail(itemId: id))
+        path.append(.projectTrajectory(projectId: id))
+        #expect(path.last == .projectTrajectory(projectId: id))
     }
 
     @Test func dismissFromRecordLeavesPracticeHomeWhenOpenedFromRecordIsFalse() {
