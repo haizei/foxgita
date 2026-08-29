@@ -74,7 +74,6 @@ struct ProjectReadyView: View {
     private func createToday() {
         guard !creatingLock, let project else { return }
         creatingLock = true
-        defer { creatingLock = false }
         RecordAnalytics.projectReadyActionClicked(action: "create_practice")
         RecordAnalytics.projectPracticeCreateTapped(projectId: project.id.uuidString)
         do {
@@ -96,6 +95,7 @@ struct ProjectReadyView: View {
             )
             router.replaceLastRecordRoute(.practiceDetail(itemId: item.id))
         } catch {
+            creatingLock = false
             RecordAnalytics.projectPracticeCreated(
                 projectId: project.id.uuidString,
                 practiceItemId: "",

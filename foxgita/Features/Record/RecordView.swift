@@ -6,6 +6,13 @@
 import SwiftData
 import SwiftUI
 
+enum RecordProjectCreateStart {
+    static func shouldPush(onto last: RecordRoute?) -> Bool {
+        if case .projectCreate = last { return false }
+        return true
+    }
+}
+
 enum RecordPlayback {
     /// Pause of the same id is not a failure. Start fails only when `playingIdAfter`
     /// is not the clip we meant to start.
@@ -88,6 +95,7 @@ struct RecordView: View {
     }
 
     private func startProjectCreate(fromEmpty: Bool) {
+        guard RecordProjectCreateStart.shouldPush(onto: router.recordPath.last) else { return }
         RecordAnalytics.projectSetupStarted(
             source: fromEmpty ? "empty" : "list",
             fromEmpty: fromEmpty,

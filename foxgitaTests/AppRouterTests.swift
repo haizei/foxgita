@@ -120,6 +120,13 @@ struct AppRouterTests {
         #expect(path.last == .projectTrajectory(projectId: id))
     }
 
+    @Test func projectCreateStartIgnoresWhenAlreadyOnCreate() {
+        #expect(RecordProjectCreateStart.shouldPush(onto: nil))
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectReady(projectId: UUID())))
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreate(fromEmpty: true)) == false)
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreate(fromEmpty: false)) == false)
+    }
+
     @Test func replaceLastRecordRouteReplacesTop() {
         let router = AppRouter()
         let id = UUID()

@@ -185,7 +185,6 @@ struct ProjectEditorView: View {
             return
         case .success(let fields):
             isSubmitting = true
-            defer { isSubmitting = false }
             do {
                 switch mode {
                 case .create:
@@ -236,6 +235,7 @@ struct ProjectEditorView: View {
                     }
                 }
             } catch {
+                isSubmitting = false
                 self.error = String(localized: "保存失败，请重试")
             }
         }
@@ -256,6 +256,7 @@ struct ProjectEditorView: View {
                     toProjectId: projectId.uuidString
                 )
             } catch {
+                isSubmitting = false
                 self.error = String(localized: "保存失败，请重试")
                 return
             }
