@@ -267,13 +267,35 @@ struct RecordView: View {
     private var projectPane: some View {
         let state = projectListState
         if profileProjects.isEmpty {
-            emptyState(
-                title: String(localized: "用项目组织跨天目标"),
-                subtitle: String(localized: "项目把多天练习收在一起，方便你持续推进一首歌或一个阶段"),
-                actionTitle: String(localized: "创建项目")
-            ) {
-                startProjectCreate(fromEmpty: true)
+            VStack(spacing: 12) {
+                Text("用项目保持目标和上次进度")
+                    .font(GitaFont.body(.bold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .multilineTextAlignment(.center)
+                Text("把多天练习收进同一个方向。不建项目也可以继续练习。")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                Button("创建第一个项目") {
+                    startProjectCreate(fromEmpty: true)
+                }
+                .font(GitaFont.callout(.bold))
+                .foregroundStyle(GitaTheme.brandOn)
+                .padding(.horizontal, 20)
+                .frame(height: 40)
+                .background(GitaTheme.brand500)
+                .clipShape(Capsule())
+                Button("不建项目也可以继续练习") {
+                    router.recordSegment = .practice
+                }
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
             }
+            .frame(maxWidth: .infinity)
+            .padding(16)
+            .padding(.vertical, 24)
+            .background(GitaTheme.bgSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
         } else {
             VStack(alignment: .leading, spacing: 16) {
                 HStack {
@@ -613,6 +635,9 @@ struct RecordView: View {
     private func emitViewOpened() {
         let segment = router.recordSegment == .practice ? "practice" : "project"
         RecordAnalytics.viewOpened(segment: segment, entry: "tab")
+        if router.recordSegment == .project && profileProjects.isEmpty {
+            RecordAnalytics.projectEmptyViewed(source: "segment")
+        }
     }
 
     private func shiftWeek(by weeks: Int) {
