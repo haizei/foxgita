@@ -46,21 +46,52 @@ enum ProjectSetupRules {
         hasFocus(raw)
     }
 
-    static func isCreateDirty(name: String, goal: String, currentFocus: String) -> Bool {
-        !trimmed(name).isEmpty || !trimmed(goal).isEmpty || !trimmed(currentFocus).isEmpty
+    static let kinds = ["歌曲", "技巧", "演出准备"]
+    static let stages = ["熟悉内容", "分段练习", "串联整首", "稳定演奏", "完成"]
+
+    static func isKnownKind(_ raw: String) -> Bool {
+        kinds.contains(trimmed(raw))
+    }
+
+    static func isKnownStage(_ raw: String) -> Bool {
+        stages.contains(trimmed(raw))
+    }
+
+    static func showsReadyStage(_ raw: String) -> Bool {
+        !trimmed(raw).isEmpty
+    }
+
+    static func isCreateDirty(
+        name: String,
+        goal: String,
+        currentFocus: String,
+        kind: String,
+        stage: String
+    ) -> Bool {
+        !trimmed(name).isEmpty
+            || !trimmed(goal).isEmpty
+            || !trimmed(currentFocus).isEmpty
+            || !trimmed(kind).isEmpty
+            || !trimmed(stage).isEmpty
     }
 
     static func isEditDirty(
         name: String,
         goal: String,
         currentFocus: String,
+        kind: String,
+        stage: String,
         loadedName: String,
         loadedGoal: String,
-        loadedFocus: String
+        loadedFocus: String,
+        loadedKind: String,
+        loadedStage: String
     ) -> Bool {
         trimmed(name) != trimmed(loadedName)
             || trimmed(goal) != trimmed(loadedGoal)
             || trimmed(currentFocus) != trimmed(loadedFocus)
+            || trimmed(kind) != trimmed(loadedKind)
+            || trimmed(stage) != trimmed(loadedStage)
     }
 
     static func prepare(

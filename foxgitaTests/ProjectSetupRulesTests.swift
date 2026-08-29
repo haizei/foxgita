@@ -59,24 +59,107 @@ struct ProjectSetupRulesTests {
     }
 
     @Test func createDirtyIgnoresWhitespaceOnly() {
-        #expect(ProjectSetupRules.isCreateDirty(name: "", goal: "", currentFocus: "") == false)
-        #expect(ProjectSetupRules.isCreateDirty(name: "  ", goal: "", currentFocus: "") == false)
-        #expect(ProjectSetupRules.isCreateDirty(name: "知足", goal: "", currentFocus: "") == true)
-        #expect(ProjectSetupRules.isCreateDirty(name: "", goal: "", currentFocus: "副歌") == true)
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "", goal: "", currentFocus: "", kind: "", stage: ""
+            ) == false
+        )
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "  ", goal: "", currentFocus: "", kind: "", stage: ""
+            ) == false
+        )
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "知足", goal: "", currentFocus: "", kind: "", stage: ""
+            ) == true
+        )
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "", goal: "", currentFocus: "副歌", kind: "", stage: ""
+            ) == true
+        )
     }
 
     @Test func editDirtyComparesTrimmedLoaded() {
         #expect(
             ProjectSetupRules.isEditDirty(
                 name: "知足", goal: "完整弹唱", currentFocus: "",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: ""
+                kind: "", stage: "",
+                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
+                loadedKind: "", loadedStage: ""
             ) == false
         )
         #expect(
             ProjectSetupRules.isEditDirty(
                 name: "知足 ", goal: "完整弹唱", currentFocus: "副歌",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: ""
+                kind: "", stage: "",
+                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
+                loadedKind: "", loadedStage: ""
             ) == true
+        )
+    }
+
+    @Test func knownKindAndStage() {
+        #expect(ProjectSetupRules.kinds == ["歌曲", "技巧", "演出准备"])
+        #expect(ProjectSetupRules.stages == ["熟悉内容", "分段练习", "串联整首", "稳定演奏", "完成"])
+        #expect(ProjectSetupRules.isKnownKind("歌曲") == true)
+        #expect(ProjectSetupRules.isKnownKind(" 技巧 ") == true)
+        #expect(ProjectSetupRules.isKnownKind("自由") == false)
+        #expect(ProjectSetupRules.isKnownKind("") == false)
+        #expect(ProjectSetupRules.isKnownStage("串联整首") == true)
+        #expect(ProjectSetupRules.isKnownStage("分段") == false)
+    }
+
+    @Test func readyStageHiddenWhenBlank() {
+        #expect(ProjectSetupRules.showsReadyStage("") == false)
+        #expect(ProjectSetupRules.showsReadyStage("   ") == false)
+        #expect(ProjectSetupRules.showsReadyStage("串联整首") == true)
+        #expect(ProjectSetupRules.showsReadyStage("旧自由文本") == true)
+    }
+
+    @Test func createDirtyIncludesKindAndStage() {
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "", goal: "", currentFocus: "", kind: "", stage: ""
+            ) == false
+        )
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "", goal: "", currentFocus: "", kind: "歌曲", stage: ""
+            ) == true
+        )
+        #expect(
+            ProjectSetupRules.isCreateDirty(
+                name: "", goal: "", currentFocus: "", kind: "", stage: "串联整首"
+            ) == true
+        )
+    }
+
+    @Test func editDirtyIncludesKindAndStage() {
+        #expect(
+            ProjectSetupRules.isEditDirty(
+                name: "知足", goal: "完整弹唱", currentFocus: "",
+                kind: "歌曲", stage: "串联整首",
+                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
+                loadedKind: "歌曲", loadedStage: "串联整首"
+            ) == false
+        )
+        #expect(
+            ProjectSetupRules.isEditDirty(
+                name: "知足", goal: "完整弹唱", currentFocus: "",
+                kind: "", stage: "串联整首",
+                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
+                loadedKind: "歌曲", loadedStage: "串联整首"
+            ) == true
+        )
+        #expect(
+            ProjectSetupRules.isEditDirty(
+                name: "知足", goal: "完整弹唱", currentFocus: "",
+                kind: "", stage: "旧自由文本",
+                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
+                loadedKind: "", loadedStage: "旧自由文本"
+            ) == false
         )
     }
 

@@ -40,15 +40,25 @@ struct ProjectEditorView: View {
     private var isDirty: Bool {
         switch mode {
         case .create:
-            return ProjectSetupRules.isCreateDirty(name: name, goal: goal, currentFocus: currentFocus)
+            return ProjectSetupRules.isCreateDirty(
+                name: name,
+                goal: goal,
+                currentFocus: currentFocus,
+                kind: "",
+                stage: ""
+            )
         case .edit:
             return ProjectSetupRules.isEditDirty(
                 name: name,
                 goal: goal,
                 currentFocus: currentFocus,
+                kind: "",
+                stage: "",
                 loadedName: loadedName,
                 loadedGoal: loadedGoal,
-                loadedFocus: loadedFocus
+                loadedFocus: loadedFocus,
+                loadedKind: "",
+                loadedStage: ""
             )
         }
     }
