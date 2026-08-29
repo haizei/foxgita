@@ -22,14 +22,19 @@ struct ProjectEditorView: View {
     @State private var name = ""
     @State private var goal = ""
     @State private var currentFocus = ""
+    @State private var kind = ""
+    @State private var stage = ""
     @State private var loadedName = ""
     @State private var loadedGoal = ""
     @State private var loadedFocus = ""
+    @State private var loadedKind = ""
+    @State private var loadedStage = ""
     @State private var nameError: String?
     @State private var goalError: String?
     @State private var error: String?
     @State private var didLoadEditFields = false
     @State private var showAbandon = false
+    @State private var showStagePicker = false
     @State private var isSubmitting = false
     @State private var startedAt = Date()
 
@@ -44,21 +49,21 @@ struct ProjectEditorView: View {
                 name: name,
                 goal: goal,
                 currentFocus: currentFocus,
-                kind: "",
-                stage: ""
+                kind: kind,
+                stage: stage
             )
         case .edit:
             return ProjectSetupRules.isEditDirty(
                 name: name,
                 goal: goal,
                 currentFocus: currentFocus,
-                kind: "",
-                stage: "",
+                kind: kind,
+                stage: stage,
                 loadedName: loadedName,
                 loadedGoal: loadedGoal,
                 loadedFocus: loadedFocus,
-                loadedKind: "",
-                loadedStage: ""
+                loadedKind: loadedKind,
+                loadedStage: loadedStage
             )
         }
     }
@@ -83,15 +88,7 @@ struct ProjectEditorView: View {
                         max: ProjectSetupRules.goalMax,
                         error: goalError
                     )
-                    field(
-                        title: "当前重点（选填）",
-                        text: $currentFocus,
-                        max: ProjectSetupRules.focusMax,
-                        error: nil
-                    )
-                    Text("下一次行动提示，不是待办")
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
+                    optionalSection
                     if let error {
                         Text(error).foregroundStyle(GitaTheme.brand500)
                     }
@@ -108,6 +105,70 @@ struct ProjectEditorView: View {
         .confirmationDialog("未保存的内容会丢失", isPresented: $showAbandon, titleVisibility: .visible) {
             Button("继续填写", role: .cancel) {}
             Button("放弃创建", role: .destructive) { abandon() }
+        }
+    }
+
+    private var optionalSection: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 8) {
+                ForEach(ProjectSetupRules.kinds, id: \.self) { item in
+                    let selected = ProjectSetupRules.trimmed(kind) == item
+                    Button {
+                        kind = selected ? "" : item
+                    } label: {
+                        Text(item)
+                            .font(GitaFont.footnote(selected ? .medium : .regular))
+                            .foregroundStyle(selected ? GitaTheme.brand500 : GitaTheme.textSecondary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(selected ? GitaTheme.brand50 : GitaTheme.bgSubtle)
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+            }
+
+            Button { showStagePicker = true } label: {
+                HStack {
+                    Text("当前阶段")
+                        .font(GitaFont.footnote())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                    Spacer(minLength: 0)
+                    Text(ProjectSetupRules.trimmed(stage).isEmpty ? "未选择" : stage)
+                        .font(GitaFont.callout(.medium))
+                        .foregroundStyle(GitaTheme.textPrimary)
+                    Text("›")
+                        .font(GitaFont.callout())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
+                .padding(.horizontal, 14)
+                .frame(height: 50)
+                .background(GitaTheme.bgSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: GitaTheme.radius12)
+                        .stroke(GitaTheme.borderSubtle, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+            }
+            .buttonStyle(.plain)
+            .confirmationDialog("当前阶段", isPresented: $showStagePicker, titleVisibility: .visible) {
+                Button("不选择") { stage = "" }
+                ForEach(ProjectSetupRules.stages, id: \.self) { item in
+                    Button(item) { stage = item }
+                }
+                Button("取消", role: .cancel) {}
+            }
+
+            field(
+                title: "当前重点（选填）",
+                text: $currentFocus,
+                max: ProjectSetupRules.focusMax,
+                error: nil
+            )
+            Text("下一次行动提示，不是待办")
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
         }
     }
 
@@ -143,9 +204,13 @@ struct ProjectEditorView: View {
         name = project.name
         goal = project.goal
         currentFocus = project.currentFocus
+        kind = project.kindRaw
+        stage = project.stageRaw
         loadedName = project.name
         loadedGoal = project.goal
         loadedFocus = project.currentFocus
+        loadedKind = project.kindRaw
+        loadedStage = project.stageRaw
     }
 
     private func requestClose() {
@@ -205,8 +270,8 @@ struct ProjectEditorView: View {
                     let project = try store.createProject(
                         name: fields.name,
                         goal: fields.goal,
-                        kindRaw: "",
-                        stageRaw: "",
+                        kindRaw: ProjectSetupRules.trimmed(kind),
+                        stageRaw: ProjectSetupRules.trimmed(stage),
                         currentFocus: fields.currentFocus,
                         now: Date()
                     )
@@ -233,8 +298,8 @@ struct ProjectEditorView: View {
                         id: id,
                         name: fields.name,
                         goal: fields.goal,
-                        kindRaw: "",
-                        stageRaw: "",
+                        kindRaw: ProjectSetupRules.trimmed(kind),
+                        stageRaw: ProjectSetupRules.trimmed(stage),
                         currentFocus: fields.currentFocus,
                         now: Date()
                     )
