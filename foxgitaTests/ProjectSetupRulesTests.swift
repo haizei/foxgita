@@ -13,40 +13,26 @@ struct ProjectSetupRulesTests {
         #expect(ProjectSetupRules.clamp(fortyOne, max: ProjectSetupRules.nameMax).count == 40)
     }
 
-    @Test func prepareAcceptsNameAndGoalOnly() throws {
-        let fields = try ProjectSetupRules.prepare(
-            name: " 知足 ",
-            goal: " 完整弹唱 ",
-            currentFocus: "  "
-        ).get()
+    @Test func prepareAcceptsNameOnly() throws {
+        let fields = try ProjectSetupRules.prepare(name: " 知足 ", goal: "  ").get()
         #expect(fields.name == "知足")
+        #expect(fields.goal == "")
+    }
+
+    @Test func prepareKeepsTrimmedGoal() throws {
+        let fields = try ProjectSetupRules.prepare(name: "知足", goal: " 完整弹唱 ").get()
         #expect(fields.goal == "完整弹唱")
-        #expect(fields.currentFocus == "")
     }
 
     @Test func prepareRejectsBlankAndOverlong() {
-        #expect(ProjectSetupRules.prepare(name: "  ", goal: "目标", currentFocus: "") == .failure(.nameEmpty))
-        #expect(ProjectSetupRules.prepare(name: "知足", goal: "  ", currentFocus: "") == .failure(.goalEmpty))
+        #expect(ProjectSetupRules.prepare(name: "  ", goal: "目标") == .failure(.nameEmpty))
         #expect(
-            ProjectSetupRules.prepare(
-                name: String(repeating: "啊", count: 41),
-                goal: "目标",
-                currentFocus: ""
-            ) == .failure(.nameTooLong)
+            ProjectSetupRules.prepare(name: String(repeating: "啊", count: 41), goal: "")
+                == .failure(.nameTooLong)
         )
         #expect(
-            ProjectSetupRules.prepare(
-                name: "知足",
-                goal: String(repeating: "啊", count: 121),
-                currentFocus: ""
-            ) == .failure(.goalTooLong)
-        )
-        #expect(
-            ProjectSetupRules.prepare(
-                name: "知足",
-                goal: "目标",
-                currentFocus: String(repeating: "啊", count: 121)
-            ) == .failure(.focusTooLong)
+            ProjectSetupRules.prepare(name: "知足", goal: String(repeating: "啊", count: 121))
+                == .failure(.goalTooLong)
         )
     }
 
@@ -55,49 +41,40 @@ struct ProjectSetupRulesTests {
         #expect(ProjectSetupError.nameEmpty.reason == "empty")
         #expect(ProjectSetupError.goalTooLong.fieldName == "goal")
         #expect(ProjectSetupError.goalTooLong.reason == "too_long")
-        #expect(ProjectSetupError.focusTooLong.fieldName == "currentFocus")
     }
 
-    @Test func createDirtyIgnoresWhitespaceOnly() {
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "", goal: "", currentFocus: "", kind: "", stage: ""
-            ) == false
-        )
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "  ", goal: "", currentFocus: "", kind: "", stage: ""
-            ) == false
-        )
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "知足", goal: "", currentFocus: "", kind: "", stage: ""
-            ) == true
-        )
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "", goal: "", currentFocus: "副歌", kind: "", stage: ""
-            ) == true
-        )
+    @Test func createDirtyOnlyNameAndGoal() {
+        #expect(ProjectSetupRules.isCreateDirty(name: "", goal: "") == false)
+        #expect(ProjectSetupRules.isCreateDirty(name: "  ", goal: "") == false)
+        #expect(ProjectSetupRules.isCreateDirty(name: "知足", goal: "") == true)
+        #expect(ProjectSetupRules.isCreateDirty(name: "", goal: "完整弹唱") == true)
     }
 
     @Test func editDirtyComparesTrimmedLoaded() {
         #expect(
             ProjectSetupRules.isEditDirty(
-                name: "知足", goal: "完整弹唱", currentFocus: "",
-                kind: "", stage: "",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
-                loadedKind: "", loadedStage: ""
+                name: "知足", goal: "完整弹唱",
+                loadedName: "知足", loadedGoal: "完整弹唱"
             ) == false
         )
         #expect(
             ProjectSetupRules.isEditDirty(
-                name: "知足 ", goal: "完整弹唱", currentFocus: "副歌",
-                kind: "", stage: "",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
-                loadedKind: "", loadedStage: ""
+                name: "知足 ", goal: "完整弹唱",
+                loadedName: "知足", loadedGoal: ""
             ) == true
         )
+    }
+
+    @Test func fromPracticeDirtyIgnoresUnchangedPrefill() {
+        #expect(ProjectSetupRules.isFromPracticeDirty(name: "《知足》主歌", initialName: "《知足》主歌") == false)
+        #expect(ProjectSetupRules.isFromPracticeDirty(name: "学会《知足》", initialName: "《知足》主歌") == true)
+        #expect(ProjectSetupRules.isFromPracticeDirty(name: "  ", initialName: "《知足》主歌") == true)
+    }
+
+    @Test func hasGoal() {
+        #expect(ProjectSetupRules.hasGoal("") == false)
+        #expect(ProjectSetupRules.hasGoal("  ") == false)
+        #expect(ProjectSetupRules.hasGoal("完整弹唱") == true)
     }
 
     @Test func knownKindAndStage() {
@@ -116,57 +93,5 @@ struct ProjectSetupRulesTests {
         #expect(ProjectSetupRules.showsReadyStage("   ") == false)
         #expect(ProjectSetupRules.showsReadyStage("串联整首") == true)
         #expect(ProjectSetupRules.showsReadyStage("旧自由文本") == true)
-    }
-
-    @Test func createDirtyIncludesKindAndStage() {
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "", goal: "", currentFocus: "", kind: "", stage: ""
-            ) == false
-        )
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "", goal: "", currentFocus: "", kind: "歌曲", stage: ""
-            ) == true
-        )
-        #expect(
-            ProjectSetupRules.isCreateDirty(
-                name: "", goal: "", currentFocus: "", kind: "", stage: "串联整首"
-            ) == true
-        )
-    }
-
-    @Test func editDirtyIncludesKindAndStage() {
-        #expect(
-            ProjectSetupRules.isEditDirty(
-                name: "知足", goal: "完整弹唱", currentFocus: "",
-                kind: "歌曲", stage: "串联整首",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
-                loadedKind: "歌曲", loadedStage: "串联整首"
-            ) == false
-        )
-        #expect(
-            ProjectSetupRules.isEditDirty(
-                name: "知足", goal: "完整弹唱", currentFocus: "",
-                kind: "", stage: "串联整首",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
-                loadedKind: "歌曲", loadedStage: "串联整首"
-            ) == true
-        )
-        #expect(
-            ProjectSetupRules.isEditDirty(
-                name: "知足", goal: "完整弹唱", currentFocus: "",
-                kind: "", stage: "旧自由文本",
-                loadedName: "知足", loadedGoal: "完整弹唱", loadedFocus: "",
-                loadedKind: "", loadedStage: "旧自由文本"
-            ) == false
-        )
-    }
-
-    @Test func readyFocusHiddenWhenBlank() {
-        #expect(ProjectSetupRules.showsReadyFocus("") == false)
-        #expect(ProjectSetupRules.showsReadyFocus("   ") == false)
-        #expect(ProjectSetupRules.showsReadyFocus("副歌节奏") == true)
-        #expect(ProjectSetupRules.hasFocus(" 副歌 ") == true)
     }
 }
