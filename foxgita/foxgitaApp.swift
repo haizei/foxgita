@@ -56,7 +56,8 @@ struct foxgitaApp: App {
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
                 taskMemorySync: taskMemorySync,
-                aiCandidateSync: aiCandidateSync
+                aiCandidateSync: aiCandidateSync,
+                invocationStore: invocationStore
             )
             _store = State(initialValue: store)
             _reviewRunner = State(
