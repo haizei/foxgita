@@ -20,7 +20,7 @@ struct ImageStepGeneratorTests {
         struct StubClient: VisionGenerating {
             func generateDraft(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], fallbackCategory: PracticeCategory
+                imageJPEGData: [Data], fallbackCategory: PracticeCategory, invocationId: String
             ) async throws -> AIPracticeDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -28,12 +28,12 @@ struct ImageStepGeneratorTests {
         }
         let gen = ImageStepGenerator(client: StubClient(), credentials: LLMCredentialsStore(service: "t.\(UUID().uuidString)"))
         await #expect(throws: ImageStepGeneratorError.noImages) {
-            try await gen.generate(imageData: [], baseURL: "https://x", model: "m", fallbackCategory: .left)
+            try await gen.generate(imageData: [], baseURL: "https://x", model: "m", fallbackCategory: .left, invocationId: "inv-test")
         }
         await #expect(throws: ImageStepGeneratorError.tooManyImages) {
             try await gen.generate(
                 imageData: [Data([1]), Data([2]), Data([3]), Data([4])],
-                baseURL: "https://x", model: "m", fallbackCategory: .left
+                baseURL: "https://x", model: "m", fallbackCategory: .left, invocationId: "inv-test"
             )
         }
     }
@@ -42,7 +42,7 @@ struct ImageStepGeneratorTests {
         struct StubClient: VisionGenerating {
             func generateDraft(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], fallbackCategory: PracticeCategory
+                imageJPEGData: [Data], fallbackCategory: PracticeCategory, invocationId: String
             ) async throws -> AIPracticeDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -61,7 +61,8 @@ struct ImageStepGeneratorTests {
                 imageData: [jpeg],
                 baseURL: "https://api.openai.com/v1",
                 model: "gpt-4o",
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
     }

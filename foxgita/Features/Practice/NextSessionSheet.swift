@@ -237,7 +237,8 @@ struct NextSessionSheet: View {
                     budgetMinutes: minutes,
                     baseURL: baseURL,
                     model: model,
-                    fallbackCategory: fallbackCategory
+                    fallbackCategory: fallbackCategory,
+                    invocationId: generationId
                 )
                 try Task.checkCancellation()
                 applyDraft(draft)

@@ -11,7 +11,8 @@ private struct StubNextSessionClient: NextSessionGenerating {
         model: String,
         apiKey: String,
         budgetMinutes: Int,
-        fallbackCategory: PracticeCategory
+        fallbackCategory: PracticeCategory,
+        invocationId: String
     ) async throws -> AIPracticeDraft {
         if let error { throw error }
         return draft ?? AIPracticeDraft(
@@ -29,7 +30,8 @@ final class CountingNextSessionClient: NextSessionGenerating, @unchecked Sendabl
         model: String,
         apiKey: String,
         budgetMinutes: Int,
-        fallbackCategory: PracticeCategory
+        fallbackCategory: PracticeCategory,
+        invocationId: String
     ) async throws -> AIPracticeDraft {
         calls += 1
         Issue.record("should not be called")
@@ -51,7 +53,8 @@ struct NextSessionGeneratorTests {
                 budgetMinutes: 20,
                 baseURL: "https://api.openai.com/v1",
                 model: "gpt-4o",
-                fallbackCategory: .chord
+                fallbackCategory: .chord,
+                invocationId: "inv-test"
             )
         }
     }
@@ -69,7 +72,8 @@ struct NextSessionGeneratorTests {
                 budgetMinutes: 20,
                 baseURL: "https://api.openai.com/v1",
                 model: "gpt-4o",
-                fallbackCategory: .chord
+                fallbackCategory: .chord,
+                invocationId: "inv-test"
             )
             Issue.record("expected throw")
         } catch let error as NextSessionGeneratorError {

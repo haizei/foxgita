@@ -107,7 +107,7 @@ final class RecordingSpy: MediaReviewGenerating {
     private(set) var order: [String] = []
 
     func review(
-        _ context: MediaReviewContext, baseURL: String, model: String
+        _ context: MediaReviewContext, baseURL: String, model: String, invocationId: String
     ) async throws -> MediaReviewDraft {
         order.append(context.recordingId)
         switch drafts[context.recordingId] {
@@ -124,7 +124,7 @@ final class VideoSpy: VideoDiagnosisGenerating {
     private(set) var order: [String] = []
 
     func diagnose(
-        _ context: MediaReviewContext, baseURL: String, model: String
+        _ context: MediaReviewContext, baseURL: String, model: String, invocationId: String
     ) async throws -> VideoDiagnosisDraft {
         order.append(context.recordingId)
         switch drafts[context.recordingId] {

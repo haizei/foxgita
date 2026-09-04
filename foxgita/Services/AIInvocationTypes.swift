@@ -33,3 +33,40 @@ protocol AIInvocationRecording: Sendable {
 struct EmptyAIInvocationLog: AIInvocationRecording {
     func record(_ input: AIInvocationRecordInput) async {}
 }
+
+enum AIInvocationClientRecord {
+    static func make(
+        id: String,
+        skill: SkillDefinition,
+        model: String,
+        startedAt: Date,
+        status: AIInvocationStatus,
+        error: Error?,
+        memoryIds: [String],
+        formatRetryUsed: Bool
+    ) -> AIInvocationRecordInput {
+        let cancelled = error.map { AIInvocationStore.errorType(from: $0) } == .cancelled
+        let practiceSkill = skill.id == SkillID.nextSession || skill.id == SkillID.planFromImage
+        return AIInvocationRecordInput(
+            id: id,
+            skillId: skill.id,
+            skillVersion: skill.version,
+            model: model,
+            startedAt: startedAt,
+            durationMs: max(0, Int(Date().timeIntervalSince(startedAt) * 1000)),
+            status: status,
+            errorType: error.map(AIInvocationStore.errorType(from:)),
+            memoryIds: memoryIds,
+            formatRetryUsed: formatRetryUsed,
+            draftOutcome: (cancelled && practiceSkill) ? .abandoned : nil
+        )
+    }
+
+    static func thrownError(from error: Error) -> Error {
+        if error is CancellationError { return error }
+        if AIInvocationStore.errorType(from: error) == .cancelled { return error }
+        if let vision = error as? VisionPracticeError { return vision }
+        if (error as? URLError)?.code == .timedOut { return VisionPracticeError.timeout }
+        return VisionPracticeError.transport
+    }
+}

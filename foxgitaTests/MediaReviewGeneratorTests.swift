@@ -16,7 +16,7 @@ struct MediaReviewGeneratorTests {
         struct StubClient: MediaReviewing {
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -30,7 +30,7 @@ struct MediaReviewGeneratorTests {
             client: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.notConfigured) {
-            try await gen.review(context(), baseURL: "", model: "")
+            try await gen.review(context(), baseURL: "", model: "", invocationId: "inv-test")
         }
     }
 
@@ -38,7 +38,7 @@ struct MediaReviewGeneratorTests {
         struct StubClient: MediaReviewing {
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 throw VisionPracticeError.transport
             }
@@ -54,7 +54,7 @@ struct MediaReviewGeneratorTests {
             client: StubClient(), credentials: credentials, images: Boom()
         )
         await #expect(throws: MediaReviewGeneratorError.prepareFailed) {
-            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -62,7 +62,7 @@ struct MediaReviewGeneratorTests {
         struct StubClient: MediaReviewing {
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 throw VisionPracticeError.unauthorized
             }
@@ -76,7 +76,7 @@ struct MediaReviewGeneratorTests {
             client: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.failed(.unauthorized)) {
-            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -84,7 +84,7 @@ struct MediaReviewGeneratorTests {
         struct StubClient: MediaReviewing {
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -101,7 +101,7 @@ struct MediaReviewGeneratorTests {
             client: StubClient(), credentials: credentials, images: Missing()
         )
         await #expect(throws: MediaReviewGeneratorError.fileMissing) {
-            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -112,7 +112,7 @@ struct MediaReviewGeneratorTests {
             var apiKey: String?
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 self.contextText = contextText
                 self.images = imageJPEGData
@@ -130,7 +130,7 @@ struct MediaReviewGeneratorTests {
             client: client, credentials: credentials, images: StubImages()
         )
         let draft = try await gen.review(
-            context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o"
+            context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test"
         )
         #expect(draft == MediaReviewDraft(highlight: "h", focus: "f", nextAction: "n"))
         #expect(client.apiKey == "sk")
@@ -151,7 +151,7 @@ struct MediaReviewGeneratorTests {
             var contextText: String?
             func generateReview(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String
+                imageJPEGData: [Data], contextText: String, invocationId: String
             ) async throws -> MediaReviewDraft {
                 self.contextText = contextText
                 return MediaReviewDraft(highlight: "h", focus: "f", nextAction: "n")
@@ -171,7 +171,7 @@ struct MediaReviewGeneratorTests {
             taskTitle: "音阶", steps: ["  ", ""], bpm: 90,
             timeSig: "3/4", note: "  "
         )
-        _ = try await gen.review(ctx, baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+        _ = try await gen.review(ctx, baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         let text = try #require(client.contextText)
         #expect(text.contains("音阶"))
         #expect(text.contains("90"))

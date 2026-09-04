@@ -85,7 +85,8 @@ struct VisionPracticeClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8, 0xFF])],
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         #expect(draft.title == "开放弦")
         #expect(draft.category == .left)
@@ -102,7 +103,8 @@ struct VisionPracticeClientTests {
                 model: "gpt-4o",
                 apiKey: "bad",
                 imageJPEGData: [Data([0x01])],
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
     }
@@ -120,7 +122,8 @@ struct VisionPracticeClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0x01])],
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
     }
@@ -165,7 +168,8 @@ struct VisionPracticeClientTests {
             model: "gpt-4o",
             apiKey: "sk",
             imageJPEGData: [Data([0x01])],
-            fallbackCategory: .left
+            fallbackCategory: .left,
+            invocationId: "inv-test"
         )
         #expect(draft.category == .rhythm)
         #expect(counter.count() == 2)
@@ -199,7 +203,8 @@ struct VisionPracticeClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0x01])],
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
     }
@@ -223,7 +228,8 @@ struct VisionPracticeClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0x01])],
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
         #expect(calls == 0)
@@ -251,7 +257,8 @@ struct VisionPracticeClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8, 0xFF])],
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.planFromImage.systemPrompt)
@@ -290,7 +297,8 @@ struct VisionPracticeClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8, 0xFF])],
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.planFromImage.systemPrompt)
@@ -317,7 +325,8 @@ struct VisionPracticeClientTests {
             model: "gpt-4o",
             apiKey: "sk",
             imageJPEGData: [Data([0x01])],
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         #expect(draft.title == "开放弦")
     }

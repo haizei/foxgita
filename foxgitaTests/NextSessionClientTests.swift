@@ -104,7 +104,8 @@ struct NextSessionClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             budgetMinutes: 20,
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         #expect(draft.title == "F 和弦")
         #expect(draft.category == .chord)
@@ -144,7 +145,8 @@ struct NextSessionClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             budgetMinutes: 20,
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.nextSession.systemPrompt)
@@ -169,7 +171,8 @@ struct NextSessionClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 budgetMinutes: 20,
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
         #expect(calls == 0)

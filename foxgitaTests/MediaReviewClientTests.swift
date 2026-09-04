@@ -65,7 +65,8 @@ struct MediaReviewClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8])],
-            contextText: "任务：和弦转换"
+            contextText: "任务：和弦转换",
+            invocationId: "inv-test"
         )
         #expect(draft.highlight == "稳")
         #expect(draft.focus == "F 慢")
@@ -81,7 +82,8 @@ struct MediaReviewClientTests {
                 model: "gpt-4o",
                 apiKey: "bad",
                 imageJPEGData: [Data([0xFF])],
-                contextText: "x"
+                contextText: "x",
+                invocationId: "inv-test"
             )
         }
     }
@@ -97,7 +99,8 @@ struct MediaReviewClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
-                contextText: "x"
+                contextText: "x",
+                invocationId: "inv-test"
             )
         }
     }
@@ -124,7 +127,8 @@ struct MediaReviewClientTests {
             model: "gpt-4o",
             apiKey: "sk",
             imageJPEGData: [Data([0xFF])],
-            contextText: "x"
+            contextText: "x",
+            invocationId: "inv-test"
         )
         #expect(draft.highlight == "a")
         #expect(calls == 2)
@@ -139,7 +143,8 @@ struct MediaReviewClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
-                contextText: "x"
+                contextText: "x",
+                invocationId: "inv-test"
             )
         }
     }
@@ -163,7 +168,8 @@ struct MediaReviewClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
-                contextText: "任务：和弦转换"
+                contextText: "任务：和弦转换",
+                invocationId: "inv-test"
             )
         }
         #expect(calls == 0)
@@ -189,7 +195,8 @@ struct MediaReviewClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8])],
-            contextText: "任务：和弦转换"
+            contextText: "任务：和弦转换",
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.reviewMedia.systemPrompt)
@@ -220,7 +227,8 @@ struct MediaReviewClientTests {
             model: "gpt-4o",
             apiKey: "sk",
             imageJPEGData: [Data([0xFF])],
-            contextText: "任务：晴天"
+            contextText: "任务：晴天",
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.reviewMedia.systemPrompt)

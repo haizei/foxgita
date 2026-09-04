@@ -16,7 +16,7 @@ struct VideoDiagnosisGeneratorTests {
         struct StubClient: VideoDiagnosing {
             func generateDiagnosis(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String, durationSec: Int
+                imageJPEGData: [Data], contextText: String, durationSec: Int, invocationId: String
             ) async throws -> VideoDiagnosisDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -30,7 +30,7 @@ struct VideoDiagnosisGeneratorTests {
             client: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.notConfigured) {
-            try await gen.diagnose(context(), baseURL: "", model: "")
+            try await gen.diagnose(context(), baseURL: "", model: "", invocationId: "inv-test")
         }
     }
 
@@ -38,7 +38,7 @@ struct VideoDiagnosisGeneratorTests {
         struct StubClient: VideoDiagnosing {
             func generateDiagnosis(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String, durationSec: Int
+                imageJPEGData: [Data], contextText: String, durationSec: Int, invocationId: String
             ) async throws -> VideoDiagnosisDraft {
                 throw VisionPracticeError.transport
             }
@@ -54,7 +54,7 @@ struct VideoDiagnosisGeneratorTests {
             client: StubClient(), credentials: credentials, images: Boom()
         )
         await #expect(throws: MediaReviewGeneratorError.prepareFailed) {
-            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -62,7 +62,7 @@ struct VideoDiagnosisGeneratorTests {
         struct StubClient: VideoDiagnosing {
             func generateDiagnosis(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String, durationSec: Int
+                imageJPEGData: [Data], contextText: String, durationSec: Int, invocationId: String
             ) async throws -> VideoDiagnosisDraft {
                 throw VisionPracticeError.unauthorized
             }
@@ -76,7 +76,7 @@ struct VideoDiagnosisGeneratorTests {
             client: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.failed(.unauthorized)) {
-            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -84,7 +84,7 @@ struct VideoDiagnosisGeneratorTests {
         struct StubClient: VideoDiagnosing {
             func generateDiagnosis(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String, durationSec: Int
+                imageJPEGData: [Data], contextText: String, durationSec: Int, invocationId: String
             ) async throws -> VideoDiagnosisDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
@@ -101,7 +101,7 @@ struct VideoDiagnosisGeneratorTests {
             client: StubClient(), credentials: credentials, images: Missing()
         )
         await #expect(throws: MediaReviewGeneratorError.fileMissing) {
-            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o")
+            try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
         }
     }
 
@@ -109,7 +109,7 @@ struct VideoDiagnosisGeneratorTests {
         struct StubClient: VideoDiagnosing {
             func generateDiagnosis(
                 baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], contextText: String, durationSec: Int
+                imageJPEGData: [Data], contextText: String, durationSec: Int, invocationId: String
             ) async throws -> VideoDiagnosisDraft {
                 VideoDiagnosisDraft(
                     highlight: "稳", focus: "F", nextAction: "慢练", findings: []
@@ -125,7 +125,7 @@ struct VideoDiagnosisGeneratorTests {
             client: StubClient(), credentials: credentials, images: StubImages()
         )
         let draft = try await gen.diagnose(
-            context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o"
+            context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test"
         )
         #expect(draft.highlight == "稳")
         #expect(draft.focus == "F")

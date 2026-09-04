@@ -66,20 +66,24 @@ enum PracticeImageCodec {
 final class ImageStepGenerator {
     private let client: any VisionGenerating
     private let credentials: LLMCredentialsStore
+    private let log: any AIInvocationRecording
 
     init(
         client: any VisionGenerating,
-        credentials: LLMCredentialsStore = LLMCredentialsStore()
+        credentials: LLMCredentialsStore = LLMCredentialsStore(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
         self.client = client
         self.credentials = credentials
+        self.log = log
     }
 
     func generate(
         imageData: [Data],
         baseURL: String,
         model: String,
-        fallbackCategory: PracticeCategory
+        fallbackCategory: PracticeCategory,
+        invocationId: String
     ) async throws -> AIPracticeDraft {
         if imageData.isEmpty {
             throw ImageStepGeneratorError.noImages
@@ -88,12 +92,14 @@ final class ImageStepGenerator {
             throw ImageStepGeneratorError.tooManyImages
         }
         guard credentials.isConfigured(baseURL: baseURL, model: model) else {
+            await recordNotConfigured(invocationId: invocationId, model: model)
             throw ImageStepGeneratorError.notConfigured
         }
         guard let apiKey = credentials.loadAPIKey()?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !apiKey.isEmpty
         else {
+            await recordNotConfigured(invocationId: invocationId, model: model)
             throw ImageStepGeneratorError.notConfigured
         }
 
@@ -108,12 +114,35 @@ final class ImageStepGenerator {
                 model: model,
                 apiKey: apiKey,
                 imageJPEGData: jpegs,
-                fallbackCategory: fallbackCategory
+                fallbackCategory: fallbackCategory,
+                invocationId: invocationId
             )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as VisionPracticeError {
             throw ImageStepGeneratorError.failed(error)
         } catch {
+            if AIInvocationStore.errorType(from: error) == .cancelled {
+                throw error
+            }
             throw ImageStepGeneratorError.failed(.transport)
         }
+    }
+
+    private func recordNotConfigured(invocationId: String, model: String) async {
+        let skill = SkillRegistry.builtin.skill(id: SkillID.planFromImage)!
+        await log.record(AIInvocationRecordInput(
+            id: invocationId,
+            skillId: skill.id,
+            skillVersion: skill.version,
+            model: model,
+            startedAt: Date(),
+            durationMs: 0,
+            status: .failure,
+            errorType: .notConfigured,
+            memoryIds: [],
+            formatRetryUsed: false,
+            draftOutcome: nil
+        ))
     }
 }

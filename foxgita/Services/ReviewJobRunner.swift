@@ -87,14 +87,17 @@ final class ReviewJobRunner {
             }
 
             do {
+                let invocationId = UUID().uuidString
                 if MediaReviewMedia.isVideo(fileName: context.fileName) {
                     let draft = try await videoGenerator.diagnose(
-                        context, baseURL: currentBaseURL, model: currentModel
+                        context, baseURL: currentBaseURL, model: currentModel,
+                        invocationId: invocationId
                     )
                     store.applyVideoDiagnosis(recordingId: id, draft: draft)
                 } else {
                     let draft = try await generator.review(
-                        context, baseURL: currentBaseURL, model: currentModel
+                        context, baseURL: currentBaseURL, model: currentModel,
+                        invocationId: invocationId
                     )
                     store.applyReview(recordingId: id, draft: draft)
                 }

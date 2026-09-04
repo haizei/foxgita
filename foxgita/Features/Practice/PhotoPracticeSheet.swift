@@ -326,7 +326,8 @@ struct PhotoPracticeSheet: View {
             imageData: blobs,
             baseURL: baseURL,
             model: model,
-            fallbackCategory: fallbackCategory
+            fallbackCategory: fallbackCategory,
+            invocationId: generationId
         )
         try Task.checkCancellation()
         let item = try entryGate.submit(
