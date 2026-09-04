@@ -13,6 +13,10 @@ enum PracticeTaskOrigin {
         "ai.next.\(generationId)"
     }
 
+    static func templateOriginKey(templateId: String) -> String {
+        "template.\(templateId)"
+    }
+
     /// "active-tpl-chord-2026-08-19" → templateId "tpl-chord", dayKey "2026-08-19"
     static func parseDailyActiveId(_ id: String) -> (templateId: String, dayKey: String)? {
         guard let match = id.wholeMatch(of: /^active-(.+)-(\d{4}-\d{2}-\d{2})$/) else {

@@ -18,7 +18,9 @@ enum PracticeEntry {
             originId: nil,
             bpm: nil,
             timeSignature: nil,
-            steps: []
+            steps: [],
+            subtitle: "",
+            targetMin: 10
         )
     }
 
@@ -27,10 +29,12 @@ enum PracticeEntry {
             title: template.title,
             category: template.category,
             source: .recommend,
-            originId: nil,
+            originId: PracticeTaskOrigin.templateOriginKey(templateId: template.id),
             bpm: template.defaultBpm,
             timeSignature: template.timeSig,
-            steps: template.steps
+            steps: template.steps,
+            subtitle: template.subtitle,
+            targetMin: template.targetMin
         )
     }
 
@@ -42,7 +46,9 @@ enum PracticeEntry {
             originId: PracticeTaskOrigin.photoOriginKey(generationId: generationId),
             bpm: nil,
             timeSignature: nil,
-            steps: draft.steps
+            steps: draft.steps,
+            subtitle: draft.subtitleLine,
+            targetMin: draft.targetMin
         )
     }
 
@@ -54,7 +60,9 @@ enum PracticeEntry {
             originId: PracticeTaskOrigin.nextOriginKey(generationId: generationId),
             bpm: nil,
             timeSignature: nil,
-            steps: draft.steps
+            steps: draft.steps,
+            subtitle: draft.subtitleLine,
+            targetMin: draft.targetMin
         )
     }
 }

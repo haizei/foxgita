@@ -150,4 +150,179 @@ struct PracticeResumeQueryTests {
         #expect(state.durationSec == 0)
         #expect(state.hasHistory)
     }
+
+    @Test func newItemHidesFocusWhenNoLineage() {
+        let current = lineage(id: UUID(), originId: "template.chord", title: "和弦转换")
+        let state = PracticeItemResumeQuery.resume(
+            current: current,
+            items: [current],
+            recordings: [],
+            defaultBpm: 80
+        )
+        #expect(state.bpm == 80)
+        #expect(!state.hasHistory)
+        #expect(PracticeResumeQuery.focusLine(state: state) == nil)
+    }
+
+    @Test func sameOriginYesterdaySeedsBpmAndFocus() {
+        let currentId = UUID()
+        let yesterdayId = UUID()
+        let current = lineage(
+            id: currentId,
+            originId: "template.chord",
+            title: "和弦转换",
+            createdAt: t2
+        )
+        let yesterday = lineage(
+            id: yesterdayId,
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 63,
+            note: "食指闷音",
+            durationSeconds: 120,
+            createdAt: t0
+        )
+        let state = PracticeItemResumeQuery.resume(
+            current: current,
+            items: [current, yesterday],
+            recordings: [],
+            defaultBpm: 80
+        )
+        #expect(state.bpm == 63)
+        #expect(state.hasHistory)
+        #expect(PracticeResumeQuery.focusLine(state: state) == "上次 63 BPM · 食指闷音")
+        #expect(
+            PracticeItemResumeQuery.seedBpm(
+                originId: "template.chord",
+                title: "和弦转换",
+                sourceRaw: PracticeItemSource.recommend.rawValue,
+                items: [yesterday],
+                fallback: 80
+            ) == 63
+        )
+    }
+
+    @Test func titleAndSourceMatchWhenOriginIsUniquePerGeneration() {
+        let current = lineage(
+            id: UUID(),
+            originId: "ai.photo.today",
+            title: "扫弦入门",
+            sourceRaw: PracticeItemSource.photo.rawValue,
+            createdAt: t2
+        )
+        let previous = lineage(
+            id: UUID(),
+            originId: "ai.photo.yesterday",
+            title: "扫弦入门",
+            sourceRaw: PracticeItemSource.photo.rawValue,
+            bpm: 72,
+            durationSeconds: 90,
+            createdAt: t0
+        )
+        let state = PracticeItemResumeQuery.resume(
+            current: current,
+            items: [current, previous],
+            recordings: [],
+            defaultBpm: 80
+        )
+        #expect(state.bpm == 72)
+        #expect(PracticeResumeQuery.focusLine(state: state) == "上次练到 72 BPM")
+    }
+
+    @Test func currentEffectiveVisitBeatsYesterdayForFocus() {
+        let current = lineage(
+            id: UUID(),
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 70,
+            note: "今天稳住了",
+            durationSeconds: 60,
+            createdAt: t2
+        )
+        let yesterday = lineage(
+            id: UUID(),
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 50,
+            note: "昨天",
+            durationSeconds: 80,
+            createdAt: t0
+        )
+        let state = PracticeItemResumeQuery.resume(
+            current: current,
+            items: [current, yesterday],
+            recordings: [
+                ResumeRecording(
+                    id: "r1",
+                    createdAt: t2,
+                    deletedAt: nil,
+                    reviewNextAction: "下次慢半拍"
+                )
+            ],
+            defaultBpm: 80
+        )
+        #expect(state.bpm == 70)
+        #expect(PracticeResumeQuery.focusLine(state: state) == "上次 70 BPM · 下次慢半拍")
+    }
+
+    @Test func ignoresDeletedAndEmptySiblings() {
+        let current = lineage(id: UUID(), originId: "template.chord", title: "和弦转换")
+        let empty = lineage(
+            id: UUID(),
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 99,
+            durationSeconds: 0,
+            createdAt: t2
+        )
+        let gone = lineage(
+            id: UUID(),
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 40,
+            durationSeconds: 60,
+            createdAt: t1,
+            deletedAt: t1
+        )
+        let keep = lineage(
+            id: UUID(),
+            originId: "template.chord",
+            title: "和弦转换",
+            bpm: 55,
+            durationSeconds: 30,
+            createdAt: t0
+        )
+        let state = PracticeItemResumeQuery.resume(
+            current: current,
+            items: [current, empty, gone, keep],
+            recordings: [],
+            defaultBpm: 80
+        )
+        #expect(state.bpm == 55)
+    }
+
+    private func lineage(
+        id: UUID,
+        originId: String?,
+        title: String,
+        sourceRaw: String = PracticeItemSource.recommend.rawValue,
+        bpm: Int? = nil,
+        note: String = "",
+        durationSeconds: Int = 0,
+        createdAt: Date? = nil,
+        deletedAt: Date? = nil
+    ) -> PracticeLineageItem {
+        PracticeLineageItem(
+            id: id,
+            originId: originId,
+            title: title,
+            sourceRaw: sourceRaw,
+            bpm: bpm,
+            note: note,
+            durationSeconds: durationSeconds,
+            recordingCount: durationSeconds > 0 ? 0 : 0,
+            createdAt: createdAt ?? t1,
+            deletedAt: deletedAt
+        )
+    }
 }

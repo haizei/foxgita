@@ -1046,6 +1046,8 @@ struct PracticeStoreTests {
         #expect(fetched.durationSeconds == 0)
         #expect(fetched.note == "")
         #expect(fetched.steps == ["新步骤"])
+        #expect(fetched.subtitle == "")
+        #expect(fetched.targetMin == 10)
         #expect(fetched.practiceDayKey == PracticeDayKey.make(from: now, calendar: cal))
         #expect(fetched.createdAt == now)
         #expect(fetched.updatedAt == now)
@@ -1424,6 +1426,8 @@ struct PracticeStoreTests {
         #expect(created.originId == nil)
         #expect(created.durationSeconds == 0)
         #expect(created.steps == ["新步骤"])
+        #expect(created.subtitle == "")
+        #expect(created.targetMin == 10)
         #expect(created.practiceDayKey == "2026-08-26")
         #expect(try repo.tasks().contains { $0.id.hasPrefix("custom-") } == false)
     }
@@ -1458,6 +1462,9 @@ struct PracticeStoreTests {
         #expect(created.bpm == template.defaultBpm)
         #expect(created.timeSignature == template.timeSig)
         #expect(created.steps == ["按住 C", "切换 G"])
+        #expect(created.originId == PracticeTaskOrigin.templateOriginKey(templateId: template.id))
+        #expect(created.subtitle == "8 分钟")
+        #expect(created.targetMin == 8)
         #expect(try repo.task(id: "tpl-chord")?.isTemplate == true)
         #expect(try repo.task(id: "active-tpl-chord") == nil)
     }
@@ -1490,6 +1497,8 @@ struct PracticeStoreTests {
         #expect(created.sourceRaw == PracticeItemSource.photo.rawValue)
         #expect(created.originId == PracticeTaskOrigin.photoOriginKey(generationId: generationId))
         #expect(created.steps == ["熟悉下下上"])
+        #expect(created.subtitle == sampleDraft().subtitleLine)
+        #expect(created.targetMin == 12)
         #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
     }
 
@@ -1521,6 +1530,8 @@ struct PracticeStoreTests {
         #expect(created.sourceRaw == PracticeItemSource.next.rawValue)
         #expect(created.originId == PracticeTaskOrigin.nextOriginKey(generationId: generationId))
         #expect(created.steps == ["熟悉下下上"])
+        #expect(created.subtitle == sampleDraft(title: "今日安排", category: .scale).subtitleLine)
+        #expect(created.targetMin == 12)
         #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
     }
 
@@ -1591,6 +1602,98 @@ struct PracticeStoreTests {
         #expect(first.id == second.id)
         #expect(try repo.practiceItems(profileId: profileId).count == 1)
         #expect(try repo.tasks().isEmpty)
+    }
+
+    @Test func createPracticeItemSeedsBpmFromSameOriginHistory() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let cal = shanghai()
+        let yesterday = try store.createPracticeItem(
+            input: makeInput(originId: "template.chord", bpm: 80),
+            now: date(2026, 8, 25, calendar: cal),
+            calendar: cal
+        )
+        try store.savePracticeItem(
+            id: yesterday.id,
+            durationSeconds: 90,
+            note: "昨天",
+            now: date(2026, 8, 25, 21, calendar: cal),
+            bpm: 63
+        )
+
+        let today = try store.createPracticeItem(
+            input: makeInput(originId: "template.chord", bpm: 80),
+            now: date(2026, 8, 26, calendar: cal),
+            calendar: cal
+        )
+        #expect(today.bpm == 63)
+        #expect(today.practiceDayKey == "2026-08-26")
+    }
+
+    @Test func swipeEditDoesNotPromoteOlderItemForBpmSeed() throws {
+        let (store, _, _) = makeStore(seeded: true)
+        store.prepare()
+        let cal = shanghai()
+        let yesterday = try store.createPracticeItem(
+            input: makeInput(originId: "template.chord", bpm: 80),
+            now: date(2026, 8, 25, 10, calendar: cal),
+            calendar: cal
+        )
+        try store.savePracticeItem(
+            id: yesterday.id,
+            durationSeconds: 90,
+            note: "昨天",
+            now: date(2026, 8, 25, 21, calendar: cal),
+            bpm: 50
+        )
+        let today = try store.createPracticeItem(
+            input: makeInput(originId: "template.chord", bpm: 80),
+            now: date(2026, 8, 26, 10, calendar: cal),
+            calendar: cal
+        )
+        try store.savePracticeItem(
+            id: today.id,
+            durationSeconds: 80,
+            note: "今天",
+            now: date(2026, 8, 26, 21, calendar: cal),
+            bpm: 70
+        )
+        try store.updatePracticeItem(
+            id: yesterday.id,
+            title: "和弦转换改名",
+            subtitle: "被改过",
+            minutes: 8,
+            now: date(2026, 8, 27, 9, calendar: cal)
+        )
+        let tomorrow = try store.createPracticeItem(
+            input: makeInput(originId: "template.chord", bpm: 80),
+            now: date(2026, 8, 27, 10, calendar: cal),
+            calendar: cal
+        )
+        #expect(tomorrow.bpm == 70)
+    }
+
+    @Test func updatePracticeItemEditsTitleSubtitleAndTarget() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(title: "开放弦"),
+            now: date(2026, 8, 26, calendar: cal),
+            calendar: cal
+        )
+        try store.updatePracticeItem(
+            id: created.id,
+            title: "  慢扫  ",
+            subtitle: "开放弦与爬格子",
+            minutes: 12,
+            now: date(2026, 8, 26, 11, calendar: cal)
+        )
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.title == "慢扫")
+        #expect(fetched.subtitle == "开放弦与爬格子")
+        #expect(fetched.targetMin == 12)
     }
 
     @Test func cancelWithoutSubmitCreatesNoPracticeItem() throws {

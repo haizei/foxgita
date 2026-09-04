@@ -43,11 +43,14 @@ enum PracticeDetailState {
         storedDurationSeconds: Int,
         storedNote: String,
         steps: [String] = [],
-        storedSteps: [String] = []
+        storedSteps: [String] = [],
+        bpm: Int? = nil,
+        storedBpm: Int? = nil
     ) -> Bool {
         max(0, elapsedSeconds) != max(0, storedDurationSeconds)
             || note != storedNote
             || steps != storedSteps
+            || bpm != storedBpm
     }
 
     static func initialSteps(_ stored: [String]) -> [String] {
@@ -87,6 +90,8 @@ struct PracticeDetailView: View {
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Environment(MemoryConsentCoordinator.self) private var consent
     @Query private var items: [PracticeItem]
+    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
+    private var allPracticeItems: [PracticeItem]
     @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
     private var projects: [Project]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
@@ -106,6 +111,8 @@ struct PracticeDetailView: View {
     @State private var storedDurationSeconds = 0
     @State private var steps: [String] = []
     @State private var storedSteps: [String] = []
+    @State private var storedBpm: Int? = nil
+    @State private var storedResumeState: ResumeState? = nil
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
     @State private var toast: String?
@@ -149,7 +156,9 @@ struct PracticeDetailView: View {
             storedDurationSeconds: storedDurationSeconds,
             storedNote: storedNote,
             steps: steps,
-            storedSteps: storedSteps
+            storedSteps: storedSteps,
+            bpm: metronome.bpm,
+            storedBpm: storedBpm
         )
     }
 
@@ -220,7 +229,10 @@ struct PracticeDetailView: View {
                 steps = loadedSteps
                 storedSteps = loadedSteps
                 practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
-                metronome.setBpm(item.bpm ?? 80)
+                let resume = resumeState(for: item)
+                storedResumeState = resume
+                metronome.setBpm(resume.bpm)
+                storedBpm = resume.bpm
                 if let projectId = item.projectId,
                    projects.contains(where: { $0.id == projectId }) {
                     sessionProjectId = projectId
@@ -344,13 +356,32 @@ struct PracticeDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if let timeSig = item.timeSignature, !timeSig.isEmpty {
+                    if !item.subtitle.isEmpty,
+                       !AIPracticePresentation.isAIGenerated(subtitle: item.subtitle) {
+                        HStack {
+                            Text(item.subtitle)
+                            Spacer()
+                            if let timeSig = item.timeSignature, !timeSig.isEmpty {
+                                Text(timeSig)
+                            }
+                        }
+                        .font(.system(size: 12))
+                        .foregroundStyle(GitaTheme.textSecondary)
+                    } else if let timeSig = item.timeSignature, !timeSig.isEmpty {
                         HStack {
                             Spacer()
                             Text(timeSig)
                         }
                         .font(.system(size: 12))
                         .foregroundStyle(GitaTheme.textSecondary)
+                    }
+
+                    if let resume = storedResumeState,
+                       let line = PracticeResumeQuery.focusLine(state: resume) {
+                        Text(line)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .accessibilityLabel(Text(line))
                     }
 
                     metronomeCard
@@ -1000,11 +1031,13 @@ struct PracticeDetailView: View {
                 durationSeconds: practiceTimer.elapsedSec,
                 note: noteText,
                 now: Date(),
-                steps: steps
+                steps: steps,
+                bpm: metronome.bpm
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
             storedSteps = steps
+            storedBpm = metronome.bpm
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -1019,6 +1052,16 @@ struct PracticeDetailView: View {
         router.practiceToast = String(localized: "项目已删除，本次练习已保存为独立练习")
     }
 
+    private func resumeState(for item: PracticeItem) -> ResumeState {
+        let peers = allPracticeItems.filter { $0.profileId == item.profileId }
+        return PracticeItemResumeQuery.resume(
+            current: PracticeItemResumeQuery.lineageItem(from: item),
+            items: peers.map(PracticeItemResumeQuery.lineageItem(from:)),
+            recordings: PracticeItemResumeQuery.recordings(from: peers),
+            defaultBpm: 80
+        )
+    }
+
     private func resetTrip() {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
         noteFocused = false
@@ -1027,6 +1070,9 @@ struct PracticeDetailView: View {
         practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
         noteText = storedNote
         steps = storedSteps
+        if let storedBpm {
+            metronome.setBpm(storedBpm)
+        }
     }
 
     private func complete(_ item: PracticeItem) {

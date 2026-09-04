@@ -11,6 +11,8 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
     let note: String
     let recordingCount: Int
     let categoryRaw: String
+    let subtitle: String
+    let targetMin: Int
 
     init(
         id: UUID,
@@ -22,7 +24,9 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         projectId: UUID? = nil,
         note: String = "",
         recordingCount: Int = 0,
-        categoryRaw: String = PracticeCategory.chord.rawValue
+        categoryRaw: String = PracticeCategory.chord.rawValue,
+        subtitle: String = "",
+        targetMin: Int = 0
     ) {
         self.id = id
         self.practiceDayKey = practiceDayKey
@@ -34,6 +38,8 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         self.note = note
         self.recordingCount = recordingCount
         self.categoryRaw = categoryRaw
+        self.subtitle = subtitle
+        self.targetMin = targetMin
     }
 }
 
@@ -84,5 +90,29 @@ struct PracticeHomeState: Equatable {
 
     static func allowsSwipeDelete(isSelectedToday: Bool) -> Bool {
         isSelectedToday
+    }
+
+    static func allowsSwipeEdit(isSelectedToday: Bool) -> Bool {
+        isSelectedToday
+    }
+
+    static func initialTargetMin(_ value: Int) -> Int {
+        min(60, max(1, value == 0 ? 10 : value))
+    }
+
+    static func cardMinutesLabel(
+        isSelectedToday: Bool,
+        targetMin: Int,
+        durationSeconds: Int
+    ) -> String {
+        if isSelectedToday {
+            return String(localized: "\(initialTargetMin(targetMin)) 分钟")
+        }
+        let minutes: Int = {
+            let clamped = max(0, durationSeconds)
+            guard clamped > 0 else { return 0 }
+            return max(1, Int((Double(clamped) / 60.0).rounded(.up)))
+        }()
+        return String(localized: "已练 \(minutes) 分钟")
     }
 }

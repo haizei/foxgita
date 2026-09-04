@@ -385,6 +385,8 @@ struct DaySessionCard: View {
     var actionTitle: String = String(localized: "查看")
     var solidCTA: Bool = false
     var showsShadow: Bool = true
+    var subtitle: String = ""
+    let minutesText: String
     var action: (() -> Void)?
 
     init(
@@ -394,6 +396,8 @@ struct DaySessionCard: View {
         actionTitle: String = String(localized: "查看"),
         solidCTA: Bool = false,
         showsShadow: Bool = true,
+        subtitle: String = "",
+        minutesText: String? = nil,
         action: (() -> Void)? = nil
     ) {
         self.title = title
@@ -402,6 +406,8 @@ struct DaySessionCard: View {
         self.actionTitle = actionTitle
         self.solidCTA = solidCTA
         self.showsShadow = showsShadow
+        self.subtitle = subtitle
+        self.minutesText = minutesText ?? String(localized: "已练 \(minutes) 分钟")
         self.action = action
     }
 
@@ -426,18 +432,26 @@ struct DaySessionCard: View {
                     .font(GitaFont.body(.bold))
                     .foregroundStyle(GitaTheme.textPrimary)
                     .lineLimit(2)
-                Text("已练 \(minutes) 分钟")
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textSecondary)
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .lineLimit(2)
+                }
             }
             Spacer(minLength: 0)
-            Text(actionTitle)
-                .font(GitaFont.caption(.semibold))
-                .foregroundStyle(solidCTA ? GitaTheme.brandOn : GitaTheme.textSecondary)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(solidCTA ? GitaTheme.brand500 : GitaTheme.bgSubtle)
-                .clipShape(Capsule())
+            VStack(alignment: .trailing, spacing: 6) {
+                Text(minutesText)
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Text(actionTitle)
+                    .font(GitaFont.caption(.semibold))
+                    .foregroundStyle(solidCTA ? GitaTheme.brandOn : GitaTheme.textSecondary)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(solidCTA ? GitaTheme.brand500 : GitaTheme.bgSubtle)
+                    .clipShape(Capsule())
+            }
         }
         .padding(.leading, 16)
         .padding(.trailing, 12)
@@ -454,10 +468,18 @@ struct DaySessionCard: View {
         if let action {
             Button(action: action) { card }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("\(title)，已练 \(minutes) 分钟"))
+                .accessibilityLabel(Text(accessibilityLabelText))
         } else {
             card
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(Text(accessibilityLabelText))
         }
+    }
+
+    private var accessibilityLabelText: String {
+        [title, subtitle, minutesText, actionTitle]
+            .filter { !$0.isEmpty }
+            .joined(separator: "，")
     }
 }
 

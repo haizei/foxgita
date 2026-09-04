@@ -127,4 +127,36 @@ struct PracticeHomeStateTests {
         #expect(PracticeHomeState.allowsSwipeDelete(isSelectedToday: true))
         #expect(!PracticeHomeState.allowsSwipeDelete(isSelectedToday: false))
     }
+
+    @Test func onlyTodayAllowsSwipeEdit() {
+        #expect(PracticeHomeState.allowsSwipeEdit(isSelectedToday: true))
+        #expect(!PracticeHomeState.allowsSwipeEdit(isSelectedToday: false))
+    }
+
+    @Test func todayCardShowsTargetMinutes() {
+        #expect(
+            PracticeHomeState.cardMinutesLabel(
+                isSelectedToday: true,
+                targetMin: 8,
+                durationSeconds: 0
+            ) == "8 分钟"
+        )
+        #expect(
+            PracticeHomeState.cardMinutesLabel(
+                isSelectedToday: true,
+                targetMin: 8,
+                durationSeconds: 120
+            ) == "8 分钟"
+        )
+    }
+
+    @Test func pastCardShowsElapsedMinutes() {
+        #expect(
+            PracticeHomeState.cardMinutesLabel(
+                isSelectedToday: false,
+                targetMin: 8,
+                durationSeconds: 125
+            ) == "已练 3 分钟"
+        )
+    }
 }

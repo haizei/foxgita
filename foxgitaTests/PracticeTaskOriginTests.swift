@@ -10,5 +10,6 @@ struct PracticeTaskOriginTests {
         #expect(PracticeTaskOrigin.parseDailyActiveId("active-tpl-chord") == nil)
         #expect(PracticeTaskOrigin.photoOriginKey(generationId: "g1") == "ai.photo.g1")
         #expect(PracticeTaskOrigin.nextOriginKey(generationId: "g1") == "ai.next.g1")
+        #expect(PracticeTaskOrigin.templateOriginKey(templateId: "tpl-chord") == "template.tpl-chord")
     }
 }

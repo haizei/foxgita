@@ -23,6 +23,7 @@ struct PracticeView: View {
     @State private var lastSeenTodayStart: Date?
     @State private var openSwipeRowId: String?
     @State private var deleteItemId: UUID?
+    @State private var editingItemId: UUID?
 
     private var calendar: Calendar { .current }
     private var isSelectedToday: Bool { calendar.isDateInToday(selectedDay) }
@@ -220,6 +221,30 @@ struct PracticeView: View {
                     Text("删除后这条练习会从今日列表消失。")
                 }
             }
+            .sheet(item: editSheetItem) { item in
+                EditPracticeItemSheet(
+                    title: item.title,
+                    subtitle: item.subtitle,
+                    minutes: PracticeHomeState.initialTargetMin(item.targetMin)
+                ) { title, subtitle, minutes in
+                    do {
+                        try store.updatePracticeItem(
+                            id: item.id,
+                            title: title,
+                            subtitle: subtitle,
+                            minutes: minutes,
+                            now: Date()
+                        )
+                    } catch {
+                        showToast(
+                            store.lastError?.localizedDescription
+                                ?? error.localizedDescription
+                        )
+                    }
+                    editingItemId = nil
+                    openSwipeRowId = nil
+                }
+            }
         }
     }
 
@@ -255,6 +280,21 @@ struct PracticeView: View {
             isSelectedToday: isSelectedToday,
             durationSeconds: item.durationSeconds
         )
+        let minutesLabel = PracticeHomeState.cardMinutesLabel(
+            isSelectedToday: isSelectedToday,
+            targetMin: item.targetMin,
+            durationSeconds: item.durationSeconds
+        )
+        let card = DaySessionCard(
+            title: item.title,
+            minutes: minutesFromSeconds(item.durationSeconds),
+            category: category(for: item),
+            actionTitle: cta,
+            solidCTA: index == 0 && isSelectedToday,
+            showsShadow: false,
+            subtitle: item.subtitle,
+            minutesText: minutesLabel
+        )
         if PracticeHomeState.allowsSwipeDelete(isSelectedToday: isSelectedToday) {
             SwipeRevealRow(
                 id: item.id.uuidString,
@@ -263,27 +303,32 @@ struct PracticeView: View {
                     openSwipeRowId = nil
                     router.practicePath.append(.detail(itemId: item.id))
                 },
+                onEdit: PracticeHomeState.allowsSwipeEdit(isSelectedToday: isSelectedToday)
+                    ? { editingItemId = item.id }
+                    : nil,
                 onDelete: { deleteItemId = item.id }
             ) {
-                DaySessionCard(
-                    title: item.title,
-                    minutes: minutesFromSeconds(item.durationSeconds),
-                    category: category(for: item),
-                    actionTitle: cta,
-                    solidCTA: index == 0,
-                    showsShadow: false
-                )
+                card
             }
         } else {
             DaySessionCard(
                 title: item.title,
                 minutes: minutesFromSeconds(item.durationSeconds),
                 category: category(for: item),
-                actionTitle: cta
+                actionTitle: cta,
+                subtitle: item.subtitle,
+                minutesText: minutesLabel
             ) {
                 router.practicePath.append(.detail(itemId: item.id))
             }
         }
+    }
+
+    private var editSheetItem: Binding<PracticeItemSnapshot?> {
+        Binding(
+            get: { homeState.items.first { $0.id == editingItemId } },
+            set: { if $0 == nil { editingItemId = nil } }
+        )
     }
 
     private func category(for item: PracticeItemSnapshot) -> PracticeCategory {
@@ -329,5 +374,51 @@ struct PracticeView: View {
         .padding(16)
         .background(GitaTheme.bgSubtle)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+    }
+}
+
+private struct EditPracticeItemSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (String, String, Int) -> Void
+
+    @State private var title: String
+    @State private var subtitle: String
+    @State private var minutes: Int
+
+    init(
+        title: String,
+        subtitle: String,
+        minutes: Int,
+        onSave: @escaping (String, String, Int) -> Void
+    ) {
+        self.onSave = onSave
+        _title = State(initialValue: title)
+        _subtitle = State(initialValue: subtitle)
+        _minutes = State(initialValue: minutes)
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section("练习") {
+                    TextField("标题", text: $title)
+                    TextField("备注", text: $subtitle)
+                    Stepper("目标 \(minutes) 分钟", value: $minutes, in: 1...60)
+                }
+            }
+            .navigationTitle("编辑练习")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        onSave(title, subtitle, minutes)
+                        dismiss()
+                    }
+                }
+            }
+        }
     }
 }

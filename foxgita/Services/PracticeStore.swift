@@ -37,6 +37,8 @@ struct PracticeItemInput {
     let bpm: Int?
     let timeSignature: String?
     var steps: [String] = []
+    var subtitle: String = ""
+    var targetMin: Int = 0
 }
 
 /// Command layer. Views read through `@Query` for free reactivity and write
@@ -77,7 +79,9 @@ final class PracticeStore {
             projectId: item.projectId,
             note: item.note,
             recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
-            categoryRaw: item.categoryRaw
+            categoryRaw: item.categoryRaw,
+            subtitle: item.subtitle,
+            targetMin: item.targetMin
         )
     }
 
@@ -259,6 +263,8 @@ final class PracticeStore {
             originId: nil,
             projectId: projectId,
             steps: PracticeDetailState.initialSteps([]),
+            subtitle: "",
+            targetMin: PracticeHomeState.initialTargetMin(0),
             createdAt: now,
             updatedAt: now
         )
@@ -275,6 +281,15 @@ final class PracticeStore {
 
     func createPracticeItem(input: PracticeItemInput, now: Date, calendar: Calendar) throws -> PracticeItem {
         let profileId = try requireProfileUUID()
+        let lineage = try repository.practiceItems(profileId: profileId)
+            .map(PracticeItemResumeQuery.lineageItem(from:))
+        let seededBpm = PracticeItemResumeQuery.seedBpm(
+            originId: input.originId,
+            title: input.title,
+            sourceRaw: input.source.rawValue,
+            items: lineage,
+            fallback: input.bpm
+        )
         let item = PracticeItem(
             id: UUID(),
             profileId: profileId,
@@ -282,12 +297,14 @@ final class PracticeStore {
             title: input.title,
             categoryRaw: input.category.rawValue,
             durationSeconds: 0,
-            bpm: input.bpm,
+            bpm: seededBpm,
             timeSignature: input.timeSignature,
             note: "",
             sourceRaw: input.source.rawValue,
             originId: input.originId,
             steps: PracticeDetailState.initialSteps(input.steps),
+            subtitle: input.subtitle,
+            targetMin: PracticeHomeState.initialTargetMin(input.targetMin),
             createdAt: now,
             updatedAt: now
         )
@@ -307,7 +324,8 @@ final class PracticeStore {
         durationSeconds: Int,
         note: String,
         now: Date,
-        steps: [String]? = nil
+        steps: [String]? = nil,
+        bpm: Int? = nil
     ) throws {
         let item = try requireLivePracticeItem(id: id)
         item.durationSeconds = max(0, durationSeconds)
@@ -315,11 +333,30 @@ final class PracticeStore {
         if let steps {
             item.steps = PracticeDetailState.initialSteps(steps)
         }
+        if let bpm {
+            item.bpm = min(200, max(40, bpm))
+        }
         item.updatedAt = now
         if let projectId = item.projectId,
            (try repository.project(id: projectId, profileId: item.profileId)) == nil {
             item.projectId = nil
         }
+        try persistPracticeItemChanges()
+    }
+
+    func updatePracticeItem(
+        id: UUID,
+        title: String,
+        subtitle: String,
+        minutes: Int,
+        now: Date
+    ) throws {
+        let item = try requireLivePracticeItem(id: id)
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.title = trimmed.isEmpty ? item.title : trimmed
+        item.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.targetMin = PracticeHomeState.initialTargetMin(minutes)
+        item.updatedAt = now
         try persistPracticeItemChanges()
     }
 

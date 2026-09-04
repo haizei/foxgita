@@ -170,6 +170,29 @@ struct PracticeDetailStateTests {
         )
     }
 
+    @Test func bpmEditsMakeDetailDirty() {
+        #expect(
+            !PracticeDetailState.isDirty(
+                elapsedSeconds: 60,
+                note: "",
+                storedDurationSeconds: 60,
+                storedNote: "",
+                bpm: 80,
+                storedBpm: 80
+            )
+        )
+        #expect(
+            PracticeDetailState.isDirty(
+                elapsedSeconds: 60,
+                note: "",
+                storedDurationSeconds: 60,
+                storedNote: "",
+                bpm: 63,
+                storedBpm: 80
+            )
+        )
+    }
+
     @Test func detailMatchesHomeItem() {
         let id = UUID()
         let created = date(year: 2026, month: 8, day: 26, hour: 9)

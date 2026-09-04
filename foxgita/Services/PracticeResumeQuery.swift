@@ -105,3 +105,131 @@ enum PracticeResumeQuery {
         return first
     }
 }
+
+struct PracticeLineageItem: Equatable {
+    var id: UUID
+    var originId: String?
+    var title: String
+    var sourceRaw: String
+    var bpm: Int?
+    var note: String
+    var durationSeconds: Int
+    var recordingCount: Int
+    var createdAt: Date
+    var deletedAt: Date?
+}
+
+enum PracticeItemResumeQuery {
+    static func lineage(
+        currentId: UUID,
+        originId: String?,
+        title: String,
+        sourceRaw: String,
+        items: [PracticeLineageItem]
+    ) -> [PracticeLineageItem] {
+        let live = items.filter { $0.deletedAt == nil && $0.id != currentId }
+        let origin = originId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !origin.isEmpty {
+            let matched = live.filter {
+                ($0.originId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "") == origin
+            }
+            if !matched.isEmpty { return matched }
+        }
+        return live.filter { $0.title == title && $0.sourceRaw == sourceRaw }
+    }
+
+    static func resume(
+        current: PracticeLineageItem,
+        items: [PracticeLineageItem],
+        recordings: [ResumeRecording],
+        defaultBpm: Int
+    ) -> ResumeState {
+        var sessions = lineage(
+            currentId: current.id,
+            originId: current.originId,
+            title: current.title,
+            sourceRaw: current.sourceRaw,
+            items: items
+        ).map(session(from:))
+        if isEffective(current) {
+            sessions.append(session(from: current))
+        }
+        return PracticeResumeQuery.resume(
+            sessions: sessions,
+            recordings: recordings,
+            defaultBpm: current.bpm ?? defaultBpm
+        )
+    }
+
+    static func seedBpm(
+        originId: String?,
+        title: String,
+        sourceRaw: String,
+        items: [PracticeLineageItem],
+        fallback: Int?
+    ) -> Int? {
+        let siblings = lineage(
+            currentId: UUID(),
+            originId: originId,
+            title: title,
+            sourceRaw: sourceRaw,
+            items: items
+        )
+        let state = PracticeResumeQuery.resume(
+            sessions: siblings.map(session(from:)),
+            recordings: [],
+            defaultBpm: fallback ?? 80
+        )
+        return state.hasHistory ? state.bpm : fallback
+    }
+
+    static func lineageItem(from item: PracticeItem) -> PracticeLineageItem {
+        PracticeLineageItem(
+            id: item.id,
+            originId: item.originId,
+            title: item.title,
+            sourceRaw: item.sourceRaw,
+            bpm: item.bpm,
+            note: item.note,
+            durationSeconds: item.durationSeconds,
+            recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
+            createdAt: item.createdAt,
+            deletedAt: item.deletedAt
+        )
+    }
+
+    static func recordings(from items: [PracticeItem]) -> [ResumeRecording] {
+        items.flatMap { item in
+            item.recordings.map { rec in
+                ResumeRecording(
+                    id: rec.id,
+                    createdAt: rec.createdAt,
+                    deletedAt: rec.deletedAt,
+                    reviewNextAction: rec.reviewNextAction
+                )
+            }
+        }
+    }
+
+    private static func isEffective(_ item: PracticeLineageItem) -> Bool {
+        guard item.deletedAt == nil else { return false }
+        return PracticeRecordRules.isEffective(
+            durationSec: item.durationSeconds,
+            noteText: item.note,
+            recordingCount: item.recordingCount
+        )
+    }
+
+    private static func session(from item: PracticeLineageItem) -> ResumeSession {
+        ResumeSession(
+            id: item.id.uuidString,
+            endedAt: item.createdAt,
+            bpm: item.bpm ?? 80,
+            noteText: item.note,
+            deletedAt: item.deletedAt,
+            durationSec: item.durationSeconds,
+            recordingCount: item.recordingCount,
+            startedAt: item.createdAt
+        )
+    }
+}
