@@ -98,11 +98,11 @@ struct RecordView: View {
         allSnapshots.contains { PracticeItemRules.isEffective($0) }
     }
 
-    private func startProjectCreate(fromEmpty: Bool) {
+    private func startProjectCreate(source: String) {
         guard RecordProjectCreateStart.shouldPush(onto: router.recordPath.last) else { return }
-        RecordAnalytics.projectCreateStarted(
-            source: fromEmpty ? "projects_empty" : "projects_list"
-        )
+        RecordAnalytics.projectCreateEntryViewed(source: source)
+        RecordAnalytics.projectCreateStarted(source: source)
+        router.projectCreateSource = source
         router.recordPath.append(.projectCreate)
     }
 
@@ -148,8 +148,10 @@ struct RecordView: View {
                     HistoryView(initialSegment: segment)
                 case .practiceDetail(let itemId):
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
-                case .projectCreate, .projectCreateFromPractice:
-                    ProjectEditorView(mode: .create)
+                case .projectCreate:
+                    ProjectEditorView(mode: .create, createSource: router.projectCreateSource)
+                case .projectCreateFromPractice:
+                    ProjectEditorView(mode: .create, createSource: "practice_detail")
                 case .projectDetail(let id):
                     ProjectDetailView(projectId: id)
                 case .projectEdit(let id):
@@ -281,14 +283,14 @@ struct RecordView: View {
                 HStack {
                     Spacer(minLength: 0)
                     Button {
-                        startProjectCreate(fromEmpty: false)
+                        startProjectCreate(source: "projects_list")
                     } label: {
-                        Text("创建项目")
+                        Text("新建项目")
                             .font(GitaFont.callout(.semibold))
                             .foregroundStyle(GitaTheme.brand500)
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(Text("创建项目"))
+                    .accessibilityLabel(Text("新建项目"))
                 }
                 if let current = state.current {
                     currentProjectCard(current)
@@ -583,7 +585,7 @@ struct RecordView: View {
     private var projectEmptyState: some View {
         VStack(spacing: 16) {
             VStack(spacing: 12) {
-                Text("跨天目标")
+                Text("跨天练习目标")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.brand500)
                     .padding(.horizontal, 14)
@@ -591,33 +593,23 @@ struct RecordView: View {
                     .background(GitaTheme.brand50)
                     .clipShape(Capsule())
 
-                Text("把多天练习连成一个项目")
+                Text("把多天练习放进一个项目")
                     .font(GitaFont.headline())
                     .foregroundStyle(GitaTheme.textPrimary)
                     .multilineTextAlignment(.center)
 
-                Text("项目记录完成目标和当前重点，练习时间、笔记与媒体仍保存在每天的练习项里。")
-                    .font(GitaFont.callout())
-                    .foregroundStyle(GitaTheme.textSecondary)
-                    .multilineTextAlignment(.center)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("• 看见上次练到哪里")
-                    Text("• 保存下一次的唯一重点")
-                    Text("• 从项目直接创建今天的练习")
+                VStack(spacing: 0) {
+                    Text("以后可以从上次状态继续，")
+                    Text("练习记录会自然汇集到这里。")
                 }
                 .font(GitaFont.callout())
-                .foregroundStyle(GitaTheme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-                .background(GitaTheme.bgSubtle)
-                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+                .foregroundStyle(GitaTheme.textSecondary)
+                .multilineTextAlignment(.center)
 
                 Button {
-                    startProjectCreate(fromEmpty: true)
+                    startProjectCreate(source: "projects_empty")
                 } label: {
-                    Text("创建第一个项目")
+                    Text("新建项目")
                         .font(GitaFont.body())
                         .foregroundStyle(GitaTheme.brandOn)
                         .frame(maxWidth: .infinity)
@@ -642,7 +634,7 @@ struct RecordView: View {
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
             .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
 
-            Text("创建项目不会改变已有练习，也不会要求所有练习都归入项目")
+            Text("项目不会改变已有练习，也不会要求所有练习加入项目")
                 .font(GitaFont.caption())
                 .foregroundStyle(GitaTheme.textSecondary)
                 .multilineTextAlignment(.center)

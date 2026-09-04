@@ -49,6 +49,8 @@ final class AppRouter {
     var practiceToast: String?
     /// Set only after an effective Complete. Never persist.
     var lastCompletedPracticeItemId: UUID?
+    var projectCreatedToast = false
+    var projectCreateSource = "projects_list"
 
     func clearJustCompleted() {
         lastCompletedPracticeItemId = nil
@@ -56,6 +58,7 @@ final class AppRouter {
 
     func presentCreatedProject(_ projectId: UUID, fromPracticeTab: Bool) {
         recordSegment = .project
+        projectCreatedToast = true
         if fromPracticeTab {
             selectedTab = .record
             practicePath.removeAll()

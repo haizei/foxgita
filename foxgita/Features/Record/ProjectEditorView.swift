@@ -8,8 +8,7 @@ enum ProjectEditorMode: Equatable {
 
 struct ProjectEditorView: View {
     let mode: ProjectEditorMode
-    var fromEmpty: Bool = false
-    var onCreated: ((UUID) -> Void)? = nil
+    var createSource: String = "projects_list"
 
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
@@ -19,25 +18,19 @@ struct ProjectEditorView: View {
 
     @State private var name = ""
     @State private var goal = ""
-    @State private var currentFocus = ""
-    @State private var kind = ""
-    @State private var stage = ""
     @State private var loadedName = ""
     @State private var loadedGoal = ""
-    @State private var loadedFocus = ""
-    @State private var loadedKind = ""
-    @State private var loadedStage = ""
     @State private var nameError: String?
     @State private var goalError: String?
     @State private var error: String?
     @State private var didLoadEditFields = false
     @State private var showAbandon = false
-    @State private var showStagePicker = false
     @State private var isSubmitting = false
     @State private var startedAt = Date()
+    @State private var goalExpanded = false
 
     private var canSubmit: Bool {
-        !ProjectSetupRules.trimmed(name).isEmpty && !ProjectSetupRules.trimmed(goal).isEmpty
+        !ProjectSetupRules.trimmed(name).isEmpty
     }
 
     private var isDirty: Bool {
@@ -46,12 +39,13 @@ struct ProjectEditorView: View {
             return ProjectSetupRules.isCreateDirty(name: name, goal: goal)
         case .edit:
             return ProjectSetupRules.isEditDirty(
-                name: name,
-                goal: goal,
-                loadedName: loadedName,
-                loadedGoal: loadedGoal
+                name: name, goal: goal, loadedName: loadedName, loadedGoal: loadedGoal
             )
         }
+    }
+
+    private var analyticsSource: String {
+        mode == .create ? createSource : "edit"
     }
 
     var body: some View {
@@ -61,8 +55,30 @@ struct ProjectEditorView: View {
                 editorHeader
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        requiredCard
-                        optionalSection
+                        Text("你想持续练什么？")
+                            .font(GitaFont.headline())
+                            .foregroundStyle(GitaTheme.textPrimary)
+                        Text("用一句话创建，其他信息以后再补充。")
+                            .font(GitaFont.callout())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                        field(
+                            title: "项目名称 *",
+                            placeholder: "学会《知足》",
+                            text: $name,
+                            max: ProjectSetupRules.nameMax,
+                            error: nameError
+                        )
+                        if goalExpanded {
+                            field(
+                                title: "完成标准",
+                                placeholder: "",
+                                text: $goal,
+                                max: ProjectSetupRules.goalMax,
+                                error: goalError
+                            )
+                        } else {
+                            goalFoldedRow
+                        }
                         if let error {
                             Text(error)
                                 .font(GitaFont.callout())
@@ -92,7 +108,7 @@ struct ProjectEditorView: View {
         HStack {
             Color.clear.frame(width: 24, height: 24)
             Spacer(minLength: 0)
-            Text(mode == .create ? "创建项目" : "编辑项目")
+            Text(mode == .create ? "新建项目" : "编辑项目")
                 .font(GitaFont.body(.bold))
                 .foregroundStyle(GitaTheme.textPrimary)
             Spacer(minLength: 0)
@@ -109,122 +125,50 @@ struct ProjectEditorView: View {
         .frame(height: 56)
     }
 
-    private var requiredCard: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            field(
-                title: "项目名称 *",
-                placeholder: "学会《知足》",
-                text: $name,
-                max: ProjectSetupRules.nameMax,
-                emphasized: false,
-                minHeight: 48,
-                error: nameError
-            )
-            field(
-                title: "完成目标 *",
-                placeholder: "跟着原唱，稳定完成整首弹唱",
-                text: $goal,
-                max: ProjectSetupRules.goalMax,
-                emphasized: true,
-                minHeight: 62,
-                error: goalError
-            )
-        }
-        .padding(GitaTheme.s16)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-    }
-
-    private var optionalSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("补充练习方向")
-                    .font(GitaFont.footnote(.bold))
+    private var goalFoldedRow: some View {
+        Button(action: expandGoal) {
+            HStack(spacing: 8) {
+                Text("＋")
+                    .font(GitaFont.callout(.medium))
+                    .foregroundStyle(GitaTheme.brand500)
+                Text("添加完成标准")
+                    .font(GitaFont.callout())
                     .foregroundStyle(GitaTheme.textPrimary)
                 Spacer(minLength: 0)
-                Text("选填")
+                Text("选填  ›")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
             }
-
-            HStack(spacing: 8) {
-                ForEach(ProjectSetupRules.kinds, id: \.self) { item in
-                    let selected = ProjectSetupRules.trimmed(kind) == item
-                    Button {
-                        kind = selected ? "" : item
-                    } label: {
-                        Text(item)
-                            .font(GitaFont.footnote(selected ? .medium : .regular))
-                            .foregroundStyle(selected ? GitaTheme.brand500 : GitaTheme.textSecondary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(selected ? GitaTheme.brand50 : GitaTheme.bgSubtle)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-                }
-                Spacer(minLength: 0)
-            }
-
-            Button { showStagePicker = true } label: {
-                HStack {
-                    Text("当前阶段")
-                        .font(GitaFont.footnote())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                    Spacer(minLength: 0)
-                    Text(ProjectSetupRules.trimmed(stage).isEmpty ? "未选择" : stage)
-                        .font(GitaFont.callout(.medium))
-                        .foregroundStyle(GitaTheme.textPrimary)
-                    Text("›")
-                        .font(GitaFont.callout())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                }
-                .padding(.horizontal, 14)
-                .frame(height: 50)
-                .background(GitaTheme.bgSurface)
-                .overlay(
-                    RoundedRectangle(cornerRadius: GitaTheme.radius12)
-                        .stroke(GitaTheme.borderSubtle, lineWidth: 1)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
-            }
-            .buttonStyle(.plain)
-            .confirmationDialog("当前阶段", isPresented: $showStagePicker, titleVisibility: .visible) {
-                Button("不选择") { stage = "" }
-                ForEach(ProjectSetupRules.stages, id: \.self) { item in
-                    Button(item) { stage = item }
-                }
-                Button("取消", role: .cancel) {}
-            }
-
-            field(
-                title: "当前重点",
-                placeholder: "主歌进入副歌时保持节奏",
-                text: $currentFocus,
-                max: ProjectSetupRules.focusMax,
-                emphasized: true,
-                minHeight: 52,
-                error: nil
+            .padding(.horizontal, 14)
+            .frame(height: 50)
+            .background(GitaTheme.bgSurface)
+            .overlay(
+                RoundedRectangle(cornerRadius: GitaTheme.radius12)
+                    .stroke(GitaTheme.borderSubtle, lineWidth: 1)
             )
-            Text("写下一次练习最值得关注的一件事，不是待办。")
-                .font(GitaFont.caption())
-                .foregroundStyle(GitaTheme.textSecondary)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
         }
+        .buttonStyle(.plain)
     }
 
     private var editorFooter: some View {
-        Button(action: save) {
-            Text(mode == .create ? "创建项目" : "保存")
-                .font(GitaFont.body(.bold))
-                .foregroundStyle(GitaTheme.brandOn)
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(GitaTheme.brand500)
-                .clipShape(Capsule())
-                .opacity(canSubmit && !isSubmitting ? 1 : 0.72)
+        VStack(spacing: 8) {
+            Text("只需要一个项目名称")
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
+            Button(action: save) {
+                Text(mode == .create ? "创建项目" : "保存")
+                    .font(GitaFont.body(.bold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(GitaTheme.brand500)
+                    .clipShape(Capsule())
+                    .opacity(canSubmit && !isSubmitting ? 1 : 0.72)
+            }
+            .buttonStyle(.plain)
+            .disabled(!canSubmit || isSubmitting)
         }
-        .buttonStyle(.plain)
-        .disabled(!canSubmit || isSubmitting)
         .padding(.horizontal, GitaTheme.s24)
         .padding(.top, 10)
         .padding(.bottom, 26)
@@ -236,8 +180,6 @@ struct ProjectEditorView: View {
         placeholder: String,
         text: Binding<String>,
         max: Int,
-        emphasized: Bool,
-        minHeight: CGFloat,
         error: String?
     ) -> some View {
         VStack(alignment: .leading, spacing: 7) {
@@ -250,13 +192,13 @@ struct ProjectEditorView: View {
                 .tint(GitaTheme.brand500)
                 .textFieldStyle(.plain)
                 .lineLimit(1...4)
-                .frame(minHeight: minHeight, alignment: .topLeading)
+                .frame(minHeight: 48, alignment: .topLeading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
-                .background(emphasized ? GitaTheme.brand50 : GitaTheme.bgSurface)
+                .background(GitaTheme.bgSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: GitaTheme.radius12)
-                        .stroke(emphasized ? GitaTheme.brand50 : GitaTheme.borderSubtle, lineWidth: 1)
+                        .stroke(GitaTheme.borderSubtle, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
                 .onChange(of: text.wrappedValue) { _, newValue in
@@ -279,14 +221,17 @@ struct ProjectEditorView: View {
         didLoadEditFields = true
         name = project.name
         goal = project.goal
-        currentFocus = project.currentFocus
-        kind = project.kindRaw
-        stage = project.stageRaw
         loadedName = project.name
         loadedGoal = project.goal
-        loadedFocus = project.currentFocus
-        loadedKind = project.kindRaw
-        loadedStage = project.stageRaw
+        if ProjectSetupRules.hasGoal(project.goal) {
+            goalExpanded = true
+        }
+    }
+
+    private func expandGoal() {
+        guard !goalExpanded else { return }
+        goalExpanded = true
+        RecordAnalytics.projectGoalExpanded(source: createSource)
     }
 
     private func requestClose() {
@@ -297,24 +242,20 @@ struct ProjectEditorView: View {
         }
     }
 
-    private var createSource: String {
-        if onCreated != nil { return "practice_detail" }
-        return fromEmpty ? "projects_empty" : "projects_list"
-    }
-
     private func abandon() {
         if mode == .create {
             let ms = Int((Date().timeIntervalSince(startedAt) * 1000).rounded())
-            RecordAnalytics.projectSetupAbandoned(source: createSource, durationMs: ms)
+            RecordAnalytics.projectSetupAbandoned(source: analyticsSource, durationMs: ms)
         }
         leave()
     }
 
     private func leave() {
-        if onCreated != nil {
-            dismiss()
-        } else if !router.recordPath.isEmpty {
+        switch router.recordPath.last {
+        case .projectCreate, .projectCreateFromPractice, .projectEdit:
             router.recordPath.removeLast()
+        default:
+            dismiss()
         }
     }
 
@@ -325,70 +266,31 @@ struct ProjectEditorView: View {
         error = nil
         switch ProjectSetupRules.prepare(name: name, goal: goal) {
         case .failure(let setupError):
-            RecordAnalytics.projectSetupValidationFailed(
-                fieldName: setupError.fieldName,
-                reason: setupError.reason
-            )
-            switch setupError {
-            case .nameEmpty, .nameTooLong:
+            RecordAnalytics.projectSetupValidationFailed(fieldName: setupError.fieldName, reason: setupError.reason)
+            if setupError.fieldName == "name" {
                 nameError = setupError == .nameEmpty ? "请填写项目名称" : "名称过长"
-            case .goalEmpty, .goalTooLong:
-                goalError = setupError == .goalEmpty ? "请填写完成目标" : "目标过长"
-            case .focusTooLong:
-                error = "当前重点过长"
+            } else {
+                goalError = "完成标准过长"
             }
-            return
         case .success(let fields):
             isSubmitting = true
             do {
                 switch mode {
                 case .create:
-                    RecordAnalytics.projectCreateSubmitted(
-                        source: createSource,
-                        hasGoal: ProjectSetupRules.hasGoal(goal)
-                    )
-                    let project = try store.createProject(
-                        name: fields.name,
-                        goal: fields.goal,
-                        now: Date()
-                    )
+                    RecordAnalytics.projectCreateSubmitted(source: createSource, hasGoal: ProjectSetupRules.hasGoal(fields.goal))
+                    let project = try store.createProject(name: fields.name, goal: fields.goal, now: Date())
                     let ms = Int((Date().timeIntervalSince(startedAt) * 1000).rounded())
-                    RecordAnalytics.projectCreated(
-                        source: createSource,
-                        hasGoal: ProjectSetupRules.hasGoal(fields.goal),
-                        durationMs: ms
-                    )
-                    finishCreate(projectId: project.id)
+                    RecordAnalytics.projectCreated(source: createSource, hasGoal: ProjectSetupRules.hasGoal(fields.goal), durationMs: ms)
+                    router.presentCreatedProject(project.id, fromPracticeTab: false)
                 case .edit(let id):
-                    try store.updateProjectBasics(
-                        id: id,
-                        name: fields.name,
-                        goal: fields.goal,
-                        now: Date()
-                    )
-                    if onCreated != nil {
-                        dismiss()
-                    } else if !router.recordPath.isEmpty {
-                        router.recordPath.removeLast()
-                    }
+                    try store.updateProjectBasics(id: id, name: fields.name, goal: fields.goal, now: Date())
+                    if !router.recordPath.isEmpty { router.recordPath.removeLast() }
                 }
             } catch {
                 isSubmitting = false
+                RecordAnalytics.projectCreateFailed(source: createSource, errorCode: "save_failed")
                 self.error = String(localized: "保存失败，请重试")
             }
-        }
-    }
-
-    private func finishCreate(projectId: UUID) {
-        if let onCreated {
-            onCreated(projectId)
-            dismiss()
-            return
-        }
-        if fromEmpty {
-            router.replaceLastRecordRoute(.projectDetail(projectId: projectId))
-        } else if !router.recordPath.isEmpty {
-            router.recordPath.removeLast()
         }
     }
 }

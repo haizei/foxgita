@@ -107,6 +107,10 @@ struct ProjectDetailView: View {
                 projectId: projectId.uuidString,
                 hasEvidence: evidence != nil
             )
+            if router.projectCreatedToast {
+                showToast("项目已创建")
+                router.projectCreatedToast = false
+            }
         }
         .onDisappear {
             player.stop()

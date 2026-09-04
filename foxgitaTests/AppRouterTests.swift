@@ -142,6 +142,7 @@ struct AppRouterTests {
         router.presentCreatedProject(id, fromPracticeTab: false)
         #expect(router.recordSegment == .project)
         #expect(router.recordPath == [.projectDetail(projectId: id)])
+        #expect(router.projectCreatedToast)
     }
 
     @Test func presentCreatedProjectFromPracticeTabSwitchesTab() {
@@ -155,6 +156,7 @@ struct AppRouterTests {
         #expect(router.recordSegment == .project)
         #expect(router.recordPath == [.projectDetail(projectId: id)])
         #expect(router.practicePath.isEmpty)
+        #expect(router.projectCreatedToast)
     }
 
     @Test func dismissFromRecordLeavesPracticeHomeWhenOpenedFromRecordIsFalse() {

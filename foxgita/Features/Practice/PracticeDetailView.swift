@@ -300,10 +300,7 @@ struct PracticeDetailView: View {
             .ignoresSafeArea()
         }
         .sheet(isPresented: $showCreateProjectSheet) {
-            ProjectEditorView(mode: .create, onCreated: { newId in
-                guard let item else { return }
-                assignProject(newId, to: item)
-            })
+            ProjectEditorView(mode: .create, createSource: "practice_detail")
         }
     }
 
