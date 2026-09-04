@@ -297,10 +297,15 @@ struct ProjectEditorView: View {
         }
     }
 
+    private var createSource: String {
+        if onCreated != nil { return "practice_detail" }
+        return fromEmpty ? "projects_empty" : "projects_list"
+    }
+
     private func abandon() {
         if mode == .create {
             let ms = Int((Date().timeIntervalSince(startedAt) * 1000).rounded())
-            RecordAnalytics.projectSetupAbandoned(fromEmpty: fromEmpty, durationMs: ms)
+            RecordAnalytics.projectSetupAbandoned(source: createSource, durationMs: ms)
         }
         leave()
     }
@@ -338,9 +343,9 @@ struct ProjectEditorView: View {
             do {
                 switch mode {
                 case .create:
-                    RecordAnalytics.projectSetupSubmitClicked(
-                        fromEmpty: fromEmpty,
-                        hasFocus: ProjectSetupRules.hasFocus(currentFocus)
+                    RecordAnalytics.projectCreateSubmitted(
+                        source: createSource,
+                        hasGoal: ProjectSetupRules.hasGoal(goal)
                     )
                     let project = try store.createProject(
                         name: fields.name,
@@ -348,18 +353,9 @@ struct ProjectEditorView: View {
                         now: Date()
                     )
                     let ms = Int((Date().timeIntervalSince(startedAt) * 1000).rounded())
-                    let source: String
-                    if onCreated != nil {
-                        source = "join"
-                    } else if fromEmpty {
-                        source = "empty"
-                    } else {
-                        source = "list"
-                    }
                     RecordAnalytics.projectCreated(
-                        source: source,
-                        fromEmpty: fromEmpty,
-                        hasFocus: ProjectSetupRules.hasFocus(currentFocus),
+                        source: createSource,
+                        hasGoal: ProjectSetupRules.hasGoal(fields.goal),
                         durationMs: ms
                     )
                     finishCreate(projectId: project.id)

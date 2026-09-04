@@ -66,14 +66,6 @@ struct ProjectReadyView: View {
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
-        .onAppear {
-            if let project {
-                RecordAnalytics.projectReadyViewed(
-                    projectId: project.id.uuidString,
-                    hasFocus: ProjectSetupRules.hasFocus(project.currentFocus)
-                )
-            }
-        }
     }
 
     private var readyHeader: some View {
@@ -166,7 +158,6 @@ struct ProjectReadyView: View {
     }
 
     private func returnToList() {
-        RecordAnalytics.projectReadyActionClicked(action: "return_projects")
         if !router.recordPath.isEmpty {
             router.recordPath.removeLast()
         }
@@ -175,7 +166,6 @@ struct ProjectReadyView: View {
     private func createToday() {
         guard !creatingLock, let project else { return }
         creatingLock = true
-        RecordAnalytics.projectReadyActionClicked(action: "create_practice")
         RecordAnalytics.projectPracticeCreateTapped(projectId: project.id.uuidString)
         do {
             let item = try store.createTodayPracticeItem(

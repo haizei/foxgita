@@ -1152,11 +1152,7 @@ struct PracticeDetailView: View {
     }
 
     private func startCreateAndJoin() {
-        RecordAnalytics.projectSetupStarted(
-            source: "join",
-            fromEmpty: false,
-            hasExistingPractice: true
-        )
+        RecordAnalytics.projectCreateStarted(source: "practice_detail")
         if openedFromRecord {
             router.recordPath.append(.projectCreateFromPractice(itemId: itemId))
         } else {

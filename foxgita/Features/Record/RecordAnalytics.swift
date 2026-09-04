@@ -61,18 +61,22 @@ enum RecordAnalytics {
         sink?("project_empty_viewed", ["source": source])
     }
 
-    static func projectSetupStarted(source: String, fromEmpty: Bool, hasExistingPractice: Bool) {
-        sink?("project_setup_started", [
-            "source": source,
-            "from_empty": fromEmpty ? "true" : "false",
-            "has_existing_practice": hasExistingPractice ? "true" : "false",
-        ])
+    static func projectCreateEntryViewed(source: String) {
+        sink?("project_create_entry_viewed", ["source": source])
     }
 
-    static func projectSetupSubmitClicked(fromEmpty: Bool, hasFocus: Bool) {
-        sink?("project_setup_submit_clicked", [
-            "from_empty": fromEmpty ? "true" : "false",
-            "has_focus": hasFocus ? "true" : "false",
+    static func projectCreateStarted(source: String) {
+        sink?("project_create_started", ["source": source])
+    }
+
+    static func projectGoalExpanded(source: String) {
+        sink?("project_goal_expanded", ["source": source])
+    }
+
+    static func projectCreateSubmitted(source: String, hasGoal: Bool) {
+        sink?("project_create_submitted", [
+            "source": source,
+            "has_goal": hasGoal ? "true" : "false",
         ])
     }
 
@@ -83,31 +87,37 @@ enum RecordAnalytics {
         ])
     }
 
-    static func projectCreated(source: String, fromEmpty: Bool, hasFocus: Bool, durationMs: Int) {
+    static func projectCreated(source: String, hasGoal: Bool, durationMs: Int) {
         sink?("project_created", [
             "source": source,
-            "from_empty": fromEmpty ? "true" : "false",
-            "has_focus": hasFocus ? "true" : "false",
+            "has_goal": hasGoal ? "true" : "false",
             "duration_ms": String(durationMs),
         ])
     }
 
-    static func projectSetupAbandoned(fromEmpty: Bool, durationMs: Int) {
+    static func projectCreatedFromPractice(linkResult: String, hadPreviousProject: Bool) {
+        sink?("project_created_from_practice", [
+            "link_result": linkResult,
+            "had_previous_project": hadPreviousProject ? "true" : "false",
+        ])
+    }
+
+    static func projectCreateFailed(source: String, errorCode: String) {
+        sink?("project_create_failed", [
+            "source": source,
+            "error_code": errorCode,
+        ])
+    }
+
+    static func projectSetupAbandoned(source: String, durationMs: Int) {
         sink?("project_setup_abandoned", [
-            "from_empty": fromEmpty ? "true" : "false",
+            "source": source,
             "duration_ms": String(durationMs),
         ])
     }
 
-    static func projectReadyViewed(projectId: String, hasFocus: Bool) {
-        sink?("project_ready_viewed", [
-            "project_id": projectId,
-            "has_focus": hasFocus ? "true" : "false",
-        ])
-    }
-
-    static func projectReadyActionClicked(action: String) {
-        sink?("project_ready_action_clicked", ["action": action])
+    static func projectDetailFirstPracticeClicked(projectId: String) {
+        sink?("project_detail_first_practice_clicked", ["project_id": projectId])
     }
 
     static func projectFirstPracticeCreated(

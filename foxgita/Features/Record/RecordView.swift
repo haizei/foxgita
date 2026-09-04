@@ -100,10 +100,8 @@ struct RecordView: View {
 
     private func startProjectCreate(fromEmpty: Bool) {
         guard RecordProjectCreateStart.shouldPush(onto: router.recordPath.last) else { return }
-        RecordAnalytics.projectSetupStarted(
-            source: fromEmpty ? "empty" : "list",
-            fromEmpty: fromEmpty,
-            hasExistingPractice: hasExistingPractice
+        RecordAnalytics.projectCreateStarted(
+            source: fromEmpty ? "projects_empty" : "projects_list"
         )
         router.recordPath.append(.projectCreate)
     }
