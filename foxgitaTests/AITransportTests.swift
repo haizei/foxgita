@@ -71,13 +71,14 @@ struct AITransportTests {
         defer { TransportMockURLProtocol.handler = nil }
 
         let url = AITransport.completionsURL(from: "https://api.openai.com/v1")!
-        let content = try await makeTransport().complete(
+        let result = try await makeTransport().complete(
             url: url, apiKey: "sk", model: "gpt-4o",
             systemPrompt: "sys", userText: "user",
             imageJPEGData: [Data([0xFF])],
             includeResponseFormat: true, allowsFormatRetry: true, timeout: nil
         )
-        #expect(content == "```json\n{\"ok\":true}\n```")
+        #expect(result.content == "```json\n{\"ok\":true}\n```")
+        #expect(result.formatRetryUsed == false)
     }
 
     @Test func completeUnauthorized() async {
@@ -146,13 +147,14 @@ struct AITransportTests {
         defer { TransportMockURLProtocol.handler = nil }
 
         let url = AITransport.completionsURL(from: "https://api.openai.com/v1")!
-        let content = try await makeTransport().complete(
+        let result = try await makeTransport().complete(
             url: url, apiKey: "sk", model: "m",
             systemPrompt: "s", userText: "u",
             imageJPEGData: [],
             includeResponseFormat: true, allowsFormatRetry: true, timeout: nil
         )
-        #expect(content == "{\"x\":1}")
+        #expect(result.content == "{\"x\":1}")
+        #expect(result.formatRetryUsed == true)
         #expect(counter.count() == 2)
     }
 
@@ -187,12 +189,13 @@ struct AITransportTests {
         defer { TransportMockURLProtocol.handler = nil }
 
         let url = AITransport.completionsURL(from: "https://api.openai.com/v1")!
-        _ = try await makeTransport().complete(
+        let result = try await makeTransport().complete(
             url: url, apiKey: "sk-test", model: "gpt-4o",
             systemPrompt: "sys-role", userText: "user-role",
             imageJPEGData: [Data([0xFF, 0xD8])],
             includeResponseFormat: true, allowsFormatRetry: true, timeout: 180
         )
+        #expect(result.formatRetryUsed == false)
         #expect(seenTimeout == 180)
         #expect(bodyJSON["model"] as? String == "gpt-4o")
         let messages = bodyJSON["messages"] as? [[String: Any]]
