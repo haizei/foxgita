@@ -109,4 +109,22 @@ struct PracticeHomeStateTests {
         #expect(state.items.allSatisfy { state.checkedInDayKeys.contains($0.practiceDayKey) })
         #expect(!state.checkedInDayKeys.contains("2026-08-24"))
     }
+
+    @Test func todayUnplayedItemUsesStartCTA() {
+        #expect(PracticeHomeState.ctaTitle(isSelectedToday: true, durationSeconds: 0) == "开始")
+    }
+
+    @Test func todayPlayedItemUsesContinueCTA() {
+        #expect(PracticeHomeState.ctaTitle(isSelectedToday: true, durationSeconds: 60) == "继续")
+    }
+
+    @Test func pastDayUsesViewCTA() {
+        #expect(PracticeHomeState.ctaTitle(isSelectedToday: false, durationSeconds: 60) == "查看")
+        #expect(PracticeHomeState.ctaTitle(isSelectedToday: false, durationSeconds: 0) == "查看")
+    }
+
+    @Test func onlyTodayAllowsSwipeDelete() {
+        #expect(PracticeHomeState.allowsSwipeDelete(isSelectedToday: true))
+        #expect(!PracticeHomeState.allowsSwipeDelete(isSelectedToday: false))
+    }
 }

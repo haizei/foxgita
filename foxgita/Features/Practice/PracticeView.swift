@@ -8,6 +8,7 @@ import SwiftUI
 
 struct PracticeView: View {
     @Environment(AppRouter.self) private var router
+    @Environment(PracticeStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var practiceItems: [PracticeItem]
@@ -20,6 +21,8 @@ struct PracticeView: View {
     @State private var showSheet = false
     @State private var pendingItemId: String?
     @State private var lastSeenTodayStart: Date?
+    @State private var openSwipeRowId: String?
+    @State private var deleteItemId: UUID?
 
     private var calendar: Calendar { .current }
     private var isSelectedToday: Bool { calendar.isDateInToday(selectedDay) }
@@ -187,6 +190,36 @@ struct PracticeView: View {
                 router.practiceToast = nil
                 showToast(message)
             }
+            .confirmationDialog(
+                "删除练习",
+                isPresented: Binding(
+                    get: { deleteItemId != nil },
+                    set: { if !$0 { deleteItemId = nil } }
+                ),
+                titleVisibility: .visible
+            ) {
+                Button("删除", role: .destructive) {
+                    if let id = deleteItemId {
+                        do {
+                            try store.softDeletePracticeItem(id: id, now: Date())
+                        } catch {
+                            showToast(
+                                store.lastError?.localizedDescription
+                                    ?? error.localizedDescription
+                            )
+                        }
+                    }
+                    deleteItemId = nil
+                    openSwipeRowId = nil
+                }
+                Button("取消", role: .cancel) { deleteItemId = nil }
+            } message: {
+                if let title = homeState.items.first(where: { $0.id == deleteItemId })?.title {
+                    Text("确定删除「\(title)」？")
+                } else {
+                    Text("删除后这条练习会从今日列表消失。")
+                }
+            }
         }
     }
 
@@ -210,14 +243,45 @@ struct PracticeView: View {
                 )
             }
         } else {
-            ForEach(homeState.items) { item in
+            ForEach(Array(homeState.items.enumerated()), id: \.element.id) { index, item in
+                todayOrPastRow(item, index: index)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func todayOrPastRow(_ item: PracticeItemSnapshot, index: Int) -> some View {
+        let cta = PracticeHomeState.ctaTitle(
+            isSelectedToday: isSelectedToday,
+            durationSeconds: item.durationSeconds
+        )
+        if PracticeHomeState.allowsSwipeDelete(isSelectedToday: isSelectedToday) {
+            SwipeRevealRow(
+                id: item.id.uuidString,
+                openRowId: $openSwipeRowId,
+                onTap: {
+                    openSwipeRowId = nil
+                    router.practicePath.append(.detail(itemId: item.id))
+                },
+                onDelete: { deleteItemId = item.id }
+            ) {
                 DaySessionCard(
                     title: item.title,
                     minutes: minutesFromSeconds(item.durationSeconds),
-                    category: category(for: item)
-                ) {
-                    router.practicePath.append(.detail(itemId: item.id))
-                }
+                    category: category(for: item),
+                    actionTitle: cta,
+                    solidCTA: index == 0,
+                    showsShadow: false
+                )
+            }
+        } else {
+            DaySessionCard(
+                title: item.title,
+                minutes: minutesFromSeconds(item.durationSeconds),
+                category: category(for: item),
+                actionTitle: cta
+            ) {
+                router.practicePath.append(.detail(itemId: item.id))
             }
         }
     }

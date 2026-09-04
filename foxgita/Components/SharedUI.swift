@@ -209,14 +209,14 @@ struct SwipeRevealRow<Content: View>: View {
     let id: String
     @Binding var openRowId: String?
     let onTap: () -> Void
-    let onEdit: () -> Void
+    var onEdit: (() -> Void)? = nil
     let onDelete: () -> Void
     @ViewBuilder let content: () -> Content
 
     @State private var dragTranslation: CGFloat = 0
 
     private let actionWidth: CGFloat = 72
-    private var revealWidth: CGFloat { actionWidth * 2 }
+    private var revealWidth: CGFloat { actionWidth * (onEdit == nil ? 1 : 2) }
     /// Stationary parent space. Measuring translation on the offset card (even
     /// `.global`) feeds the card's own displacement back into the gesture.
     private let swipeSpace = "swipe-reveal"
@@ -236,15 +236,17 @@ struct SwipeRevealRow<Content: View>: View {
             Color.clear
                 .overlay(alignment: .trailing) {
                     HStack(spacing: 0) {
-                        swipeAction(
-                            title: String(localized: "编辑"),
-                            systemImage: "square.and.pencil",
-                            fill: editFill,
-                            action: {
-                                close()
-                                onEdit()
-                            }
-                        )
+                        if let onEdit {
+                            swipeAction(
+                                title: String(localized: "编辑"),
+                                systemImage: "square.and.pencil",
+                                fill: editFill,
+                                action: {
+                                    close()
+                                    onEdit()
+                                }
+                            )
+                        }
                         swipeAction(
                             title: String(localized: "删除"),
                             systemImage: "trash",
@@ -274,7 +276,7 @@ struct SwipeRevealRow<Content: View>: View {
         .coordinateSpace(.named(swipeSpace))
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
-        .accessibilityHint(Text("左滑可编辑或删除"))
+        .accessibilityHint(Text(onEdit == nil ? "左滑可删除" : "左滑可编辑或删除"))
     }
 
     private var dragGesture: some Gesture {
@@ -380,6 +382,8 @@ struct DaySessionCard: View {
     let title: String
     let minutes: Int
     let category: PracticeCategory
+    var actionTitle: String = String(localized: "查看")
+    var solidCTA: Bool = false
     var showsShadow: Bool = true
     var action: (() -> Void)?
 
@@ -387,12 +391,16 @@ struct DaySessionCard: View {
         title: String,
         minutes: Int,
         category: PracticeCategory,
+        actionTitle: String = String(localized: "查看"),
+        solidCTA: Bool = false,
         showsShadow: Bool = true,
         action: (() -> Void)? = nil
     ) {
         self.title = title
         self.minutes = minutes
         self.category = category
+        self.actionTitle = actionTitle
+        self.solidCTA = solidCTA
         self.showsShadow = showsShadow
         self.action = action
     }
@@ -423,12 +431,12 @@ struct DaySessionCard: View {
                     .foregroundStyle(GitaTheme.textSecondary)
             }
             Spacer(minLength: 0)
-            Text("查看")
+            Text(actionTitle)
                 .font(GitaFont.caption(.semibold))
-                .foregroundStyle(GitaTheme.textSecondary)
+                .foregroundStyle(solidCTA ? GitaTheme.brandOn : GitaTheme.textSecondary)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(GitaTheme.bgSubtle)
+                .background(solidCTA ? GitaTheme.brand500 : GitaTheme.bgSubtle)
                 .clipShape(Capsule())
         }
         .padding(.leading, 16)

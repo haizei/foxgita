@@ -76,4 +76,13 @@ struct PracticeHomeState: Equatable {
             checkedInDayKeys: PracticeItemRules.checkedInDayKeys(in: allItems)
         )
     }
+
+    static func ctaTitle(isSelectedToday: Bool, durationSeconds: Int) -> String {
+        guard isSelectedToday else { return String(localized: "查看") }
+        return durationSeconds > 0 ? String(localized: "继续") : String(localized: "开始")
+    }
+
+    static func allowsSwipeDelete(isSelectedToday: Bool) -> Bool {
+        isSelectedToday
+    }
 }
