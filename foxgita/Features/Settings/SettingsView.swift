@@ -210,6 +210,28 @@ struct SettingsView: View {
                         }
                     }
 
+                    sectionLabel("AI 调用")
+                    group {
+                        NavigationLink {
+                            AIInvocationLogView()
+                        } label: {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("AI 调用记录").font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(GitaTheme.textPrimary)
+                                    Text("最近的生成与结果")
+                                        .font(.system(size: 12))
+                                        .foregroundStyle(GitaTheme.textSecondary)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(GitaTheme.textTertiary)
+                            }
+                            .padding(16)
+                        }
+                    }
+
                     sectionLabel("关于")
                     group {
                         infoRow("Gita", "今天只练一点点")
