@@ -1,9 +1,10 @@
 import Foundation
 import SwiftData
 
+@Observable
 @MainActor
 final class AIInvocationStore {
-    private let context: ModelContext
+    @ObservationIgnored private let context: ModelContext
 
     init(context: ModelContext) {
         self.context = context

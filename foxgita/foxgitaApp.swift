@@ -17,6 +17,7 @@ struct foxgitaApp: App {
     private let liveMemory: LiveMemoryContext
     private let memoryRepo: SwiftDataMemoryRepository
     private let memoryStore: MemoryStore
+    private let invocationStore: AIInvocationStore
     private let coordinator: MemoryConsentCoordinator
     private let durationPreferenceSync: DurationPreferenceSync
 
@@ -49,6 +50,9 @@ struct foxgitaApp: App {
             self.memoryStore = memoryStore
             self.durationPreferenceSync = durationPreferenceSync
             self.coordinator = MemoryConsentCoordinator(store: memoryStore)
+            let invocationStore = AIInvocationStore(context: container.mainContext)
+            self.invocationStore = invocationStore
+            let invocationLog = LiveAIInvocationLog(store: invocationStore)
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
                 taskMemorySync: taskMemorySync,
@@ -58,8 +62,14 @@ struct foxgitaApp: App {
             _reviewRunner = State(
                 initialValue: ReviewJobRunner(
                     store: store,
-                    generator: MediaReviewGenerator(client: MediaReviewClient(memory: liveMemory)),
-                    videoGenerator: VideoDiagnosisGenerator(client: VideoDiagnosisClient(memory: liveMemory))
+                    generator: MediaReviewGenerator(
+                        client: MediaReviewClient(memory: liveMemory, log: invocationLog),
+                        log: invocationLog
+                    ),
+                    videoGenerator: VideoDiagnosisGenerator(
+                        client: VideoDiagnosisClient(memory: liveMemory, log: invocationLog),
+                        log: invocationLog
+                    )
                 )
             )
         } catch {
@@ -76,6 +86,7 @@ struct foxgitaApp: App {
                 .environment(reviewRunner)
                 .environment(\.memoryContext, liveMemory)
                 .environment(memoryStore)
+                .environment(invocationStore)
                 .environment(coordinator)
                 .environment(\.durationPreferenceSync, durationPreferenceSync)
                 .modelContainer(container)
