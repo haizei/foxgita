@@ -6,7 +6,8 @@ protocol NextSessionGenerating: Sendable {
         model: String,
         apiKey: String,
         budgetMinutes: Int,
-        fallbackCategory: PracticeCategory
+        fallbackCategory: PracticeCategory,
+        invocationId: String
     ) async throws -> AIPracticeDraft
 }
 
@@ -14,15 +15,18 @@ struct NextSessionClient: NextSessionGenerating {
     private let transport: AITransport
     private let registry: SkillRegistry
     private let memory: any MemoryContextProviding
+    private let log: any AIInvocationRecording
 
     init(
         session: URLSession = .shared,
         registry: SkillRegistry = .builtin,
-        memory: any MemoryContextProviding = EmptyMemoryContext()
+        memory: any MemoryContextProviding = EmptyMemoryContext(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
         self.transport = AITransport(session: session)
         self.registry = registry
         self.memory = memory
+        self.log = log
     }
 
     static func clampBudget(_ minutes: Int) -> Int {
@@ -57,21 +61,43 @@ struct NextSessionClient: NextSessionGenerating {
         model: String,
         apiKey: String,
         budgetMinutes: Int,
-        fallbackCategory: PracticeCategory
+        fallbackCategory: PracticeCategory,
+        invocationId: String
     ) async throws -> AIPracticeDraft {
+        let startedAt = Date()
         guard let skill = registry.skill(id: SkillID.nextSession) else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: SkillDefinition.nextSession,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.unregisteredSkill,
+                memoryIds: [],
+                formatRetryUsed: false
+            ))
             throw VisionPracticeError.unregisteredSkill
         }
         guard let url = AITransport.completionsURL(from: baseURL) else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.invalidURL,
+                memoryIds: [],
+                formatRetryUsed: false
+            ))
             throw VisionPracticeError.invalidURL
         }
         let budget = Self.clampBudget(budgetMinutes)
         let userText = (skill.userPrompt ?? "").replacingOccurrences(of: "{{minutes}}", with: "\(budget)")
-        let memoryBlock = await memory.block(skill: skill, query: "")
-        let finalUserText = memoryBlock.isEmpty ? userText : userText + "\n\n" + memoryBlock
-        let rawContent: String
+        let snap = await memory.snapshot(skill: skill, query: "")
+        let finalUserText = snap.block.isEmpty ? userText : userText + "\n\n" + snap.block
+        let result: AITransportResult
         do {
-            rawContent = try await transport.complete(
+            result = try await transport.complete(
                 url: url,
                 apiKey: apiKey,
                 model: model,
@@ -82,27 +108,77 @@ struct NextSessionClient: NextSessionGenerating {
                 allowsFormatRetry: skill.allowsFormatRetry,
                 timeout: skill.timeout
             )
-        } catch let error as VisionPracticeError {
-            throw error
         } catch {
-            throw VisionPracticeError.transport
+            let thrown = AIInvocationClientRecord.thrownError(from: error)
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: thrown,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: false
+            ))
+            throw thrown
         }
-        guard !rawContent.isEmpty else {
+        guard !result.content.isEmpty else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.emptyContent,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
             throw VisionPracticeError.emptyContent
         }
-        let jsonText = AITransport.stripMarkdownFences(rawContent)
+        let jsonText = AITransport.stripMarkdownFences(result.content)
         guard let jsonData = jsonText.data(using: .utf8) else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.invalidJSON,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
             throw VisionPracticeError.invalidJSON
         }
         let raw: AIPracticeDraft.Raw
         do {
             raw = try JSONDecoder().decode(AIPracticeDraft.Raw.self, from: jsonData)
         } catch {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.invalidJSON,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
             throw VisionPracticeError.invalidJSON
         }
-        return AIPracticeDraft.normalize(
+        let draft = AIPracticeDraft.normalize(
             Self.capRaw(raw, budget: budget),
             fallbackCategory: fallbackCategory
         )
+        await log.record(AIInvocationClientRecord.make(
+            id: invocationId,
+            skill: skill,
+            model: model,
+            startedAt: startedAt,
+            status: .success,
+            error: nil,
+            memoryIds: snap.itemIds,
+            formatRetryUsed: result.formatRetryUsed
+        ))
+        return draft
     }
 }

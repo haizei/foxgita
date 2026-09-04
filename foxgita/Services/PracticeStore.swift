@@ -53,17 +53,20 @@ final class PracticeStore {
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let taskMemorySync: TaskMemorySync?
     @ObservationIgnored private let aiCandidateSync: AICandidateSync?
+    @ObservationIgnored private let invocationStore: AIInvocationStore?
 
     init(
         repository: PracticeRepository,
         defaults: UserDefaults = .standard,
         taskMemorySync: TaskMemorySync? = nil,
-        aiCandidateSync: AICandidateSync? = nil
+        aiCandidateSync: AICandidateSync? = nil,
+        invocationStore: AIInvocationStore? = nil
     ) {
         self.repository = repository
         self.defaults = defaults
         self.taskMemorySync = taskMemorySync
         self.aiCandidateSync = aiCandidateSync
+        self.invocationStore = invocationStore
     }
 
     func clearError() { lastError = nil }
@@ -342,6 +345,7 @@ final class PracticeStore {
             item.projectId = nil
         }
         try persistPracticeItemChanges()
+        markInvocationIfEffective(item, now: now)
     }
 
     func updatePracticeItem(
@@ -368,7 +372,7 @@ final class PracticeStore {
         try persistPracticeItemChanges()
     }
 
-    func attachRecording(_ recording: RecordingRef, toPracticeItemId itemId: UUID) throws {
+    func attachRecording(_ recording: RecordingRef, toPracticeItemId itemId: UUID, now: Date = Date()) throws {
         guard RecordingStore.fileExists(fileName: recording.fileName) else {
             lastError = .fileMissing
             throw StoreError.fileMissing
@@ -382,6 +386,7 @@ final class PracticeStore {
             recording.practiceItem = item
         }
         try persistPracticeItemChanges()
+        markInvocationIfEffective(item, now: now)
     }
 
     // MARK: - Launch
@@ -1032,6 +1037,12 @@ final class PracticeStore {
         }
         project.updatedAt = now
         try persistPracticeItemChanges()
+    }
+
+    private func markInvocationIfEffective(_ item: PracticeItem, now: Date) {
+        let snap = PracticeStore.snapshot(from: item)
+        guard PracticeItemRules.isEffective(snap) else { return }
+        invocationStore?.markCompleted(taskId: item.id.uuidString, now: now)
     }
 
     private func persistPracticeItemChanges() throws {

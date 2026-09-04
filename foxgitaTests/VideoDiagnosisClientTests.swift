@@ -67,7 +67,8 @@ struct VideoDiagnosisClientTests {
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8])],
             contextText: "任务：和弦转换\n时长：180秒\n媒介：录像",
-            durationSec: 180
+            durationSec: 180,
+            invocationId: "inv-test"
         )
         #expect(draft.focus == "F")
         #expect(draft.findings.count == 1)
@@ -84,7 +85,8 @@ struct VideoDiagnosisClientTests {
                 apiKey: "bad",
                 imageJPEGData: [Data([0xFF])],
                 contextText: "x",
-                durationSec: 10
+                durationSec: 10,
+                invocationId: "inv-test"
             )
         }
     }
@@ -101,7 +103,8 @@ struct VideoDiagnosisClientTests {
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
                 contextText: "x",
-                durationSec: 10
+                durationSec: 10,
+                invocationId: "inv-test"
             )
         }
     }
@@ -131,7 +134,8 @@ struct VideoDiagnosisClientTests {
             apiKey: "sk",
             imageJPEGData: [Data([0xFF])],
             contextText: "x",
-            durationSec: 10
+            durationSec: 10,
+            invocationId: "inv-test"
         )
         #expect(draft.highlight == "稳")
         #expect(calls == 2)
@@ -147,7 +151,8 @@ struct VideoDiagnosisClientTests {
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
                 contextText: "x",
-                durationSec: 10
+                durationSec: 10,
+                invocationId: "inv-test"
             )
         }
     }
@@ -174,7 +179,8 @@ struct VideoDiagnosisClientTests {
             apiKey: "sk",
             imageJPEGData: [Data([0xFF])],
             contextText: "x",
-            durationSec: 10
+            durationSec: 10,
+            invocationId: "inv-test"
         )
         #expect(seen == VideoDiagnosisClient.requestTimeout)
         #expect(VideoDiagnosisClient.requestTimeout == 180)
@@ -200,7 +206,8 @@ struct VideoDiagnosisClientTests {
                 apiKey: "sk",
                 imageJPEGData: [Data([0xFF])],
                 contextText: "x",
-                durationSec: 10
+                durationSec: 10,
+                invocationId: "inv-test"
             )
         }
         #expect(calls == 0)
@@ -229,7 +236,8 @@ struct VideoDiagnosisClientTests {
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8])],
             contextText: "任务：和弦转换\n时长：180秒\n媒介：录像",
-            durationSec: 180
+            durationSec: 180,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.diagnoseVideo.systemPrompt)
@@ -267,7 +275,8 @@ struct VideoDiagnosisClientTests {
             apiKey: "sk-test",
             imageJPEGData: [Data([0xFF, 0xD8])],
             contextText: "任务：晴天",
-            durationSec: 180
+            durationSec: 180,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.diagnoseVideo.systemPrompt)

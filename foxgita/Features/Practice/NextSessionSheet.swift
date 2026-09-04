@@ -19,6 +19,7 @@ struct NextSessionSheet: View {
     @Environment(\.durationPreferenceSync) private var durationSync
     @Environment(PracticeStore.self) private var store
     @Environment(MemoryStore.self) private var memoryStore
+    @Environment(AIInvocationStore.self) private var invocationStore
     @Environment(MemoryConsentCoordinator.self) private var consent
 
     @State private var phase: Phase = .duration
@@ -36,6 +37,10 @@ struct NextSessionSheet: View {
     @State private var editTitle = ""
     @State private var editMinutes = 20
     @State private var editSteps: [EditStep] = []
+    @State private var appliedTitle = ""
+    @State private var appliedMinutes = 20
+    @State private var appliedSteps: [String] = []
+    @State private var didFinishOutcome = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +88,7 @@ struct NextSessionSheet: View {
         }
         .onDisappear {
             generateTask?.cancel()
+            abandonPreviewIfNeeded()
             if consent.isPresented {
                 consent.chooseDisabled()
             }
@@ -224,20 +230,28 @@ struct NextSessionSheet: View {
             guard gate == .proceed else { return }
             durationSync?.syncActive(minutes: minutes)
             memoryStore.reload()
+            if phase == .preview {
+                invocationStore.setDraftOutcome(
+                    id: generationId, outcome: .regenerated, taskId: nil
+                )
+            }
             generationId = UUID().uuidString
             submitToken = PracticeEntryToken()
             phase = .generating
             isGenerating = true
             toast = nil
             do {
+                let log = LiveAIInvocationLog(store: invocationStore)
                 let generator = NextSessionGenerator(
-                    client: NextSessionClient(memory: memoryContext)
+                    client: NextSessionClient(memory: memoryContext, log: log),
+                    log: log
                 )
                 let draft = try await generator.generate(
                     budgetMinutes: minutes,
                     baseURL: baseURL,
                     model: model,
-                    fallbackCategory: fallbackCategory
+                    fallbackCategory: fallbackCategory,
+                    invocationId: generationId
                 )
                 try Task.checkCancellation()
                 applyDraft(draft)
@@ -263,6 +277,9 @@ struct NextSessionSheet: View {
     private func applyDraft(_ draft: AIPracticeDraft) {
         draftCategory = draft.category
         draftChords = draft.chords
+        appliedTitle = draft.title
+        appliedMinutes = draft.targetMin
+        appliedSteps = draft.steps
         editTitle = draft.title
         editMinutes = draft.targetMin
         editSteps = draft.steps.map { EditStep(text: $0) }
@@ -279,6 +296,7 @@ struct NextSessionSheet: View {
         isSubmitting = true
         do {
             let item = try commitDraft(token: token)
+            recordConfirmOutcome(taskId: item.id.uuidString)
             selection = item.id.uuidString
             onFinished()
         } catch {
@@ -323,6 +341,29 @@ struct NextSessionSheet: View {
         hideToastLater()
     }
 
+    private func recordConfirmOutcome(taskId: String) {
+        guard !didFinishOutcome else { return }
+        didFinishOutcome = true
+        invocationStore.setDraftOutcome(
+            id: generationId,
+            outcome: AIDraftOutcomeRules.confirm(
+                originalTitle: appliedTitle,
+                originalMinutes: appliedMinutes,
+                originalSteps: appliedSteps,
+                editTitle: editTitle,
+                editMinutes: editMinutes,
+                editSteps: editSteps.map(\.text)
+            ),
+            taskId: taskId
+        )
+    }
+
+    private func abandonPreviewIfNeeded() {
+        guard phase == .preview, !didFinishOutcome else { return }
+        didFinishOutcome = true
+        invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
+    }
+
     private func close() {
         if phase == .generating {
             generateTask?.cancel()
@@ -330,6 +371,7 @@ struct NextSessionSheet: View {
             isGenerating = false
             phase = .duration
         } else {
+            abandonPreviewIfNeeded()
             dismiss()
         }
     }

@@ -7,7 +7,8 @@ protocol VideoDiagnosing: Sendable {
         apiKey: String,
         imageJPEGData: [Data],
         contextText: String,
-        durationSec: Int
+        durationSec: Int,
+        invocationId: String
     ) async throws -> VideoDiagnosisDraft
 }
 
@@ -17,15 +18,18 @@ struct VideoDiagnosisClient: VideoDiagnosing {
     private let transport: AITransport
     private let registry: SkillRegistry
     private let memory: any MemoryContextProviding
+    private let log: any AIInvocationRecording
 
     init(
         session: URLSession = VideoDiagnosisClient.makeSession(),
         registry: SkillRegistry = .builtin,
-        memory: any MemoryContextProviding = EmptyMemoryContext()
+        memory: any MemoryContextProviding = EmptyMemoryContext(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
         self.transport = AITransport(session: session)
         self.registry = registry
         self.memory = memory
+        self.log = log
     }
 
     static func makeSession() -> URLSession {
@@ -41,20 +45,42 @@ struct VideoDiagnosisClient: VideoDiagnosing {
         apiKey: String,
         imageJPEGData: [Data],
         contextText: String,
-        durationSec: Int
+        durationSec: Int,
+        invocationId: String
     ) async throws -> VideoDiagnosisDraft {
+        let startedAt = Date()
         guard let skill = registry.skill(id: SkillID.diagnoseVideo) else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: SkillDefinition.diagnoseVideo,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.unregisteredSkill,
+                memoryIds: [],
+                formatRetryUsed: false
+            ))
             throw VisionPracticeError.unregisteredSkill
         }
         guard let url = AITransport.completionsURL(from: baseURL) else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.invalidURL,
+                memoryIds: [],
+                formatRetryUsed: false
+            ))
             throw VisionPracticeError.invalidURL
         }
         let userText = skill.userPrompt ?? contextText
-        let memoryBlock = await memory.block(skill: skill, query: contextText)
-        let finalUserText = memoryBlock.isEmpty ? userText : userText + "\n\n" + memoryBlock
-        let rawContent: String
+        let snap = await memory.snapshot(skill: skill, query: contextText)
+        let finalUserText = snap.block.isEmpty ? userText : userText + "\n\n" + snap.block
+        let result: AITransportResult
         do {
-            rawContent = try await transport.complete(
+            result = try await transport.complete(
                 url: url,
                 apiKey: apiKey,
                 model: model,
@@ -65,18 +91,60 @@ struct VideoDiagnosisClient: VideoDiagnosing {
                 allowsFormatRetry: skill.allowsFormatRetry,
                 timeout: skill.timeout
             )
-        } catch let error as VisionPracticeError {
-            throw error
         } catch {
-            if (error as? URLError)?.code == .timedOut {
-                throw VisionPracticeError.timeout
-            }
-            throw VisionPracticeError.transport
+            let thrown = AIInvocationClientRecord.thrownError(from: error)
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: thrown,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: false
+            ))
+            throw thrown
         }
-        guard !rawContent.isEmpty else {
+        guard !result.content.isEmpty else {
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: VisionPracticeError.invalidJSON,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
             throw VisionPracticeError.invalidJSON
         }
-        return try Self.parseDraft(from: rawContent, durationSec: durationSec)
+        do {
+            let draft = try Self.parseDraft(from: result.content, durationSec: durationSec)
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .success,
+                error: nil,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
+            return draft
+        } catch {
+            let thrown = (error as? VisionPracticeError) ?? .invalidJSON
+            await log.record(AIInvocationClientRecord.make(
+                id: invocationId,
+                skill: skill,
+                model: model,
+                startedAt: startedAt,
+                status: .failure,
+                error: thrown,
+                memoryIds: snap.itemIds,
+                formatRetryUsed: result.formatRetryUsed
+            ))
+            throw thrown
+        }
     }
 
     private static func parseDraft(from content: String, durationSec: Int) throws -> VideoDiagnosisDraft {

@@ -21,7 +21,9 @@ protocol MediaImagePreparing: Sendable {
 }
 
 protocol MediaReviewGenerating: Sendable {
-    func review(_ context: MediaReviewContext, baseURL: String, model: String) async throws -> MediaReviewDraft
+    func review(
+        _ context: MediaReviewContext, baseURL: String, model: String, invocationId: String
+    ) async throws -> MediaReviewDraft
 }
 
 @MainActor
@@ -29,25 +31,32 @@ final class MediaReviewGenerator: MediaReviewGenerating {
     private let client: any MediaReviewing
     private let credentials: LLMCredentialsStore
     private let images: any MediaImagePreparing
+    private let log: any AIInvocationRecording
 
     init(
         client: any MediaReviewing,
         credentials: LLMCredentialsStore = LLMCredentialsStore(),
-        images: any MediaImagePreparing = FileMediaImagePreparer()
+        images: any MediaImagePreparing = FileMediaImagePreparer(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
         self.client = client
         self.credentials = credentials
         self.images = images
+        self.log = log
     }
 
-    func review(_ context: MediaReviewContext, baseURL: String, model: String) async throws -> MediaReviewDraft {
+    func review(
+        _ context: MediaReviewContext, baseURL: String, model: String, invocationId: String
+    ) async throws -> MediaReviewDraft {
         guard credentials.isConfigured(baseURL: baseURL, model: model) else {
+            await recordNotConfigured(invocationId: invocationId, model: model)
             throw MediaReviewGeneratorError.notConfigured
         }
         guard let apiKey = credentials.loadAPIKey()?
             .trimmingCharacters(in: .whitespacesAndNewlines),
             !apiKey.isEmpty
         else {
+            await recordNotConfigured(invocationId: invocationId, model: model)
             throw MediaReviewGeneratorError.notConfigured
         }
 
@@ -71,15 +80,38 @@ final class MediaReviewGenerator: MediaReviewGenerating {
                 model: model,
                 apiKey: apiKey,
                 imageJPEGData: jpegs,
-                contextText: Self.contextText(from: context)
+                contextText: Self.contextText(from: context),
+                invocationId: invocationId
             )
+        } catch is CancellationError {
+            throw CancellationError()
         } catch let error as VisionPracticeError {
             throw MediaReviewGeneratorError.failed(error)
         } catch let error as MediaReviewGeneratorError {
             throw error
         } catch {
+            if AIInvocationStore.errorType(from: error) == .cancelled {
+                throw error
+            }
             throw MediaReviewGeneratorError.failed(.transport)
         }
+    }
+
+    private func recordNotConfigured(invocationId: String, model: String) async {
+        let skill = SkillRegistry.builtin.skill(id: SkillID.reviewMedia)!
+        await log.record(AIInvocationRecordInput(
+            id: invocationId,
+            skillId: skill.id,
+            skillVersion: skill.version,
+            model: model,
+            startedAt: Date(),
+            durationMs: 0,
+            status: .failure,
+            errorType: .notConfigured,
+            memoryIds: [],
+            formatRetryUsed: false,
+            draftOutcome: nil
+        ))
     }
 
     static func contextText(from context: MediaReviewContext) -> String {

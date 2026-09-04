@@ -42,4 +42,20 @@ struct MemoryContextBuilderTests {
         let clipped = MemoryContextBuilder.block(items: [huge], now: Date())
         #expect(clipped.count <= MemoryContextBuilder.budget)
     }
+
+    @Test func snapshotKeepsOnlyBudgetedIds() {
+        let kept = MemoryItem(
+            profileId: "p", kind: .goal, key: "goal.small", summaryText: "短",
+            sourceType: "t", sourceId: "a", confidence: 1, importance: 1
+        )
+        let dropped = MemoryItem(
+            profileId: "p", kind: .goal, key: "goal.huge",
+            summaryText: String(repeating: "字", count: 900),
+            sourceType: "t", sourceId: "b", confidence: 1, importance: 0.1
+        )
+        let snap = MemoryContextBuilder.snapshot(items: [kept, dropped], now: Date())
+        #expect(snap.itemIds == [kept.id])
+        #expect(snap.block.contains("短"))
+        #expect(!snap.block.contains(String(repeating: "字", count: 20)))
+    }
 }

@@ -17,6 +17,7 @@ struct PhotoPracticeSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.memoryContext) private var memoryContext
     @Environment(PracticeStore.self) private var store
+    @Environment(AIInvocationStore.self) private var invocationStore
     @Environment(MemoryConsentCoordinator.self) private var consent
     @State private var phase: Phase = .source
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -321,12 +322,17 @@ struct PhotoPracticeSheet: View {
     }
 
     private func generate(blobs: [Data]) async throws {
-        let generator = ImageStepGenerator(client: VisionPracticeClient(memory: memoryContext))
+        let log = LiveAIInvocationLog(store: invocationStore)
+        let generator = ImageStepGenerator(
+            client: VisionPracticeClient(memory: memoryContext, log: log),
+            log: log
+        )
         let draft = try await generator.generate(
             imageData: blobs,
             baseURL: baseURL,
             model: model,
-            fallbackCategory: fallbackCategory
+            fallbackCategory: fallbackCategory,
+            invocationId: generationId
         )
         try Task.checkCancellation()
         let item = try entryGate.submit(
@@ -335,6 +341,9 @@ struct PhotoPracticeSheet: View {
             token: submitToken,
             now: Date(),
             calendar: .current
+        )
+        invocationStore.setDraftOutcome(
+            id: generationId, outcome: .accepted, taskId: item.id.uuidString
         )
         completed = true
         isGenerating = false

@@ -2,6 +2,14 @@ import Foundation
 import Testing
 @testable import foxgita
 
+final class InvocationLogSpy: AIInvocationRecording, @unchecked Sendable {
+    private let lock = NSLock()
+    private(set) var inputs: [AIInvocationRecordInput] = []
+    func record(_ input: AIInvocationRecordInput) async {
+        lock.lock(); inputs.append(input); lock.unlock()
+    }
+}
+
 @Suite(.serialized)
 struct NextSessionClientTests {
     private func makeClient(
@@ -96,7 +104,8 @@ struct NextSessionClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             budgetMinutes: 20,
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         #expect(draft.title == "F 和弦")
         #expect(draft.category == .chord)
@@ -136,7 +145,8 @@ struct NextSessionClientTests {
             model: "gpt-4o",
             apiKey: "sk-test",
             budgetMinutes: 20,
-            fallbackCategory: .song
+            fallbackCategory: .song,
+            invocationId: "inv-test"
         )
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == SkillDefinition.nextSession.systemPrompt)
@@ -161,9 +171,96 @@ struct NextSessionClientTests {
                 model: "gpt-4o",
                 apiKey: "sk",
                 budgetMinutes: 20,
-                fallbackCategory: .left
+                fallbackCategory: .left,
+                invocationId: "inv-test"
             )
         }
         #expect(calls == 0)
+    }
+
+    @Test func generateDraftRecordsSuccessWithoutSecrets() async throws {
+        let spy = InvocationLogSpy()
+        let payload: [String: Any] = [
+            "choices": [[
+                "message": [
+                    "content": #"{"title":"F 和弦","category":"chord","targetMin":40,"steps":["热身","重点","收尾"],"stepMinutes":[5,20,15]}"#
+                ]
+            ]]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        MockURLProtocol.handler = { _ in (200, data) }
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = NextSessionClient(
+            session: URLSession(configuration: config),
+            log: spy
+        )
+        _ = try await client.generateDraft(
+            baseURL: "https://api.openai.com/v1",
+            model: "gpt-4o",
+            apiKey: "sk-test",
+            budgetMinutes: 20,
+            fallbackCategory: .song,
+            invocationId: "inv-ok"
+        )
+        let row = try #require(spy.inputs.first)
+        #expect(row.id == "inv-ok")
+        #expect(row.status == .success)
+        #expect(row.errorType == nil)
+        #expect(row.skillId == SkillID.nextSession)
+    }
+
+    @Test func unregisteredSkillRecordsFailureAndSendsNoRequest() async {
+        let spy = InvocationLogSpy()
+        var calls = 0
+        MockURLProtocol.handler = { _ in calls += 1; return (200, Data()) }
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = NextSessionClient(
+            session: URLSession(configuration: config),
+            registry: SkillRegistry(skills: []),
+            log: spy
+        )
+        await #expect(throws: VisionPracticeError.unregisteredSkill) {
+            try await client.generateDraft(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk",
+                budgetMinutes: 20,
+                fallbackCategory: .left,
+                invocationId: "inv-miss"
+            )
+        }
+        #expect(calls == 0)
+        #expect(spy.inputs.first?.errorType == .unregisteredSkill)
+    }
+
+    @Test func generateDraftRecordsCancelledAsCancelledNotTransport() async {
+        let spy = InvocationLogSpy()
+        MockURLProtocol.handler = { _ in throw URLError(.cancelled) }
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [MockURLProtocol.self]
+        let client = NextSessionClient(
+            session: URLSession(configuration: config),
+            log: spy
+        )
+        await #expect(throws: CancellationError.self) {
+            try await client.generateDraft(
+                baseURL: "https://api.openai.com/v1",
+                model: "gpt-4o",
+                apiKey: "sk-test",
+                budgetMinutes: 20,
+                fallbackCategory: .song,
+                invocationId: "inv-cancel"
+            )
+        }
+        let row = spy.inputs.first
+        #expect(row?.status == .failure)
+        #expect(row?.errorType == .cancelled)
+        #expect(row?.draftOutcome == .abandoned)
+        #expect(row?.errorType != .transport)
     }
 }

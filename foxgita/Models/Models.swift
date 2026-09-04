@@ -13,6 +13,7 @@ typealias LocalProfile = GitaSchemaV13.LocalProfile
 typealias MemoryItem = GitaSchemaV13.MemoryItem
 typealias PracticeItem = GitaSchemaV13.PracticeItem
 typealias Project = GitaSchemaV13.Project
+typealias AIInvocationLog = GitaSchemaV13.AIInvocationLog
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -717,7 +718,7 @@ enum StepCoding {
 /// V9 → V10 adds Project, PracticeItem.projectId, LocalProfile.pinnedProjectId;
 /// V10 → V11 adds optional Project.stageVersionItemId and Project.finalVersionItemId;
 /// V11 → V12 adds PracticeItem.stepsRaw;
-/// V12 → V13 adds PracticeItem.subtitle and PracticeItem.targetMin.
+/// V12 → V13 adds PracticeItem.subtitle, PracticeItem.targetMin, and AIInvocationLog.
 enum GitaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [

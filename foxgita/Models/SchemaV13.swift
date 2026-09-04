@@ -10,7 +10,7 @@ enum GitaSchemaV13: VersionedSchema {
     static var versionIdentifier: Schema.Version { Schema.Version(13, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
-        [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self, PracticeItem.self, Project.self]
+        [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self, PracticeItem.self, Project.self, AIInvocationLog.self]
     }
 
     @Model
@@ -460,6 +460,61 @@ enum GitaSchemaV13: VersionedSchema {
         var status: ProjectStatus {
             get { ProjectStatus(rawValue: statusRaw) ?? .active }
             set { statusRaw = newValue.rawValue }
+        }
+    }
+
+    @Model
+    final class AIInvocationLog {
+        @Attribute(.unique) var id: String
+        var profileId: String
+        var skillId: String
+        var skillVersion: String
+        var model: String
+        var startedAt: Date
+        var durationMs: Int
+        var statusRaw: String
+        var errorTypeRaw: String
+        var memoryIdsRaw: String
+        var formatRetryUsed: Bool
+        var draftOutcomeRaw: String
+        var taskId: String
+        var completedAt: Date?
+        var createdAt: Date
+        var updatedAt: Date
+
+        init(
+            id: String,
+            profileId: String,
+            skillId: String,
+            skillVersion: String,
+            model: String,
+            startedAt: Date,
+            durationMs: Int,
+            statusRaw: String,
+            errorTypeRaw: String = "",
+            memoryIdsRaw: String = "",
+            formatRetryUsed: Bool = false,
+            draftOutcomeRaw: String = "",
+            taskId: String = "",
+            completedAt: Date? = nil,
+            now: Date = Date()
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.skillId = skillId
+            self.skillVersion = skillVersion
+            self.model = model
+            self.startedAt = startedAt
+            self.durationMs = durationMs
+            self.statusRaw = statusRaw
+            self.errorTypeRaw = errorTypeRaw
+            self.memoryIdsRaw = memoryIdsRaw
+            self.formatRetryUsed = formatRetryUsed
+            self.draftOutcomeRaw = draftOutcomeRaw
+            self.taskId = taskId
+            self.completedAt = completedAt
+            self.createdAt = now
+            self.updatedAt = now
         }
     }
 }
