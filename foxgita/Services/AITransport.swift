@@ -1,5 +1,10 @@
 import Foundation
 
+struct AITransportResult: Equatable, Sendable {
+    var content: String
+    var formatRetryUsed: Bool
+}
+
 struct AITransport: Sendable {
     private let session: URLSession
 
@@ -47,7 +52,7 @@ struct AITransport: Sendable {
         includeResponseFormat: Bool,
         allowsFormatRetry: Bool,
         timeout: TimeInterval?
-    ) async throws -> String {
+    ) async throws -> AITransportResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         if let timeout {
@@ -72,7 +77,7 @@ struct AITransport: Sendable {
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            throw Self.mapSessionError(error)
+            try Self.mapSessionError(error)
         }
 
         guard let http = response as? HTTPURLResponse else {
@@ -87,7 +92,7 @@ struct AITransport: Sendable {
                includeResponseFormat,
                (400...499).contains(http.statusCode),
                bodyText.contains("response_format") || bodyText.contains("unknown") {
-                return try await complete(
+                let nested = try await complete(
                     url: url,
                     apiKey: apiKey,
                     model: model,
@@ -98,6 +103,7 @@ struct AITransport: Sendable {
                     allowsFormatRetry: false,
                     timeout: timeout
                 )
+                return AITransportResult(content: nested.content, formatRetryUsed: true)
             }
             throw VisionPracticeError.httpStatus(http.statusCode)
         }
@@ -117,13 +123,15 @@ struct AITransport: Sendable {
         } catch {
             throw VisionPracticeError.invalidJSON
         }
-        return chat.choices?.first?.message?.content?
+        let content = chat.choices?.first?.message?.content?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return AITransportResult(content: content, formatRetryUsed: false)
     }
 
-    private static func mapSessionError(_ error: Error) -> VisionPracticeError {
-        if (error as? URLError)?.code == .timedOut { return .timeout }
-        return .transport
+    private static func mapSessionError(_ error: Error) throws -> Never {
+        if (error as? URLError)?.code == .timedOut { throw VisionPracticeError.timeout }
+        if (error as? URLError)?.code == .cancelled { throw CancellationError() }
+        throw VisionPracticeError.transport
     }
 
     private static func buildBody(

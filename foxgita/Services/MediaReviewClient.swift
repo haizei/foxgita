@@ -43,7 +43,7 @@ struct MediaReviewClient: MediaReviewing {
         let finalUserText = memoryBlock.isEmpty ? userText : userText + "\n\n" + memoryBlock
         let rawContent: String
         do {
-            rawContent = try await transport.complete(
+            let result = try await transport.complete(
                 url: url,
                 apiKey: apiKey,
                 model: model,
@@ -54,6 +54,7 @@ struct MediaReviewClient: MediaReviewing {
                 allowsFormatRetry: skill.allowsFormatRetry,
                 timeout: skill.timeout
             )
+            rawContent = result.content
         } catch let error as VisionPracticeError {
             throw error
         } catch {
