@@ -25,11 +25,11 @@ enum PracticeRoute: Hashable {
 enum RecordRoute: Hashable {
     case history(RecordHistorySegment)
     case practiceDetail(itemId: UUID)
-    case projectCreate(fromEmpty: Bool)
+    case projectCreate
+    case projectCreateFromPractice(itemId: UUID)
     case projectDetail(projectId: UUID)
     case projectEdit(projectId: UUID)
     case projectTrajectory(projectId: UUID)
-    case projectReady(projectId: UUID)
 }
 
 @Observable
@@ -47,13 +47,22 @@ final class AppRouter {
     var returnPracticeToToday = false
     /// Set by detail / past-day open; PracticeView shows it then clears.
     var practiceToast: String?
-    /// Practice detail create-and-join on the Record stack; cleared after join or cancel.
-    var pendingJoinPracticeItemId: UUID?
-    /// Set only after an effective Complete. Never persist. Never infer "latest session".
-    var lastCompletedSessionId: String?
+    /// Set only after an effective Complete. Never persist.
+    var lastCompletedPracticeItemId: UUID?
 
     func clearJustCompleted() {
-        lastCompletedSessionId = nil
+        lastCompletedPracticeItemId = nil
+    }
+
+    func presentCreatedProject(_ projectId: UUID, fromPracticeTab: Bool) {
+        recordSegment = .project
+        if fromPracticeTab {
+            selectedTab = .record
+            practicePath.removeAll()
+            recordPath = [.projectDetail(projectId: projectId)]
+        } else {
+            replaceLastRecordRoute(.projectDetail(projectId: projectId))
+        }
     }
 
     func openRecord(dayKey: String?) {

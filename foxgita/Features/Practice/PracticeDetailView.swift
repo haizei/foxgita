@@ -1158,8 +1158,7 @@ struct PracticeDetailView: View {
             hasExistingPractice: true
         )
         if openedFromRecord {
-            router.pendingJoinPracticeItemId = itemId
-            router.recordPath.append(.projectCreate(fromEmpty: false))
+            router.recordPath.append(.projectCreateFromPractice(itemId: itemId))
         } else {
             showCreateProjectSheet = true
         }

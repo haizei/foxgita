@@ -16,8 +16,6 @@ struct ProjectEditorView: View {
     @Environment(\.dismiss) private var dismiss
     @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
     private var projects: [Project]
-    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
-    private var practiceItems: [PracticeItem]
 
     @State private var name = ""
     @State private var goal = ""
@@ -308,7 +306,6 @@ struct ProjectEditorView: View {
     }
 
     private func leave() {
-        router.pendingJoinPracticeItemId = nil
         if onCreated != nil {
             dismiss()
         } else if !router.recordPath.isEmpty {
@@ -356,8 +353,6 @@ struct ProjectEditorView: View {
                         source = "join"
                     } else if fromEmpty {
                         source = "empty"
-                    } else if router.pendingJoinPracticeItemId != nil {
-                        source = "join"
                     } else {
                         source = "list"
                     }
@@ -394,23 +389,8 @@ struct ProjectEditorView: View {
             dismiss()
             return
         }
-        if let joinId = router.pendingJoinPracticeItemId {
-            let from = practiceItems.first { $0.id == joinId }?.projectId?.uuidString ?? ""
-            do {
-                try store.setPracticeItemProject(id: joinId, projectId: projectId, now: Date())
-                RecordAnalytics.practiceProjectChanged(
-                    fromProjectId: from,
-                    toProjectId: projectId.uuidString
-                )
-            } catch {
-                isSubmitting = false
-                self.error = String(localized: "保存失败，请重试")
-                return
-            }
-            router.pendingJoinPracticeItemId = nil
-        }
         if fromEmpty {
-            router.replaceLastRecordRoute(.projectReady(projectId: projectId))
+            router.replaceLastRecordRoute(.projectDetail(projectId: projectId))
         } else if !router.recordPath.isEmpty {
             router.recordPath.removeLast()
         }

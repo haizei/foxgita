@@ -8,8 +8,12 @@ import SwiftUI
 
 enum RecordProjectCreateStart {
     static func shouldPush(onto last: RecordRoute?) -> Bool {
-        if case .projectCreate = last { return false }
-        return true
+        switch last {
+        case .projectCreate, .projectCreateFromPractice:
+            return false
+        default:
+            return true
+        }
     }
 }
 
@@ -101,7 +105,7 @@ struct RecordView: View {
             fromEmpty: fromEmpty,
             hasExistingPractice: hasExistingPractice
         )
-        router.recordPath.append(.projectCreate(fromEmpty: fromEmpty))
+        router.recordPath.append(.projectCreate)
     }
 
     var body: some View {
@@ -146,10 +150,8 @@ struct RecordView: View {
                     HistoryView(initialSegment: segment)
                 case .practiceDetail(let itemId):
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
-                case .projectCreate(let fromEmpty):
-                    ProjectEditorView(mode: .create, fromEmpty: fromEmpty)
-                case .projectReady(let id):
-                    ProjectReadyView(projectId: id)
+                case .projectCreate, .projectCreateFromPractice:
+                    ProjectEditorView(mode: .create)
                 case .projectDetail(let id):
                     ProjectDetailView(projectId: id)
                 case .projectEdit(let id):

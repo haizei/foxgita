@@ -3,11 +3,11 @@ import Testing
 @testable import foxgita
 
 struct AppRouterTests {
-    @Test func clearJustCompletedDropsSessionId() {
+    @Test func clearJustCompletedDropsPracticeItemId() {
         let router = AppRouter()
-        router.lastCompletedSessionId = "s1"
+        router.lastCompletedPracticeItemId = UUID()
         router.clearJustCompleted()
-        #expect(router.lastCompletedSessionId == nil)
+        #expect(router.lastCompletedPracticeItemId == nil)
     }
 
     @Test func practiceDetailRouteCarriesItemId() {
@@ -106,11 +106,11 @@ struct AppRouterTests {
 
     @Test func recordRouteCarriesProjectPages() {
         let id = UUID()
-        #expect(RecordRoute.projectCreate(fromEmpty: true) == .projectCreate(fromEmpty: true))
-        #expect(RecordRoute.projectCreate(fromEmpty: false) != .projectCreate(fromEmpty: true))
-        #expect(RecordRoute.projectReady(projectId: id) == .projectReady(projectId: id))
+        let itemId = UUID()
+        #expect(RecordRoute.projectCreate == .projectCreate)
+        #expect(RecordRoute.projectCreateFromPractice(itemId: itemId) == .projectCreateFromPractice(itemId: itemId))
         var path: [RecordRoute] = [
-            .projectCreate(fromEmpty: true),
+            .projectCreate,
             .projectDetail(projectId: id),
             .projectEdit(projectId: id),
         ]
@@ -122,34 +122,39 @@ struct AppRouterTests {
 
     @Test func projectCreateStartIgnoresWhenAlreadyOnCreate() {
         #expect(RecordProjectCreateStart.shouldPush(onto: nil))
-        #expect(RecordProjectCreateStart.shouldPush(onto: .projectReady(projectId: UUID())))
-        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreate(fromEmpty: true)) == false)
-        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreate(fromEmpty: false)) == false)
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectDetail(projectId: UUID())))
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreate) == false)
+        #expect(RecordProjectCreateStart.shouldPush(onto: .projectCreateFromPractice(itemId: UUID())) == false)
     }
 
     @Test func replaceLastRecordRouteReplacesTop() {
         let router = AppRouter()
         let id = UUID()
-        router.recordPath = [.projectCreate(fromEmpty: true)]
-        router.replaceLastRecordRoute(.projectReady(projectId: id))
-        #expect(router.recordPath == [.projectReady(projectId: id)])
+        router.recordPath = [.projectCreate]
+        router.replaceLastRecordRoute(.projectDetail(projectId: id))
+        #expect(router.recordPath == [.projectDetail(projectId: id)])
     }
 
-    @Test func replaceLastRecordRouteAppendsWhenEmpty() {
+    @Test func presentCreatedProjectReplacesCreateOnRecordStack() {
         let router = AppRouter()
         let id = UUID()
-        router.replaceLastRecordRoute(.projectReady(projectId: id))
-        #expect(router.recordPath == [.projectReady(projectId: id)])
+        router.recordPath = [.projectCreate]
+        router.presentCreatedProject(id, fromPracticeTab: false)
+        #expect(router.recordSegment == .project)
+        #expect(router.recordPath == [.projectDetail(projectId: id)])
     }
 
-    @Test func replaceReadyWithPracticeDetailLeavesListUnderneath() {
+    @Test func presentCreatedProjectFromPracticeTabSwitchesTab() {
         let router = AppRouter()
-        let projectId = UUID()
+        let id = UUID()
         let itemId = UUID()
-        router.recordPath = [.projectReady(projectId: projectId)]
-        router.replaceLastRecordRoute(.practiceDetail(itemId: itemId))
-        router.dismissPracticeDetail(fromRecord: true)
-        #expect(router.recordPath.isEmpty)
+        router.selectedTab = .practice
+        router.practicePath = [.detail(itemId: itemId)]
+        router.presentCreatedProject(id, fromPracticeTab: true)
+        #expect(router.selectedTab == .record)
+        #expect(router.recordSegment == .project)
+        #expect(router.recordPath == [.projectDetail(projectId: id)])
+        #expect(router.practicePath.isEmpty)
     }
 
     @Test func dismissFromRecordLeavesPracticeHomeWhenOpenedFromRecordIsFalse() {
