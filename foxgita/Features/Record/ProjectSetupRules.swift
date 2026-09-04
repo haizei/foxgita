@@ -3,22 +3,26 @@ import Foundation
 struct ProjectSetupFields: Equatable {
     var name: String
     var goal: String
+    var currentFocus: String
 }
 
 enum ProjectSetupError: Error, Equatable {
     case nameEmpty, nameTooLong, goalTooLong
+    // Legacy call-site stubs; prepare never returns these.
+    case goalEmpty, focusTooLong
 
     var fieldName: String {
         switch self {
         case .nameEmpty, .nameTooLong: return "name"
-        case .goalTooLong: return "goal"
+        case .goalTooLong, .goalEmpty: return "goal"
+        case .focusTooLong: return "currentFocus"
         }
     }
 
     var reason: String {
         switch self {
-        case .nameEmpty: return "empty"
-        case .nameTooLong, .goalTooLong: return "too_long"
+        case .nameEmpty, .goalEmpty: return "empty"
+        case .nameTooLong, .goalTooLong, .focusTooLong: return "too_long"
         }
     }
 }
@@ -44,6 +48,10 @@ enum ProjectSetupRules {
         !trimmed(raw).isEmpty
     }
 
+    static func showsReadyFocus(_ raw: String) -> Bool {
+        hasFocus(raw)
+    }
+
     static let kinds = ["歌曲", "技巧", "演出准备"]
     static let stages = ["熟悉内容", "分段练习", "串联整首", "稳定演奏", "完成"]
 
@@ -63,6 +71,19 @@ enum ProjectSetupRules {
         !trimmed(name).isEmpty || !trimmed(goal).isEmpty
     }
 
+    static func isCreateDirty(
+        name: String,
+        goal: String,
+        currentFocus: String,
+        kind: String,
+        stage: String
+    ) -> Bool {
+        _ = currentFocus
+        _ = kind
+        _ = stage
+        return isCreateDirty(name: name, goal: goal)
+    }
+
     static func isEditDirty(
         name: String,
         goal: String,
@@ -70,6 +91,32 @@ enum ProjectSetupRules {
         loadedGoal: String
     ) -> Bool {
         trimmed(name) != trimmed(loadedName) || trimmed(goal) != trimmed(loadedGoal)
+    }
+
+    static func isEditDirty(
+        name: String,
+        goal: String,
+        currentFocus: String,
+        kind: String,
+        stage: String,
+        loadedName: String,
+        loadedGoal: String,
+        loadedFocus: String,
+        loadedKind: String,
+        loadedStage: String
+    ) -> Bool {
+        _ = currentFocus
+        _ = kind
+        _ = stage
+        _ = loadedFocus
+        _ = loadedKind
+        _ = loadedStage
+        return isEditDirty(
+            name: name,
+            goal: goal,
+            loadedName: loadedName,
+            loadedGoal: loadedGoal
+        )
     }
 
     static func isFromPracticeDirty(name: String, initialName: String) -> Bool {
@@ -82,7 +129,7 @@ enum ProjectSetupRules {
         if name.isEmpty { return .failure(.nameEmpty) }
         if name.count > nameMax { return .failure(.nameTooLong) }
         if goal.count > goalMax { return .failure(.goalTooLong) }
-        return .success(ProjectSetupFields(name: name, goal: goal))
+        return .success(ProjectSetupFields(name: name, goal: goal, currentFocus: ""))
     }
 
     static func prepare(name: String, goal: String, currentFocus: String) -> Result<ProjectSetupFields, ProjectSetupError> {
