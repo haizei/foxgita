@@ -150,8 +150,8 @@ struct RecordView: View {
                     PracticeDetailView(itemId: itemId, allowPastDayEdits: true, openedFromRecord: true)
                 case .projectCreate:
                     ProjectEditorView(mode: .create, createSource: router.projectCreateSource)
-                case .projectCreateFromPractice:
-                    ProjectEditorView(mode: .create, createSource: "practice_detail")
+                case .projectCreateFromPractice(let itemId):
+                    ProjectCreateFromPracticeView(itemId: itemId, fromPracticeTab: false)
                 case .projectDetail(let id):
                     ProjectDetailView(projectId: id)
                 case .projectEdit(let id):

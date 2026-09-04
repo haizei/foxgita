@@ -83,6 +83,25 @@ enum ProjectSetupRules {
         trimmed(name) != trimmed(initialName)
     }
 
+    static func practiceSourceLabel(practiceDayKey: String, todayKey: String) -> String {
+        if practiceDayKey == todayKey {
+            return "来自今天的练习"
+        }
+        return "来自 \(practiceDayKey) 的练习"
+    }
+
+    static func practiceSourceMeta(durationSeconds: Int, recordingCount: Int) -> String {
+        let minutes = JustCompletedCopy.minutesLabel(
+            durationSec: durationSeconds,
+            hasNote: false,
+            mediaCount: 0
+        )
+        if recordingCount > 0 {
+            return "\(minutes) · 已保存 \(recordingCount) 条录音"
+        }
+        return minutes
+    }
+
     static func prepare(name: String, goal: String) -> Result<ProjectSetupFields, ProjectSetupError> {
         let name = trimmed(name)
         let goal = trimmed(goal)

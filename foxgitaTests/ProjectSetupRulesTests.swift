@@ -94,4 +94,17 @@ struct ProjectSetupRulesTests {
         #expect(ProjectSetupRules.showsReadyStage("串联整首") == true)
         #expect(ProjectSetupRules.showsReadyStage("旧自由文本") == true)
     }
+
+    @Test func practiceSourceLabelAndMeta() {
+        #expect(
+            ProjectSetupRules.practiceSourceLabel(practiceDayKey: "2026-08-28", todayKey: "2026-08-28")
+                == "来自今天的练习"
+        )
+        #expect(
+            ProjectSetupRules.practiceSourceLabel(practiceDayKey: "2026-08-27", todayKey: "2026-08-28")
+                == "来自 2026-08-27 的练习"
+        )
+        #expect(ProjectSetupRules.practiceSourceMeta(durationSeconds: 720, recordingCount: 1) == "12 分钟 · 已保存 1 条录音")
+        #expect(ProjectSetupRules.practiceSourceMeta(durationSeconds: 720, recordingCount: 0) == "12 分钟")
+    }
 }
