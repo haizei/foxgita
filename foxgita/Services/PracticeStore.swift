@@ -98,16 +98,9 @@ final class PracticeStore {
 
     // MARK: - Projects
 
-    func createProject(
-        name: String,
-        goal: String,
-        kindRaw: String,
-        stageRaw: String,
-        currentFocus: String,
-        now: Date
-    ) throws -> Project {
+    func createProject(name: String, goal: String, now: Date) throws -> Project {
         let prepared: ProjectSetupFields
-        switch ProjectSetupRules.prepare(name: name, goal: goal, currentFocus: currentFocus) {
+        switch ProjectSetupRules.prepare(name: name, goal: goal) {
         case .success(let fields):
             prepared = fields
         case .failure:
@@ -119,9 +112,9 @@ final class PracticeStore {
             profileId: profileId,
             name: prepared.name,
             goal: prepared.goal,
-            kindRaw: kindRaw,
-            stageRaw: stageRaw,
-            currentFocus: prepared.currentFocus,
+            kindRaw: "",
+            stageRaw: "",
+            currentFocus: "",
             statusRaw: ProjectStatus.active.rawValue,
             createdAt: now,
             updatedAt: now
@@ -147,7 +140,7 @@ final class PracticeStore {
         now: Date
     ) throws {
         let prepared: ProjectSetupFields
-        switch ProjectSetupRules.prepare(name: name, goal: goal, currentFocus: currentFocus) {
+        switch ProjectSetupRules.prepare(name: name, goal: goal) {
         case .success(let fields):
             prepared = fields
         case .failure:
@@ -159,7 +152,42 @@ final class PracticeStore {
         project.goal = prepared.goal
         project.kindRaw = kindRaw
         project.stageRaw = stageRaw
-        project.currentFocus = prepared.currentFocus
+        project.currentFocus = ProjectSetupRules.trimmed(currentFocus)
+        project.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func updateProjectBasics(id: UUID, name: String, goal: String, now: Date) throws {
+        let prepared: ProjectSetupFields
+        switch ProjectSetupRules.prepare(name: name, goal: goal) {
+        case .success(let fields):
+            prepared = fields
+        case .failure:
+            lastError = .invalidInput
+            throw StoreError.invalidInput
+        }
+        let project = try requireLiveProject(id: id)
+        project.name = prepared.name
+        project.goal = prepared.goal
+        project.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func updateProjectGoal(id: UUID, goal: String, now: Date) throws {
+        let trimmed = ProjectSetupRules.trimmed(goal)
+        if trimmed.count > ProjectSetupRules.goalMax {
+            lastError = .invalidInput
+            throw StoreError.invalidInput
+        }
+        let project = try requireLiveProject(id: id)
+        project.goal = trimmed
+        project.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func updateProjectStage(id: UUID, stageRaw: String, now: Date) throws {
+        let project = try requireLiveProject(id: id)
+        project.stageRaw = ProjectSetupRules.trimmed(stageRaw)
         project.updatedAt = now
         try persistPracticeItemChanges()
     }

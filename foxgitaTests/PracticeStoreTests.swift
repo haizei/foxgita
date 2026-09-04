@@ -1782,69 +1782,132 @@ struct PracticeStoreTests {
 
     // MARK: - Project commands
 
-    @Test func createProjectRejectsBlankNameAndGoal() throws {
-        let (store, _, _) = makeStore()
-        store.prepare()
-        #expect(throws: StoreError.invalidInput) {
-            try store.createProject(name: "  ", goal: "目标", kindRaw: "", stageRaw: "", currentFocus: "", now: Date())
-        }
-        #expect(throws: StoreError.invalidInput) {
-            try store.createProject(name: "知足", goal: "  ", kindRaw: "", stageRaw: "", currentFocus: "", now: Date())
-        }
-    }
-
-    @Test func createProjectRejectsOverlongFieldsAndTrimsFocus() throws {
+    @Test func createProjectAcceptsNameOnlyAndWritesEmptyExtras() throws {
         let (store, repo, _) = makeStore()
         store.prepare()
         #expect(throws: StoreError.invalidInput) {
-            try store.createProject(
-                name: String(repeating: "啊", count: 41),
-                goal: "目标",
-                kindRaw: "song",
-                stageRaw: "x",
-                currentFocus: "",
-                now: Date()
-            )
+            try store.createProject(name: "  ", goal: "目标", now: Date())
+        }
+        let project = try store.createProject(name: " 知足 ", goal: "  ", now: Date())
+        #expect(project.name == "知足")
+        #expect(project.goal == "")
+        #expect(project.kindRaw == "")
+        #expect(project.stageRaw == "")
+        #expect(project.currentFocus == "")
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+    }
+
+    @Test func createProjectRejectsOverlongGoal() throws {
+        let (store, _, _) = makeStore()
+        store.prepare()
+        #expect(throws: StoreError.invalidInput) {
+            try store.createProject(name: String(repeating: "啊", count: 41), goal: "", now: Date())
         }
         #expect(throws: StoreError.invalidInput) {
             try store.createProject(
                 name: "知足",
                 goal: String(repeating: "啊", count: 121),
-                kindRaw: "",
-                stageRaw: "",
-                currentFocus: "",
                 now: Date()
             )
         }
-        #expect(throws: StoreError.invalidInput) {
-            try store.createProject(
-                name: "知足",
-                goal: "目标",
-                kindRaw: "",
-                stageRaw: "",
-                currentFocus: String(repeating: "啊", count: 121),
-                now: Date()
-            )
-        }
-        let project = try store.createProject(
-            name: " 知足 ",
-            goal: " 完整弹唱 ",
-            kindRaw: "",
-            stageRaw: "",
-            currentFocus: " 副歌节奏 ",
+    }
+
+    @Test func updateProjectBasicsDoesNotClearStage() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let created = try store.createProject(name: "知足", goal: "", now: Date())
+        try store.updateProject(
+            id: created.id,
+            name: "知足",
+            goal: "目标",
+            kindRaw: "歌曲",
+            stageRaw: "串联整首",
+            currentFocus: "副歌",
             now: Date()
         )
-        #expect(project.name == "知足")
-        #expect(project.goal == "完整弹唱")
-        #expect(project.currentFocus == "副歌节奏")
+        try store.updateProjectBasics(id: created.id, name: "学会知足", goal: "完整弹唱", now: Date())
         let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
-        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+        let live = try #require(try repo.project(id: created.id, profileId: profileId))
+        #expect(live.name == "学会知足")
+        #expect(live.goal == "完整弹唱")
+        #expect(live.kindRaw == "歌曲")
+        #expect(live.stageRaw == "串联整首")
+        #expect(live.currentFocus == "副歌")
+    }
+
+    @Test func updateProjectGoalAndStage() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let created = try store.createProject(name: "知足", goal: "", now: Date())
+        try store.updateProjectGoal(id: created.id, goal: " 完整弹唱 ", now: Date())
+        try store.updateProjectStage(id: created.id, stageRaw: "串联整首", now: Date())
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let live = try #require(try repo.project(id: created.id, profileId: profileId))
+        #expect(live.goal == "完整弹唱")
+        #expect(live.stageRaw == "串联整首")
+        try store.updateProjectStage(id: created.id, stageRaw: "  ", now: Date())
+        let cleared = try #require(try repo.project(id: created.id, profileId: profileId))
+        #expect(cleared.stageRaw == "")
+    }
+
+    @Test func createThenLinkDoesNotCopyPracticeFields() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let item = try store.createPracticeItem(
+            input: PracticeItemInput(
+                title: "《知足》主歌进入副歌",
+                category: .song,
+                source: .custom,
+                originId: nil,
+                bpm: nil,
+                timeSignature: nil
+            ),
+            now: now,
+            calendar: cal
+        )
+        try store.savePracticeItem(id: item.id, durationSeconds: 720, note: "稳", now: now)
+        let project = try store.createProject(name: item.title, goal: "", now: now)
+        try store.setPracticeItemProject(id: item.id, projectId: project.id, now: now)
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let live = try #require(try repo.practiceItem(id: item.id, profileId: profileId))
+        #expect(live.projectId == project.id)
+        #expect(live.practiceDayKey == "2026-08-28")
+        #expect(live.durationSeconds == 720)
+        #expect(live.note == "稳")
+        #expect(try repo.practiceItems(profileId: profileId).count == 1)
+    }
+
+    @Test func emptyOnlyCreateLeavesPracticeUnlinked() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let now = date(2026, 8, 28, calendar: cal)
+        let item = try store.createPracticeItem(
+            input: PracticeItemInput(
+                title: "《知足》主歌进入副歌",
+                category: .song,
+                source: .custom,
+                originId: nil,
+                bpm: nil,
+                timeSignature: nil
+            ),
+            now: now,
+            calendar: cal
+        )
+        _ = try store.createProject(name: "空项目", goal: "", now: now)
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == nil)
     }
 
     @Test func updateProjectClearsKindStageAndTrimsFocus() throws {
         let (store, repo, _) = makeStore()
         store.prepare()
-        let created = try store.createProject(
+        let created = try store.createProject(name: "知足", goal: "目标", now: Date())
+        try store.updateProject(
+            id: created.id,
             name: "知足",
             goal: "目标",
             kindRaw: "song",
@@ -1947,7 +2010,7 @@ struct PracticeStoreTests {
         let cal = shanghai()
         let now = date(2026, 8, 28, calendar: cal)
         let project = try store.createProject(
-            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "知足", goal: "完整弹唱", now: now
         )
         let a = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
         try store.savePracticeItem(id: a.id, durationSeconds: 60, note: "a", now: date(2026, 8, 28, 11, calendar: cal))
@@ -1975,7 +2038,7 @@ struct PracticeStoreTests {
         let cal = shanghai()
         let now = date(2026, 8, 28, calendar: cal)
         let project = try store.createProject(
-            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "知足", goal: "完整弹唱", now: now
         )
         let blank = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
         #expect(throws: StoreError.invalidInput) {
@@ -1983,7 +2046,7 @@ struct PracticeStoreTests {
         }
         #expect(try repo.project(id: project.id, profileId: blank.profileId)?.stageVersionItemId == nil)
         let other = try store.createProject(
-            name: "独立", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "独立", goal: "g", now: now
         )
         try store.savePracticeItem(id: blank.id, durationSeconds: 30, note: "", now: date(2026, 8, 28, 11, calendar: cal))
         #expect(throws: StoreError.invalidInput) {
@@ -1997,7 +2060,7 @@ struct PracticeStoreTests {
         let cal = shanghai()
         let now = date(2026, 8, 28, calendar: cal)
         let project = try store.createProject(
-            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "知足", goal: "完整弹唱", now: now
         )
         let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
         try store.savePracticeItem(id: item.id, durationSeconds: 40, note: "", now: date(2026, 8, 28, 11, calendar: cal))
@@ -2015,7 +2078,7 @@ struct PracticeStoreTests {
         let cal = shanghai()
         let now = date(2026, 8, 28, calendar: cal)
         let project = try store.createProject(
-            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "知足", goal: "完整弹唱", now: now
         )
         let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
         try store.savePracticeItem(id: item.id, durationSeconds: 50, note: "", now: date(2026, 8, 28, 11, calendar: cal))
@@ -2032,7 +2095,7 @@ struct PracticeStoreTests {
         try store.savePracticeItem(id: live.id, durationSeconds: 20, note: "n", now: date(2026, 8, 28, 15, calendar: cal))
         try store.setProjectStageVersion(projectId: project.id, itemId: live.id, now: date(2026, 8, 28, 16, calendar: cal))
         let other = try store.createProject(
-            name: "另一首", goal: "g", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "另一首", goal: "g", now: now
         )
         try store.setPracticeItemProject(id: live.id, projectId: other.id, now: date(2026, 8, 28, 17, calendar: cal))
         #expect(try repo.project(id: project.id, profileId: live.profileId)?.stageVersionItemId == nil)
@@ -2047,7 +2110,7 @@ struct PracticeStoreTests {
         let cal = shanghai()
         let now = date(2026, 8, 28, calendar: cal)
         let project = try store.createProject(
-            name: "知足", goal: "完整弹唱", kindRaw: "", stageRaw: "", currentFocus: "", now: now
+            name: "知足", goal: "完整弹唱", now: now
         )
         let item = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
         try store.savePracticeItem(id: item.id, durationSeconds: 30, note: "", now: date(2026, 8, 28, 11, calendar: cal))

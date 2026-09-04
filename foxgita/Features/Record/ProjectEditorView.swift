@@ -45,25 +45,13 @@ struct ProjectEditorView: View {
     private var isDirty: Bool {
         switch mode {
         case .create:
-            return ProjectSetupRules.isCreateDirty(
-                name: name,
-                goal: goal,
-                currentFocus: currentFocus,
-                kind: kind,
-                stage: stage
-            )
+            return ProjectSetupRules.isCreateDirty(name: name, goal: goal)
         case .edit:
             return ProjectSetupRules.isEditDirty(
                 name: name,
                 goal: goal,
-                currentFocus: currentFocus,
-                kind: kind,
-                stage: stage,
                 loadedName: loadedName,
-                loadedGoal: loadedGoal,
-                loadedFocus: loadedFocus,
-                loadedKind: loadedKind,
-                loadedStage: loadedStage
+                loadedGoal: loadedGoal
             )
         }
     }
@@ -333,7 +321,7 @@ struct ProjectEditorView: View {
         nameError = nil
         goalError = nil
         error = nil
-        switch ProjectSetupRules.prepare(name: name, goal: goal, currentFocus: currentFocus) {
+        switch ProjectSetupRules.prepare(name: name, goal: goal) {
         case .failure(let setupError):
             RecordAnalytics.projectSetupValidationFailed(
                 fieldName: setupError.fieldName,
@@ -355,14 +343,11 @@ struct ProjectEditorView: View {
                 case .create:
                     RecordAnalytics.projectSetupSubmitClicked(
                         fromEmpty: fromEmpty,
-                        hasFocus: ProjectSetupRules.hasFocus(fields.currentFocus)
+                        hasFocus: ProjectSetupRules.hasFocus(currentFocus)
                     )
                     let project = try store.createProject(
                         name: fields.name,
                         goal: fields.goal,
-                        kindRaw: ProjectSetupRules.trimmed(kind),
-                        stageRaw: ProjectSetupRules.trimmed(stage),
-                        currentFocus: fields.currentFocus,
                         now: Date()
                     )
                     let ms = Int((Date().timeIntervalSince(startedAt) * 1000).rounded())
@@ -379,18 +364,15 @@ struct ProjectEditorView: View {
                     RecordAnalytics.projectCreated(
                         source: source,
                         fromEmpty: fromEmpty,
-                        hasFocus: ProjectSetupRules.hasFocus(fields.currentFocus),
+                        hasFocus: ProjectSetupRules.hasFocus(currentFocus),
                         durationMs: ms
                     )
                     finishCreate(projectId: project.id)
                 case .edit(let id):
-                    try store.updateProject(
+                    try store.updateProjectBasics(
                         id: id,
                         name: fields.name,
                         goal: fields.goal,
-                        kindRaw: ProjectSetupRules.trimmed(kind),
-                        stageRaw: ProjectSetupRules.trimmed(stage),
-                        currentFocus: fields.currentFocus,
                         now: Date()
                     )
                     if onCreated != nil {
