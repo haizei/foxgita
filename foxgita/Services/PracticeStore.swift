@@ -36,6 +36,7 @@ struct PracticeItemInput {
     let originId: String?
     let bpm: Int?
     let timeSignature: String?
+    var steps: [String] = []
 }
 
 /// Command layer. Views read through `@Query` for free reactivity and write
@@ -257,6 +258,7 @@ final class PracticeStore {
             sourceRaw: PracticeItemSource.project.rawValue,
             originId: nil,
             projectId: projectId,
+            steps: PracticeDetailState.initialSteps([]),
             createdAt: now,
             updatedAt: now
         )
@@ -285,6 +287,7 @@ final class PracticeStore {
             note: "",
             sourceRaw: input.source.rawValue,
             originId: input.originId,
+            steps: PracticeDetailState.initialSteps(input.steps),
             createdAt: now,
             updatedAt: now
         )
@@ -299,10 +302,19 @@ final class PracticeStore {
         }
     }
 
-    func savePracticeItem(id: UUID, durationSeconds: Int, note: String, now: Date) throws {
+    func savePracticeItem(
+        id: UUID,
+        durationSeconds: Int,
+        note: String,
+        now: Date,
+        steps: [String]? = nil
+    ) throws {
         let item = try requireLivePracticeItem(id: id)
         item.durationSeconds = max(0, durationSeconds)
         item.note = note
+        if let steps {
+            item.steps = PracticeDetailState.initialSteps(steps)
+        }
         item.updatedAt = now
         if let projectId = item.projectId,
            (try repository.project(id: projectId, profileId: item.profileId)) == nil {
@@ -861,7 +873,7 @@ final class PracticeStore {
                 fileName: recording.fileName,
                 durationSec: recording.durationSec,
                 taskTitle: item.title,
-                steps: [],
+                steps: item.steps,
                 bpm: item.bpm ?? 0,
                 timeSig: item.timeSignature ?? "",
                 note: item.note

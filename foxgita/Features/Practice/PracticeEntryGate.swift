@@ -17,7 +17,8 @@ enum PracticeEntry {
             source: .custom,
             originId: nil,
             bpm: nil,
-            timeSignature: nil
+            timeSignature: nil,
+            steps: []
         )
     }
 
@@ -28,7 +29,8 @@ enum PracticeEntry {
             source: .recommend,
             originId: nil,
             bpm: template.defaultBpm,
-            timeSignature: template.timeSig
+            timeSignature: template.timeSig,
+            steps: template.steps
         )
     }
 
@@ -39,7 +41,8 @@ enum PracticeEntry {
             source: .photo,
             originId: PracticeTaskOrigin.photoOriginKey(generationId: generationId),
             bpm: nil,
-            timeSignature: nil
+            timeSignature: nil,
+            steps: draft.steps
         )
     }
 
@@ -50,7 +53,8 @@ enum PracticeEntry {
             source: .next,
             originId: PracticeTaskOrigin.nextOriginKey(generationId: generationId),
             bpm: nil,
-            timeSignature: nil
+            timeSignature: nil,
+            steps: draft.steps
         )
     }
 }

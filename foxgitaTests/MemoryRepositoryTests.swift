@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MemoryRepositoryTests {
     private func makeRepo() throws -> SwiftDataMemoryRepository {
-        let schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)
         let container = try ModelContainer(for: schema, configurations: [config])
         return SwiftDataMemoryRepository(context: ModelContext(container))
@@ -106,7 +106,7 @@ struct MemoryRepositoryTests {
     }
 
     @Test func setConsentRequiresProfileAndClearAllIsIsolated() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let schema = Schema(versionedSchema: GitaSchemaV12.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]

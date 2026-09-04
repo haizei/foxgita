@@ -142,6 +142,34 @@ struct PracticeDetailStateTests {
         )
     }
 
+    @Test func emptyStoredStepsBecomePlaceholder() {
+        #expect(PracticeDetailState.initialSteps([]) == ["新步骤"])
+        #expect(PracticeDetailState.initialSteps(["慢扫", "加速"]) == ["慢扫", "加速"])
+    }
+
+    @Test func stepEditsMakeDetailDirty() {
+        #expect(
+            !PracticeDetailState.isDirty(
+                elapsedSeconds: 60,
+                note: "",
+                storedDurationSeconds: 60,
+                storedNote: "",
+                steps: ["慢扫"],
+                storedSteps: ["慢扫"]
+            )
+        )
+        #expect(
+            PracticeDetailState.isDirty(
+                elapsedSeconds: 60,
+                note: "",
+                storedDurationSeconds: 60,
+                storedNote: "",
+                steps: ["慢扫", "加速"],
+                storedSteps: ["慢扫"]
+            )
+        )
+    }
+
     @Test func detailMatchesHomeItem() {
         let id = UUID()
         let created = date(year: 2026, month: 8, day: 26, hour: 9)

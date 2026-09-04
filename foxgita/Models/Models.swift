@@ -6,13 +6,13 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV11.TaskItem
-typealias PracticeSession = GitaSchemaV11.PracticeSession
-typealias RecordingRef = GitaSchemaV11.RecordingRef
-typealias LocalProfile = GitaSchemaV11.LocalProfile
-typealias MemoryItem = GitaSchemaV11.MemoryItem
-typealias PracticeItem = GitaSchemaV11.PracticeItem
-typealias Project = GitaSchemaV11.Project
+typealias TaskItem = GitaSchemaV12.TaskItem
+typealias PracticeSession = GitaSchemaV12.PracticeSession
+typealias RecordingRef = GitaSchemaV12.RecordingRef
+typealias LocalProfile = GitaSchemaV12.LocalProfile
+typealias MemoryItem = GitaSchemaV12.MemoryItem
+typealias PracticeItem = GitaSchemaV12.PracticeItem
+typealias Project = GitaSchemaV12.Project
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -715,14 +715,15 @@ enum StepCoding {
 /// V7 → V8 adds TaskItem.originKey;
 /// V8 → V9 adds PracticeItem and optional RecordingRef.practiceItem;
 /// V9 → V10 adds Project, PracticeItem.projectId, LocalProfile.pinnedProjectId;
-/// V10 → V11 adds optional Project.stageVersionItemId and Project.finalVersionItemId.
+/// V10 → V11 adds optional Project.stageVersionItemId and Project.finalVersionItemId;
+/// V11 → V12 adds PracticeItem.stepsRaw.
 enum GitaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
             GitaSchemaV2.self, GitaSchemaV3.self, GitaSchemaV4.self,
             GitaSchemaV5.self, GitaSchemaV6.self, GitaSchemaV7.self,
             GitaSchemaV8.self, GitaSchemaV9.self, GitaSchemaV10.self,
-            GitaSchemaV11.self,
+            GitaSchemaV11.self, GitaSchemaV12.self,
         ]
     }
 
@@ -737,6 +738,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV8.self, toVersion: GitaSchemaV9.self),
             .lightweight(fromVersion: GitaSchemaV9.self, toVersion: GitaSchemaV10.self),
             .lightweight(fromVersion: GitaSchemaV10.self, toVersion: GitaSchemaV11.self),
+            .lightweight(fromVersion: GitaSchemaV11.self, toVersion: GitaSchemaV12.self),
         ]
     }
 }

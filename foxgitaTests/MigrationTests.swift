@@ -55,7 +55,7 @@ struct MigrationTests {
         }
 
         // --- Phase 2: reopen under V10 + migration plan -------------------
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -114,7 +114,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -155,7 +155,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -201,7 +201,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -251,7 +251,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -287,7 +287,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -335,7 +335,7 @@ struct MigrationTests {
         let profileId = UUID()
 
         do {
-            let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+            let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
             let config = ModelConfiguration(schema: v10Schema, url: url)
             let container = try ModelContainer(
                 for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -370,7 +370,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -411,7 +411,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -447,7 +447,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v11Schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let v11Schema = Schema(versionedSchema: GitaSchemaV12.self)
         let config = ModelConfiguration(schema: v11Schema, url: url)
         let container = try ModelContainer(
             for: v11Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -458,5 +458,41 @@ struct MigrationTests {
         #expect(projects[0].name == "知足")
         #expect(projects[0].stageVersionItemId == nil)
         #expect(projects[0].finalVersionItemId == nil)
+    }
+
+    @Test func v11PracticeItemMigratesToV12WithEmptySteps() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v11-v12-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let itemId = UUID()
+        let profileId = UUID()
+        do {
+            let v11Schema = Schema(versionedSchema: GitaSchemaV11.self)
+            let config = ModelConfiguration(schema: v11Schema, url: url)
+            let container = try ModelContainer(for: v11Schema, configurations: [config])
+            let context = ModelContext(container)
+            context.insert(GitaSchemaV11.PracticeItem(
+                id: itemId,
+                profileId: profileId,
+                practiceDayKey: "2026-09-04",
+                title: "开放弦",
+                categoryRaw: PracticeCategory.left.rawValue,
+                durationSeconds: 0
+            ))
+            try context.save()
+        }
+
+        let v12Schema = Schema(versionedSchema: GitaSchemaV12.self)
+        let config = ModelConfiguration(schema: v12Schema, url: url)
+        let container = try ModelContainer(
+            for: v12Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
+        #expect(items.count == 1)
+        #expect(items[0].id == itemId)
+        #expect(items[0].title == "开放弦")
+        #expect(items[0].steps == [])
+        #expect(PracticeDetailState.initialSteps(items[0].steps) == ["新步骤"])
     }
 }

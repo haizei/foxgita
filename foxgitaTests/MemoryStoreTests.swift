@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MemoryStoreTests {
     private func makeStore() throws -> (MemoryStore, LocalProfile) {
-        let schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let schema = Schema(versionedSchema: GitaSchemaV12.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -42,7 +42,7 @@ struct MemoryStoreTests {
     }
 
     @Test func enablingBackfillsExistingCustomTaskAndClearAllStaysGone() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let schema = Schema(versionedSchema: GitaSchemaV12.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -128,7 +128,7 @@ struct MemoryStoreTests {
     }
 
     @Test func enablingMemoryKeepsBackfillErrorAfterReload() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV11.self)
+        let schema = Schema(versionedSchema: GitaSchemaV12.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]

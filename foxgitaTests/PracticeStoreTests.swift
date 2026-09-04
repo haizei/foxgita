@@ -20,7 +20,8 @@ struct PracticeStoreTests {
     private func seedTemplate(into repo: InMemoryPracticeRepository) throws {
         let template = TaskItem(
             id: "tpl-chord", title: "和弦模板", subtitle: "8 分钟",
-            category: .chord, targetMin: 8, sortOrder: 10, isTemplate: true
+            category: .chord, targetMin: 8, steps: ["按住 C", "切换 G"],
+            sortOrder: 10, isTemplate: true
         )
         try repo.add(template)
         try repo.save()
@@ -1003,7 +1004,8 @@ struct PracticeStoreTests {
         source: PracticeItemSource = .custom,
         originId: String? = "origin-1",
         bpm: Int? = 80,
-        timeSignature: String? = "4/4"
+        timeSignature: String? = "4/4",
+        steps: [String] = []
     ) -> PracticeItemInput {
         PracticeItemInput(
             title: title,
@@ -1011,7 +1013,8 @@ struct PracticeStoreTests {
             source: source,
             originId: originId,
             bpm: bpm,
-            timeSignature: timeSignature
+            timeSignature: timeSignature,
+            steps: steps
         )
     }
 
@@ -1042,6 +1045,7 @@ struct PracticeStoreTests {
         #expect(fetched.timeSignature == "4/4")
         #expect(fetched.durationSeconds == 0)
         #expect(fetched.note == "")
+        #expect(fetched.steps == ["新步骤"])
         #expect(fetched.practiceDayKey == PracticeDayKey.make(from: now, calendar: cal))
         #expect(fetched.createdAt == now)
         #expect(fetched.updatedAt == now)
@@ -1067,6 +1071,30 @@ struct PracticeStoreTests {
         #expect(fetched.durationSeconds == 600)
         #expect(fetched.note == "第二遍")
         #expect(try repo.practiceItems(profileId: profileId).filter { $0.id == created.id }.count == 1)
+    }
+
+    @Test func savePracticeItemPersistsEditedSteps() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let profileId = try activeProfileId(repo)
+        let cal = shanghai()
+        let created = try store.createPracticeItem(
+            input: makeInput(steps: ["熟悉下下上"]),
+            now: date(2026, 8, 26, calendar: cal),
+            calendar: cal
+        )
+
+        try store.savePracticeItem(
+            id: created.id,
+            durationSeconds: 120,
+            note: "第二遍",
+            now: date(2026, 8, 26, 12, calendar: cal),
+            steps: ["熟悉下下上", "60 BPM"]
+        )
+
+        let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
+        #expect(fetched.steps == ["熟悉下下上", "60 BPM"])
+        #expect(fetched.durationSeconds == 120)
     }
 
     @Test func savePracticeItemDoesNotChangePracticeDayKey() throws {
@@ -1219,6 +1247,7 @@ struct PracticeStoreTests {
         let media = try #require(store.reviewContext(recordingId: clip.id))
         #expect(media.taskTitle == item.title)
         #expect(media.note == item.note)
+        #expect(media.steps == item.steps)
         #expect(media.fileName == clip.fileName)
     }
 
@@ -1394,6 +1423,7 @@ struct PracticeStoreTests {
         #expect(created.sourceRaw == PracticeItemSource.custom.rawValue)
         #expect(created.originId == nil)
         #expect(created.durationSeconds == 0)
+        #expect(created.steps == ["新步骤"])
         #expect(created.practiceDayKey == "2026-08-26")
         #expect(try repo.tasks().contains { $0.id.hasPrefix("custom-") } == false)
     }
@@ -1427,6 +1457,7 @@ struct PracticeStoreTests {
         #expect(created.sourceRaw == PracticeItemSource.recommend.rawValue)
         #expect(created.bpm == template.defaultBpm)
         #expect(created.timeSignature == template.timeSig)
+        #expect(created.steps == ["按住 C", "切换 G"])
         #expect(try repo.task(id: "tpl-chord")?.isTemplate == true)
         #expect(try repo.task(id: "active-tpl-chord") == nil)
     }
@@ -1458,6 +1489,7 @@ struct PracticeStoreTests {
         #expect(created.categoryRaw == PracticeCategory.rhythm.rawValue)
         #expect(created.sourceRaw == PracticeItemSource.photo.rawValue)
         #expect(created.originId == PracticeTaskOrigin.photoOriginKey(generationId: generationId))
+        #expect(created.steps == ["熟悉下下上"])
         #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
     }
 
@@ -1488,6 +1520,7 @@ struct PracticeStoreTests {
         #expect(created.categoryRaw == PracticeCategory.scale.rawValue)
         #expect(created.sourceRaw == PracticeItemSource.next.rawValue)
         #expect(created.originId == PracticeTaskOrigin.nextOriginKey(generationId: generationId))
+        #expect(created.steps == ["熟悉下下上"])
         #expect(try repo.tasks().contains { $0.originKey == created.originId } == false)
     }
 
@@ -1752,6 +1785,7 @@ struct PracticeStoreTests {
         #expect(created.practiceDayKey == "2026-08-28")
         #expect(created.projectId == project.id)
         #expect(created.title == "副歌节奏")
+        #expect(created.steps == ["新步骤"])
         #expect(created.id != old.id)
         #expect(try repo.practiceItem(id: old.id, profileId: profileId)?.practiceDayKey == "2026-08-27")
         #expect(try repo.practiceItem(id: old.id, profileId: profileId)?.durationSeconds == 0)

@@ -41,9 +41,17 @@ enum PracticeDetailState {
         elapsedSeconds: Int,
         note: String,
         storedDurationSeconds: Int,
-        storedNote: String
+        storedNote: String,
+        steps: [String] = [],
+        storedSteps: [String] = []
     ) -> Bool {
-        max(0, elapsedSeconds) != max(0, storedDurationSeconds) || note != storedNote
+        max(0, elapsedSeconds) != max(0, storedDurationSeconds)
+            || note != storedNote
+            || steps != storedSteps
+    }
+
+    static func initialSteps(_ stored: [String]) -> [String] {
+        stored.isEmpty ? [String(localized: "新步骤")] : stored
     }
 
     static func shouldAutoSaveOnDisappear(mode: PracticeDetailMode, isDirty: Bool) -> Bool {
@@ -96,6 +104,8 @@ struct PracticeDetailView: View {
     @State private var noteText = ""
     @State private var storedNote = ""
     @State private var storedDurationSeconds = 0
+    @State private var steps: [String] = []
+    @State private var storedSteps: [String] = []
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
     @State private var toast: String?
@@ -137,7 +147,9 @@ struct PracticeDetailView: View {
             elapsedSeconds: practiceTimer.elapsedSec,
             note: noteText,
             storedDurationSeconds: storedDurationSeconds,
-            storedNote: storedNote
+            storedNote: storedNote,
+            steps: steps,
+            storedSteps: storedSteps
         )
     }
 
@@ -202,6 +214,11 @@ struct PracticeDetailView: View {
                 storedDurationSeconds = PracticeDetailState.initialElapsedSeconds(
                     storedDurationSeconds: item.durationSeconds
                 )
+                let loadedSteps = mode == .editable
+                    ? PracticeDetailState.initialSteps(item.steps)
+                    : item.steps
+                steps = loadedSteps
+                storedSteps = loadedSteps
                 practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
                 metronome.setBpm(item.bpm ?? 80)
                 if let projectId = item.projectId,
@@ -338,6 +355,9 @@ struct PracticeDetailView: View {
 
                     metronomeCard
                     timerCard
+                    if mode == .editable || !steps.isEmpty {
+                        stepsCard
+                    }
                     toolsRow(item)
 
                     if recorder.isRecording {
@@ -479,6 +499,57 @@ struct PracticeDetailView: View {
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
+    }
+
+    private var stepsCard: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("练习步骤").font(.system(size: 18, weight: .bold))
+                Spacer()
+                if mode == .editable {
+                    Button("新增步骤") { steps.append(String(localized: "新步骤")) }
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                }
+            }
+            .padding(.bottom, 8)
+            ForEach(Array(steps.enumerated()), id: \.offset) { index, _ in
+                HStack(spacing: 10) {
+                    Text("\(index + 1)")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(minWidth: 28, minHeight: 28)
+                        .background(GitaTheme.brand50)
+                        .clipShape(Circle())
+                    TextField("步骤", text: binding(index))
+                        .font(.system(size: 14))
+                        .disabled(mode == .historical)
+                    if index < steps.count,
+                       let minutes = AIPracticePresentation.stepParts(steps[index]).minutes {
+                        Text("\(minutes) 分钟")
+                            .font(.system(size: 12))
+                            .foregroundStyle(GitaTheme.textSecondary)
+                    }
+                    if mode == .editable && steps.count > 1 {
+                        Button("删除") { steps.remove(at: index) }
+                            .font(.system(size: 12))
+                            .foregroundStyle(GitaTheme.textTertiary)
+                    }
+                }
+                .padding(.vertical, 10)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func binding(_ index: Int) -> Binding<String> {
+        Binding(
+            get: { index < steps.count ? steps[index] : "" },
+            set: { if index < steps.count { steps[index] = $0 } }
+        )
     }
 
     /// Historical items stay view-only: notes, existing clips, and review remain;
@@ -928,10 +999,12 @@ struct PracticeDetailView: View {
                 id: item.id,
                 durationSeconds: practiceTimer.elapsedSec,
                 note: noteText,
-                now: Date()
+                now: Date(),
+                steps: steps
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
+            storedSteps = steps
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -953,6 +1026,7 @@ struct PracticeDetailView: View {
         metronome.stop()
         practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
         noteText = storedNote
+        steps = storedSteps
     }
 
     private func complete(_ item: PracticeItem) {
