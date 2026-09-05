@@ -227,8 +227,9 @@ struct ProjectCreateFromPracticeView: View {
     private func prefillIfNeeded() {
         guard !didPrefill, let item else { return }
         didPrefill = true
-        name = item.title
-        initialName = item.title
+        let prefill = ProjectSetupRules.clamp(item.title, max: ProjectSetupRules.nameMax)
+        name = prefill
+        initialName = prefill
     }
 
     private func requestClose() {

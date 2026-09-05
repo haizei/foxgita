@@ -81,6 +81,7 @@ struct ProjectDetailView: View {
                         VStack(alignment: .leading, spacing: 20) {
                             if hasEffectivePractice {
                                 identitySection(snapshot)
+                                setupLaterCard(snapshot)
                                 evidenceSection
                                 if ProjectRules.showsThisTimeCard(snapshot) {
                                     thisTimeSection(snapshot)
@@ -447,7 +448,6 @@ struct ProjectDetailView: View {
     }
 
     private func identitySection(_ project: ProjectSnapshot) -> some View {
-        let stage = project.stageRaw.trimmingCharacters(in: .whitespacesAndNewlines)
         let showStagePill = ProjectRules.showsVersionPill(
             itemId: project.stageVersionItemId,
             projectId: project.id,
@@ -462,11 +462,8 @@ struct ProjectDetailView: View {
             Text(project.name)
                 .font(GitaFont.title())
                 .foregroundStyle(GitaTheme.textPrimary)
-            if !stage.isEmpty || showStagePill || showFinalPill {
+            if showStagePill || showFinalPill {
                 ChipWrap(spacing: 8) {
-                    if !stage.isEmpty {
-                        identityPill(stage)
-                    }
                     if showStagePill {
                         identityPill("阶段成果")
                     }
@@ -475,9 +472,6 @@ struct ProjectDetailView: View {
                     }
                 }
             }
-            Text(project.goal)
-                .font(GitaFont.body())
-                .foregroundStyle(GitaTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

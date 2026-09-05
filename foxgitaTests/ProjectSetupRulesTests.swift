@@ -71,6 +71,14 @@ struct ProjectSetupRulesTests {
         #expect(ProjectSetupRules.isFromPracticeDirty(name: "  ", initialName: "《知足》主歌") == true)
     }
 
+    @Test func fromPracticePrefillClampKeepsClean() {
+        let title = String(repeating: "啊", count: 41)
+        let prefill = ProjectSetupRules.clamp(title, max: ProjectSetupRules.nameMax)
+        #expect(prefill.count == ProjectSetupRules.nameMax)
+        #expect(ProjectSetupRules.isFromPracticeDirty(name: prefill, initialName: prefill) == false)
+        #expect(ProjectSetupRules.isFromPracticeDirty(name: prefill, initialName: title) == true)
+    }
+
     @Test func hasGoal() {
         #expect(ProjectSetupRules.hasGoal("") == false)
         #expect(ProjectSetupRules.hasGoal("  ") == false)
