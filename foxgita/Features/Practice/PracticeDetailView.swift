@@ -129,6 +129,7 @@ struct PracticeDetailView: View {
     @State private var player = AudioPlayerService()
     @State private var videoPlayURL: URL?
     @State private var showCreateFromPracticeSheet = false
+    @State private var metronomeSheetAnchor: MetronomeSheetAnchor?
     @FocusState private var noteFocused: Bool
 
     init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
@@ -370,7 +371,12 @@ struct PracticeDetailView: View {
 
                     MetronomeDisplayCard(
                         metronome: metronome,
-                        timeSignature: item.timeSignature ?? "4/4"
+                        timeSignature: item.timeSignature ?? "4/4",
+                        onEntryTap: { anchor in
+                            guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+                            noteFocused = false
+                            metronomeSheetAnchor = anchor
+                        }
                     )
                     timerCard
                     if mode == .editable || !steps.isEmpty {
@@ -447,6 +453,19 @@ struct PracticeDetailView: View {
                 }
             )
         }
+        .sheet(item: $metronomeSheetAnchor) { anchor in
+            MetronomeSettingsSheet(
+                metronome: metronome,
+                anchor: anchor,
+                meterText: normalizedTimeSignature(item.timeSignature),
+                onDone: { metronomeSheetAnchor = nil }
+            )
+        }
+    }
+
+    private func normalizedTimeSignature(_ raw: String?) -> String {
+        let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return trimmed.isEmpty ? "4/4" : trimmed
     }
 
     private var timerCard: some View {
