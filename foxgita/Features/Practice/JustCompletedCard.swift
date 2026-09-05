@@ -6,6 +6,7 @@ struct JustCompletedCard: View {
     var summary: String
     var onPracticeAgain: () -> Void
     var onViewRecord: () -> Void
+    var onCreateProject: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -34,6 +35,13 @@ struct JustCompletedCard: View {
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
+            if let onCreateProject {
+                Button("建立长期项目", action: onCreateProject)
+                    .font(.system(size: 14))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .frame(maxWidth: .infinity)
+                    .buttonStyle(.plain)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)

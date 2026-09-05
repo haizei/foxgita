@@ -24,6 +24,7 @@ struct PracticeView: View {
     @State private var openSwipeRowId: String?
     @State private var deleteItemId: UUID?
     @State private var editingItemId: UUID?
+    @State private var showCreateFromPracticeItemId: UUID?
 
     private var calendar: Calendar { .current }
     private var isSelectedToday: Bool { calendar.isDateInToday(selectedDay) }
@@ -41,6 +42,13 @@ struct PracticeView: View {
         return practiceItems
             .filter { $0.profileId == profileId }
             .map(PracticeStore.snapshot(from:))
+    }
+
+    private var allSnapshotIds: [UUID] { allSnapshots.map(\.id) }
+
+    private var justCompletedItem: PracticeItemSnapshot? {
+        guard isSelectedToday, let id = router.lastCompletedPracticeItemId else { return nil }
+        return allSnapshots.first { $0.id == id }
     }
 
     private var homeState: PracticeHomeState {
@@ -94,6 +102,8 @@ struct PracticeView: View {
                             weekAnchor: $weekAnchor
                         )
 
+                        justCompletedCard
+
                         HStack {
                             Text(sectionTitle)
                                 .font(.system(size: 18, weight: .bold))
@@ -135,9 +145,18 @@ struct PracticeView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .onAppear { applyTodaySnap() }
+            .onAppear {
+                applyTodaySnap()
+                clearStaleJustCompletedIfNeeded()
+            }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { applyTodaySnap() }
+            }
+            .onChange(of: router.lastCompletedPracticeItemId) { _, _ in
+                clearStaleJustCompletedIfNeeded()
+            }
+            .onChange(of: allSnapshotIds) { _, _ in
+                clearStaleJustCompletedIfNeeded()
             }
             .navigationBarHidden(true)
             .navigationDestination(for: PracticeRoute.self) { route in
@@ -221,6 +240,16 @@ struct PracticeView: View {
                     Text("删除后这条练习会从今日列表消失。")
                 }
             }
+            .sheet(
+                isPresented: Binding(
+                    get: { showCreateFromPracticeItemId != nil },
+                    set: { if !$0 { showCreateFromPracticeItemId = nil } }
+                )
+            ) {
+                if let itemId = showCreateFromPracticeItemId {
+                    ProjectCreateFromPracticeView(itemId: itemId, fromPracticeTab: true)
+                }
+            }
             .sheet(item: editSheetItem) { item in
                 EditPracticeItemSheet(
                     title: item.title,
@@ -245,6 +274,37 @@ struct PracticeView: View {
                     openSwipeRowId = nil
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var justCompletedCard: some View {
+        if let item = justCompletedItem {
+            let hasNote = !item.note.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let createProject: (() -> Void)? = item.projectId == nil
+                ? {
+                    RecordAnalytics.projectCreateEntryViewed(source: "practice_complete")
+                    RecordAnalytics.projectCreateStarted(source: "practice_complete")
+                    showCreateFromPracticeItemId = item.id
+                }
+                : nil
+            JustCompletedCard(
+                title: item.title,
+                minutes: JustCompletedCopy.minutesLabel(
+                    durationSec: item.durationSeconds,
+                    hasNote: hasNote,
+                    mediaCount: item.recordingCount
+                ),
+                summary: {
+                    var parts: [String] = []
+                    if hasNote { parts.append("笔记") }
+                    if item.recordingCount > 0 { parts.append("录音 \(item.recordingCount)") }
+                    return parts.joined(separator: " · ")
+                }(),
+                onPracticeAgain: { router.practicePath.append(.detail(itemId: item.id)) },
+                onViewRecord: { router.practicePath.append(.detail(itemId: item.id)) },
+                onCreateProject: createProject
+            )
         }
     }
 
@@ -340,6 +400,13 @@ struct PracticeView: View {
         let clamped = max(0, seconds)
         guard clamped > 0 else { return 0 }
         return max(1, Int((Double(clamped) / 60.0).rounded(.up)))
+    }
+
+    private func clearStaleJustCompletedIfNeeded() {
+        guard isSelectedToday, router.lastCompletedPracticeItemId != nil, justCompletedItem == nil else {
+            return
+        }
+        router.clearJustCompleted()
     }
 
     private func applyTodaySnap() {
