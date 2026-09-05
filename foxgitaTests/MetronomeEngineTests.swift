@@ -60,4 +60,24 @@ struct MetronomeEngineTests {
         #expect(!metronome.isPlaying)
         #expect(!metronome.hasPump)
     }
+
+    @Test func currentBeatInBarStartsAtZero() {
+        let metronome = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
+        #expect(metronome.currentBeatInBar == 0)
+    }
+
+    @Test func stopResetsCurrentBeatInBar() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.stop()
+        #expect(metronome.currentBeatInBar == 0)
+    }
+
+    @Test func startResetsCurrentBeatInBar() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.stop()
+        try metronome.start()
+        #expect(metronome.currentBeatInBar == 0)
+    }
 }

@@ -355,22 +355,9 @@ struct PracticeDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     if !item.subtitle.isEmpty,
                        !AIPracticePresentation.isAIGenerated(subtitle: item.subtitle) {
-                        HStack {
-                            Text(item.subtitle)
-                            Spacer()
-                            if let timeSig = item.timeSignature, !timeSig.isEmpty {
-                                Text(timeSig)
-                            }
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(GitaTheme.textSecondary)
-                    } else if let timeSig = item.timeSignature, !timeSig.isEmpty {
-                        HStack {
-                            Spacer()
-                            Text(timeSig)
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(GitaTheme.textSecondary)
+                        Text(item.subtitle)
+                            .font(.system(size: 12))
+                            .foregroundStyle(GitaTheme.textSecondary)
                     }
 
                     if let resume = storedResumeState,
@@ -381,7 +368,10 @@ struct PracticeDetailView: View {
                             .accessibilityLabel(Text(line))
                     }
 
-                    metronomeCard
+                    MetronomeDisplayCard(
+                        metronome: metronome,
+                        timeSignature: item.timeSignature ?? "4/4"
+                    )
                     timerCard
                     if mode == .editable || !steps.isEmpty {
                         stepsCard
@@ -457,42 +447,6 @@ struct PracticeDetailView: View {
                 }
             )
         }
-    }
-
-    private var metronomeCard: some View {
-        VStack(spacing: 14) {
-            HStack {
-                Text("节拍器").font(GitaFont.headline())
-                Spacer()
-                Text("木质短音")
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textSecondary)
-            }
-            HStack {
-                circleBtn("－", label: String(localized: "降低 1 BPM")) {
-                    noteFocused = false
-                    metronome.bump(-1)
-                }
-                VStack(spacing: 0) {
-                    Text("\(metronome.bpm)")
-                        .font(GitaFont.timer())
-                    Text("BPM")
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                }
-                .frame(maxWidth: .infinity)
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(Text("当前速度 \(metronome.bpm) BPM"))
-                circleBtn("＋", label: String(localized: "提高 1 BPM"), accent: true) {
-                    noteFocused = false
-                    metronome.bump(1)
-                }
-            }
-        }
-        .padding(18)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
-        .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
     }
 
     private var timerCard: some View {
@@ -895,21 +849,6 @@ struct PracticeDetailView: View {
         let pattern: [CGFloat] = [8, 14, 20, 12, 22, 10, 18, 14]
         let base = pattern[index % pattern.count]
         return recorder.isPaused ? max(6, base * 0.45) : base
-    }
-
-    private func circleBtn(
-        _ title: String, label: String, accent: Bool = false, action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(accent ? GitaTheme.brand500 : GitaTheme.textSecondary)
-                .frame(minWidth: 48, minHeight: 48)
-                .background(accent ? GitaTheme.brand50 : GitaTheme.bgSubtle)
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(label))
     }
 
     private func tool(
