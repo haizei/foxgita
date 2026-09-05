@@ -25,8 +25,9 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
         let emptyToday = app.staticTexts["今天还没加练习"].exists
-        let hasPracticedRow = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS '已练'")
+        // Today's cards read "N 分钟" (target); "已练 N 分钟" only appears on past days.
+        let hasPracticedRow = app.descendants(matching: .any).matching(
+            NSPredicate(format: "label ENDSWITH '分钟，开始' OR label ENDSWITH '分钟，继续'")
         ).firstMatch.exists
         XCTAssertTrue(
             emptyToday || hasPracticedRow,
@@ -115,7 +116,7 @@ final class PracticeFlowUITests: XCTestCase {
         if app.buttons["返回"].waitForExistence(timeout: 1) {
             app.buttons["返回"].tap()
         }
-        let row = app.descendants(matching: .any)["\(name)，已练 0 分钟"].firstMatch
+        let row = app.descendants(matching: .any)["\(name)，10 分钟，开始"].firstMatch
         guard row.waitForExistence(timeout: 2) else { return }
         row.swipeLeft()
         let swipeDelete = app.buttons["删除"].firstMatch

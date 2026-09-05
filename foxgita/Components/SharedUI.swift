@@ -50,6 +50,10 @@ struct StreakCard: View {
 
     @State private var weekStarts: [Date]
     @State private var scrolledWeek: Date?
+    /// Only a user swipe may move `weekAnchor`. Initial layout and programmatic
+    /// `scrollPosition` writes also report positions; committing those once
+    /// dragged `selectedDay` 26 weeks back and hid the add-practice button.
+    @State private var userIsScrolling = false
     private var calendar: Calendar { .current }
 
     init(
@@ -85,7 +89,24 @@ struct StreakCard: View {
                 .scrollTargetLayout()
             }
             .scrollTargetBehavior(.viewAligned)
+            // The initial `scrollPosition` value is not honoured on first layout
+            // inside the home ScrollView; anchor trailing so the current week
+            // (last page) shows without a programmatic scroll.
+            .defaultScrollAnchor(.trailing)
             .scrollPosition(id: $scrolledWeek)
+            .onScrollPhaseChange { _, newPhase in
+                switch newPhase {
+                case .interacting, .decelerating:
+                    userIsScrolling = true
+                case .idle:
+                    if userIsScrolling {
+                        userIsScrolling = false
+                        commitScrolledWeek()
+                    }
+                default:
+                    break
+                }
+            }
             .frame(height: 62)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("week-pager")
@@ -97,9 +118,8 @@ struct StreakCard: View {
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
         .shadow(color: GitaTheme.shadowCard, radius: 10, y: 6)
         .onAppear { syncPager() }
-        .onChange(of: scrolledWeek) { _, newStart in
-            guard let newStart, !calendar.isDate(newStart, inSameDayAs: weekAnchor) else { return }
-            weekAnchor = newStart
+        .onChange(of: scrolledWeek) { _, _ in
+            if userIsScrolling { commitScrolledWeek() }
         }
         .onChange(of: weekAnchor) { _, newStart in
             if let match = StatsAggregator.matchingWeekStart(newStart, in: weekStarts, calendar: calendar),
@@ -113,6 +133,12 @@ struct StreakCard: View {
                 selectedDay = next
             }
         }
+    }
+
+    private func commitScrolledWeek() {
+        guard let newStart = scrolledWeek,
+              !calendar.isDate(newStart, inSameDayAs: weekAnchor) else { return }
+        weekAnchor = newStart
     }
 
     private func syncPager() {
