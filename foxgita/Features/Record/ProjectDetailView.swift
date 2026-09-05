@@ -23,6 +23,9 @@ struct ProjectDetailView: View {
     @State private var creatingTodayLock = false
     @State private var showCompleteConfirm = false
     @State private var showDeleteConfirm = false
+    @State private var showGoalEditor = false
+    @State private var showStagePicker = false
+    @State private var goalDraft = ""
     @State private var pickerKind: ProjectVersionKind?
     @State private var versionWriteLock = false
     @State private var pendingClearKind: ProjectVersionKind?
@@ -64,6 +67,10 @@ struct ProjectDetailView: View {
         profiles.first?.pinnedProjectId == projectId
     }
 
+    private var hasEffectivePractice: Bool {
+        !ProjectRules.associatedEffectiveItems(projectId: projectId, in: allSnapshots).isEmpty
+    }
+
     var body: some View {
         ZStack {
             PageBackground()
@@ -72,14 +79,20 @@ struct ProjectDetailView: View {
                 if let snapshot {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
-                            identitySection(snapshot)
-                            evidenceSection
-                            if ProjectRules.showsThisTimeCard(snapshot) {
-                                thisTimeSection(snapshot)
+                            if hasEffectivePractice {
+                                identitySection(snapshot)
+                                evidenceSection
+                                if ProjectRules.showsThisTimeCard(snapshot) {
+                                    thisTimeSection(snapshot)
+                                }
+                                versionSlotsSection(snapshot)
+                                trajectoryLink
+                                cumulativeLabel
+                            } else {
+                                emptyIdentityCard(snapshot)
+                                setupLaterCard(snapshot)
+                                firstPracticeCard
                             }
-                            versionSlotsSection(snapshot)
-                            trajectoryLink
-                            cumulativeLabel
                         }
                         .padding(.horizontal, GitaTheme.pagePadding)
                         .padding(.bottom, 32)
@@ -95,7 +108,8 @@ struct ProjectDetailView: View {
             if let toast {
                 VStack {
                     Spacer()
-                    ToastBanner(text: toast).padding(.bottom, 40)
+                    ToastBanner(text: toast)
+                        .padding(.bottom, hasEffectivePractice ? 40 : 120)
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -166,6 +180,21 @@ struct ProjectDetailView: View {
                 applyVersion(kind: kind, itemId: itemId)
             }
         }
+        .sheet(isPresented: $showGoalEditor) {
+            goalEditorSheet
+        }
+        .confirmationDialog("当前阶段", isPresented: $showStagePicker, titleVisibility: .visible) {
+            ForEach(ProjectSetupRules.stages, id: \.self) { stage in
+                Button(stage) { saveStage(stage) }
+            }
+            Button("不选择") { saveStage("") }
+            Button("取消", role: .cancel) {}
+        }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if snapshot != nil, !hasEffectivePractice, snapshot?.status == .active {
+                emptyPracticeFooter
+            }
+        }
     }
 
     private var header: some View {
@@ -216,6 +245,205 @@ struct ProjectDetailView: View {
         }
         .frame(minHeight: 56)
         .padding(.horizontal, GitaTheme.pagePadding)
+    }
+
+    private func emptyIdentityCard(_ project: ProjectSnapshot) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(project.name)
+                    .font(GitaFont.title())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(emptyStatusLabel(project))
+                    .font(GitaFont.caption(.medium))
+                    .foregroundStyle(project.status == .active ? GitaTheme.brand500 : GitaTheme.textSecondary)
+            }
+            Text("刚刚创建 · 还没有练习记录")
+                .font(GitaFont.footnote())
+                .foregroundStyle(GitaTheme.textSecondary)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+    }
+
+    private func emptyStatusLabel(_ project: ProjectSnapshot) -> String {
+        switch project.status {
+        case .active: return "进行中"
+        case .completed: return "已完成"
+        case .archived: return "暂不练习"
+        }
+    }
+
+    private func setupLaterCard(_ project: ProjectSnapshot) -> some View {
+        let goal = ProjectSetupRules.trimmed(project.goal)
+        let stage = ProjectSetupRules.trimmed(project.stageRaw)
+        return VStack(spacing: 0) {
+            Button {
+                goalDraft = project.goal
+                showGoalEditor = true
+            } label: {
+                laterFillRow(
+                    label: "完成标准",
+                    trailing: goal.isEmpty ? "添加  ›" : "编辑  ›",
+                    trailingColor: GitaTheme.brand500,
+                    summary: goal.isEmpty ? nil : goal
+                )
+            }
+            .buttonStyle(.plain)
+
+            Divider()
+                .overlay(GitaTheme.borderSubtle)
+                .padding(.leading, 18)
+
+            Button {
+                showStagePicker = true
+            } label: {
+                laterFillRow(
+                    label: "当前阶段",
+                    trailing: stage.isEmpty ? "未设置  ›" : "\(stage)  ›",
+                    trailingColor: stage.isEmpty ? GitaTheme.textSecondary : GitaTheme.textPrimary,
+                    summary: nil
+                )
+            }
+            .buttonStyle(.plain)
+        }
+        .background(GitaTheme.bgSurface)
+        .overlay(
+            RoundedRectangle(cornerRadius: GitaTheme.radius16)
+                .stroke(GitaTheme.borderSubtle, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+    }
+
+    private func laterFillRow(
+        label: String,
+        trailing: String,
+        trailingColor: Color,
+        summary: String?
+    ) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(GitaFont.callout(.medium))
+                .foregroundStyle(GitaTheme.textPrimary)
+            Spacer(minLength: 8)
+            if let summary {
+                Text(summary)
+                    .font(GitaFont.footnote())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+            }
+            Text(trailing)
+                .font(GitaFont.footnote())
+                .foregroundStyle(trailingColor)
+                .fixedSize()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .contentShape(Rectangle())
+    }
+
+    private var firstPracticeCard: some View {
+        VStack(spacing: 12) {
+            Text("第一次")
+                .font(GitaFont.caption(.medium))
+                .foregroundStyle(GitaTheme.brand500)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 7)
+                .background(GitaTheme.brand50)
+                .clipShape(Capsule())
+            Text("从一次真实练习开始")
+                .font(GitaFont.headline())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .multilineTextAlignment(.center)
+            Text("练习完成后，时间、笔记和录音会汇集到项目里。")
+                .font(GitaFont.footnote())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 24)
+        .padding(.bottom, 22)
+        .frame(maxWidth: .infinity)
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+    }
+
+    private var emptyPracticeFooter: some View {
+        VStack(spacing: 8) {
+            Text("项目已创建，可以稍后再练")
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                createTodayPractice(replaceStack: true)
+            } label: {
+                Text("开始第一次练习")
+                    .font(GitaFont.body(.bold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(GitaTheme.brand500)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, GitaTheme.pagePadding)
+        .padding(.top, 10)
+        .padding(.bottom, 26)
+        .background(GitaTheme.bgDefault)
+    }
+
+    private var goalEditorSheet: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button("取消") { showGoalEditor = false }
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .frame(minWidth: 44, alignment: .leading)
+                Spacer(minLength: 0)
+                Text("完成标准")
+                    .font(GitaFont.body(.bold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Spacer(minLength: 0)
+                Button("保存") { saveGoal() }
+                    .font(GitaFont.callout(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(minWidth: 44, alignment: .trailing)
+            }
+            .padding(.horizontal, GitaTheme.s24)
+            .frame(height: 56)
+
+            TextField("", text: $goalDraft, axis: .vertical)
+                .font(GitaFont.callout())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .tint(GitaTheme.brand500)
+                .textFieldStyle(.plain)
+                .lineLimit(3...6)
+                .frame(minHeight: 96, alignment: .topLeading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(GitaTheme.bgSurface)
+                .overlay(
+                    RoundedRectangle(cornerRadius: GitaTheme.radius12)
+                        .stroke(GitaTheme.borderSubtle, lineWidth: 1)
+                )
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+                .padding(.horizontal, GitaTheme.s24)
+                .onChange(of: goalDraft) { _, newValue in
+                    let clamped = ProjectSetupRules.clamp(newValue, max: ProjectSetupRules.goalMax)
+                    if clamped != newValue {
+                        goalDraft = clamped
+                    }
+                }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .background(GitaTheme.bgDefault)
+        .presentationDetents([.medium])
     }
 
     private func identitySection(_ project: ProjectSnapshot) -> some View {
@@ -416,7 +644,7 @@ struct ProjectDetailView: View {
 
     private var createTodayButton: some View {
         Button {
-            createTodayPractice()
+            createTodayPractice(replaceStack: false)
         } label: {
             Text("创建今天的练习项")
                 .font(GitaFont.callout(.bold))
@@ -538,11 +766,15 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func createTodayPractice() {
+    private func createTodayPractice(replaceStack: Bool) {
         guard !creatingTodayLock else { return }
         creatingTodayLock = true
         defer { creatingTodayLock = false }
-        RecordAnalytics.projectPracticeCreateTapped(projectId: projectId.uuidString)
+        if replaceStack {
+            RecordAnalytics.projectDetailFirstPracticeClicked(projectId: projectId.uuidString)
+        } else {
+            RecordAnalytics.projectPracticeCreateTapped(projectId: projectId.uuidString)
+        }
         do {
             let item = try store.createTodayPracticeItem(projectId: projectId, now: Date(), calendar: calendar)
             RecordAnalytics.projectPracticeCreated(
@@ -550,7 +782,11 @@ struct ProjectDetailView: View {
                 practiceItemId: item.id.uuidString,
                 result: "success"
             )
-            router.recordPath.append(.practiceDetail(itemId: item.id))
+            if replaceStack {
+                router.replaceLastRecordRoute(.practiceDetail(itemId: item.id))
+            } else {
+                router.recordPath.append(.practiceDetail(itemId: item.id))
+            }
         } catch {
             RecordAnalytics.projectPracticeCreated(
                 projectId: projectId.uuidString,
@@ -558,6 +794,23 @@ struct ProjectDetailView: View {
                 result: "failure"
             )
             showToast(String(localized: "创建失败，请重试"))
+        }
+    }
+
+    private func saveGoal() {
+        do {
+            try store.updateProjectGoal(id: projectId, goal: goalDraft, now: Date())
+            showGoalEditor = false
+        } catch {
+            showToast(String(localized: "操作失败，请重试"))
+        }
+    }
+
+    private func saveStage(_ raw: String) {
+        do {
+            try store.updateProjectStage(id: projectId, stageRaw: raw, now: Date())
+        } catch {
+            showToast(String(localized: "操作失败，请重试"))
         }
     }
 

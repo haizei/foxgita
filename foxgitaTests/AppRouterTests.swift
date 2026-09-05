@@ -135,6 +135,15 @@ struct AppRouterTests {
         #expect(router.recordPath == [.projectDetail(projectId: id)])
     }
 
+    @Test func replaceLastRecordRouteReplacesProjectDetailWithPractice() {
+        let router = AppRouter()
+        let projectId = UUID()
+        let itemId = UUID()
+        router.recordPath = [.projectDetail(projectId: projectId)]
+        router.replaceLastRecordRoute(.practiceDetail(itemId: itemId))
+        #expect(router.recordPath == [.practiceDetail(itemId: itemId)])
+    }
+
     @Test func presentCreatedProjectReplacesCreateOnRecordStack() {
         let router = AppRouter()
         let id = UUID()
