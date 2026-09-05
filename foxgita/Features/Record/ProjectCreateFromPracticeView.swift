@@ -295,7 +295,7 @@ struct ProjectCreateFromPracticeView: View {
                     hadPreviousProject: hadPreviousProject
                 )
                 router.presentCreatedProject(projectId, fromPracticeTab: fromPracticeTab)
-                dismiss()
+                if fromPracticeTab { dismiss() }
                 return
             }
 
@@ -305,7 +305,7 @@ struct ProjectCreateFromPracticeView: View {
                 hadPreviousProject: hadPreviousProject
             )
             router.presentCreatedProject(projectId, fromPracticeTab: fromPracticeTab)
-            dismiss()
+            if fromPracticeTab { dismiss() }
         } catch {
             isSubmitting = false
             if createdProjectId != nil, link {
