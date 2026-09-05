@@ -14,8 +14,8 @@ struct MetronomeDisplayCard: View {
         return trimmed.isEmpty ? "4/4" : trimmed
     }
 
-    private var highlightedBeat: Int {
-        metronome.isPlaying ? metronome.currentBeatInBar : 0
+    private var activeBeat: Int? {
+        metronome.isPlaying ? metronome.currentBeatInBar : nil
     }
 
     var body: some View {
@@ -82,12 +82,12 @@ struct MetronomeDisplayCard: View {
             }
         }
         .frame(height: 58)
-        .animation(.easeInOut(duration: 0.12), value: highlightedBeat)
+        .animation(.easeInOut(duration: 0.12), value: activeBeat)
         .animation(.easeInOut(duration: 0.12), value: metronome.isPlaying)
     }
 
     private func beatBar(index: Int) -> some View {
-        let isActive = index == highlightedBeat
+        let isActive = activeBeat == index
         let fill = barFill(for: index, isActive: isActive)
         return RoundedRectangle(cornerRadius: GitaTheme.radius8)
             .fill(GitaTheme.brand50)
@@ -109,11 +109,12 @@ struct MetronomeDisplayCard: View {
     private var beatTrack: some View {
         HStack(spacing: 0) {
             ForEach(0..<4, id: \.self) { index in
+                let emphasized = trackDotEmphasized(index: index)
                 Circle()
-                    .fill(index == highlightedBeat ? GitaTheme.brand500 : GitaTheme.borderInactive)
+                    .fill(emphasized ? GitaTheme.brand500 : GitaTheme.borderInactive)
                     .frame(
-                        width: index == highlightedBeat ? 8 : 6,
-                        height: index == highlightedBeat ? 8 : 6
+                        width: emphasized ? 8 : 6,
+                        height: emphasized ? 8 : 6
                     )
                     .frame(maxWidth: .infinity)
             }
@@ -122,7 +123,12 @@ struct MetronomeDisplayCard: View {
         .padding(.horizontal, GitaTheme.s8)
         .background(GitaTheme.bgSubtle)
         .clipShape(Capsule())
-        .animation(.easeInOut(duration: 0.12), value: highlightedBeat)
+        .animation(.easeInOut(duration: 0.12), value: activeBeat)
+    }
+
+    private func trackDotEmphasized(index: Int) -> Bool {
+        if let activeBeat { return index == activeBeat }
+        return index == 0
     }
 
     private func metricLabel(_ text: String) -> some View {
