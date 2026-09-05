@@ -128,7 +128,7 @@ struct PracticeDetailView: View {
     @State private var pendingCamera = false
     @State private var player = AudioPlayerService()
     @State private var videoPlayURL: URL?
-    @State private var showCreateProjectSheet = false
+    @State private var showCreateFromPracticeSheet = false
     @FocusState private var noteFocused: Bool
 
     init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
@@ -299,8 +299,8 @@ struct PracticeDetailView: View {
             )
             .ignoresSafeArea()
         }
-        .sheet(isPresented: $showCreateProjectSheet) {
-            ProjectEditorView(mode: .create, createSource: "practice_detail")
+        .sheet(isPresented: $showCreateFromPracticeSheet) {
+            ProjectCreateFromPracticeView(itemId: itemId, fromPracticeTab: true)
         }
     }
 
@@ -1091,6 +1091,7 @@ struct PracticeDetailView: View {
             || !item.recordings.filter({ $0.deletedAt == nil }).isEmpty
         if hadContent {
             Haptics.success()
+            router.lastCompletedPracticeItemId = item.id
         } else if router.practiceToast == nil {
             router.practiceToast = String(localized: "这次没有留下记录")
         }
@@ -1126,7 +1127,6 @@ struct PracticeDetailView: View {
                             Button(project.name) { assignProject(project.id, to: item) }
                         }
                     }
-                    Button("新建并加入") { startCreateAndJoin() }
                 } else {
                     Menu("更换项目") {
                         ForEach(candidates.filter { $0.id != currentId }, id: \.id) { project in
@@ -1135,6 +1135,7 @@ struct PracticeDetailView: View {
                     }
                     Button("移出项目") { assignProject(nil, to: item) }
                 }
+                Button("建立长期项目") { startCreateAndJoin() }
             } label: {
                 HStack(spacing: 4) {
                     Text(label)
@@ -1149,11 +1150,12 @@ struct PracticeDetailView: View {
     }
 
     private func startCreateAndJoin() {
+        RecordAnalytics.projectCreateEntryViewed(source: "practice_detail")
         RecordAnalytics.projectCreateStarted(source: "practice_detail")
         if openedFromRecord {
             router.recordPath.append(.projectCreateFromPractice(itemId: itemId))
         } else {
-            showCreateProjectSheet = true
+            showCreateFromPracticeSheet = true
         }
     }
 
