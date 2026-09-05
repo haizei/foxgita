@@ -210,6 +210,11 @@ struct PracticeView: View {
                 router.practiceToast = nil
                 showToast(message)
             }
+            .onChange(of: router.selectedTab) { _, tab in
+                if tab != .practice {
+                    showCreateFromPracticeItemId = nil
+                }
+            }
             .confirmationDialog(
                 "删除练习",
                 isPresented: Binding(
