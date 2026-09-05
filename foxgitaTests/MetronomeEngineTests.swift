@@ -80,4 +80,13 @@ struct MetronomeEngineTests {
         try metronome.start()
         #expect(metronome.currentBeatInBar == 0)
     }
+
+    @Test func setBpmWhilePlayingKeepsPlaying() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.setBpm(100)
+        #expect(metronome.isPlaying)
+        #expect(metronome.bpm == 100)
+        metronome.stop()
+    }
 }
