@@ -253,6 +253,37 @@ struct StatsAggregatorTests {
         #expect(starts.last == StatsAggregator.week(containing: friday, calendar: calendar).start)
     }
 
+    @Test func matchingWeekStartUsesCalendarDayNotExactDate() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17))!
+        let starts = StatsAggregator.weekStarts(back: 2, from: friday, calendar: calendar)
+        let mondayNight = calendar.date(from: DateComponents(
+            year: 2023, month: 11, day: 13, hour: 21, minute: 30
+        ))!
+        let match = StatsAggregator.matchingWeekStart(mondayNight, in: starts, calendar: calendar)
+        #expect(match == starts.last)
+        #expect(match != mondayNight)
+        #expect(StatsAggregator.matchingWeekStart(friday, in: starts, calendar: calendar) == starts.last)
+        #expect(StatsAggregator.matchingWeekStart(mondayNight, in: [], calendar: calendar) == nil)
+    }
+
+    @Test func weekPagerRoundTripDoesNotChangeSelectedDayOnSameWeek() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let friday = calendar.date(from: DateComponents(year: 2023, month: 11, day: 17, hour: 9))!
+        let mondayAfternoon = calendar.date(from: DateComponents(
+            year: 2023, month: 11, day: 13, hour: 15
+        ))!
+        let clamped = StatsAggregator.clampedDay(
+            selected: friday, inWeekStarting: mondayAfternoon, now: friday, calendar: calendar
+        )
+        #expect(calendar.isDate(clamped, inSameDayAs: friday))
+        let bounced = StatsAggregator.week(containing: clamped, calendar: calendar).start
+        #expect(calendar.isDate(bounced, inSameDayAs: mondayAfternoon))
+        #expect(bounced != mondayAfternoon)
+    }
+
     @Test func clampedDayKeepsSelectionInsideTheWeekOtherwisePicksTodayOrMonday() {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "UTC")!

@@ -103,6 +103,14 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["跟随系统"].exists || app.staticTexts["跟随系统"].exists)
     }
 
+    func testRecordTabOpensFromTabBar() {
+        let recordTab = app.tabBars.buttons["记录"]
+        XCTAssertTrue(recordTab.waitForExistence(timeout: 5))
+        recordTab.tap()
+        XCTAssertTrue(app.buttons["数据统计"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["项目"].exists)
+    }
+
     private func deleteCreatedTask(named name: String) {
         if app.buttons["返回"].waitForExistence(timeout: 1) {
             app.buttons["返回"].tap()

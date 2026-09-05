@@ -6,14 +6,14 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV13.TaskItem
-typealias PracticeSession = GitaSchemaV13.PracticeSession
-typealias RecordingRef = GitaSchemaV13.RecordingRef
-typealias LocalProfile = GitaSchemaV13.LocalProfile
-typealias MemoryItem = GitaSchemaV13.MemoryItem
-typealias PracticeItem = GitaSchemaV13.PracticeItem
-typealias Project = GitaSchemaV13.Project
-typealias AIInvocationLog = GitaSchemaV13.AIInvocationLog
+typealias TaskItem = GitaSchemaV14.TaskItem
+typealias PracticeSession = GitaSchemaV14.PracticeSession
+typealias RecordingRef = GitaSchemaV14.RecordingRef
+typealias LocalProfile = GitaSchemaV14.LocalProfile
+typealias MemoryItem = GitaSchemaV14.MemoryItem
+typealias PracticeItem = GitaSchemaV14.PracticeItem
+typealias Project = GitaSchemaV14.Project
+typealias AIInvocationLog = GitaSchemaV14.AIInvocationLog
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -718,7 +718,13 @@ enum StepCoding {
 /// V9 → V10 adds Project, PracticeItem.projectId, LocalProfile.pinnedProjectId;
 /// V10 → V11 adds optional Project.stageVersionItemId and Project.finalVersionItemId;
 /// V11 → V12 adds PracticeItem.stepsRaw;
-/// V12 → V13 adds PracticeItem.subtitle, PracticeItem.targetMin, and AIInvocationLog.
+/// V12 → V13 adds PracticeItem.subtitle and PracticeItem.targetMin;
+/// V13 → V14 adds AIInvocationLog.
+///
+/// Never edit a shipped version in place. Two branches once each declared a
+/// different "V13"; merging them into one shape left installed stores with a
+/// model hash no version matched ("Cannot use staged migration with an
+/// unknown model version") and the app crashed on launch.
 enum GitaMigrationPlan: SchemaMigrationPlan {
     static var schemas: [any VersionedSchema.Type] {
         [
@@ -726,6 +732,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             GitaSchemaV5.self, GitaSchemaV6.self, GitaSchemaV7.self,
             GitaSchemaV8.self, GitaSchemaV9.self, GitaSchemaV10.self,
             GitaSchemaV11.self, GitaSchemaV12.self, GitaSchemaV13.self,
+            GitaSchemaV14.self,
         ]
     }
 
@@ -742,6 +749,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV10.self, toVersion: GitaSchemaV11.self),
             .lightweight(fromVersion: GitaSchemaV11.self, toVersion: GitaSchemaV12.self),
             .lightweight(fromVersion: GitaSchemaV12.self, toVersion: GitaSchemaV13.self),
+            .lightweight(fromVersion: GitaSchemaV13.self, toVersion: GitaSchemaV14.self),
         ]
     }
 }

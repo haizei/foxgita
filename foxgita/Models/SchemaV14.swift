@@ -1,16 +1,16 @@
 //
-//  SchemaV13.swift
+//  SchemaV14.swift
 //  foxgita
 //
 
 import Foundation
 import SwiftData
 
-enum GitaSchemaV13: VersionedSchema {
-    static var versionIdentifier: Schema.Version { Schema.Version(13, 0, 0) }
+enum GitaSchemaV14: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(14, 0, 0) }
 
     static var models: [any PersistentModel.Type] {
-        [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self, PracticeItem.self, Project.self]
+        [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self, PracticeItem.self, Project.self, AIInvocationLog.self]
     }
 
     @Model
@@ -116,8 +116,8 @@ enum GitaSchemaV13: VersionedSchema {
         var stepsSnapshotRaw: String
         var noteText: String
         var profileId: String = ""
-        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV13.RecordingRef.session)
-        var recordings: [GitaSchemaV13.RecordingRef]
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV14.RecordingRef.session)
+        var recordings: [GitaSchemaV14.RecordingRef]
 
         var createdAt: Date = Date()
         var updatedAt: Date = Date()
@@ -136,7 +136,7 @@ enum GitaSchemaV13: VersionedSchema {
             timeSig: String,
             steps: [String],
             noteText: String = "",
-            recordings: [GitaSchemaV13.RecordingRef] = [],
+            recordings: [GitaSchemaV14.RecordingRef] = [],
             profileId: String = "",
             now: Date = Date()
         ) {
@@ -186,7 +186,7 @@ enum GitaSchemaV13: VersionedSchema {
         var createdAt: Date
         var label: String
         var session: PracticeSession?
-        var practiceItem: GitaSchemaV13.PracticeItem? = nil
+        var practiceItem: GitaSchemaV14.PracticeItem? = nil
 
         var updatedAt: Date = Date()
         var deletedAt: Date?
@@ -360,8 +360,8 @@ enum GitaSchemaV13: VersionedSchema {
         var createdAt: Date
         var updatedAt: Date
         var deletedAt: Date?
-        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV13.RecordingRef.practiceItem)
-        var recordings: [GitaSchemaV13.RecordingRef]
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV14.RecordingRef.practiceItem)
+        var recordings: [GitaSchemaV14.RecordingRef]
 
         init(
             id: UUID = UUID(),
@@ -379,7 +379,7 @@ enum GitaSchemaV13: VersionedSchema {
             steps: [String] = [],
             subtitle: String = "",
             targetMin: Int = 0,
-            recordings: [GitaSchemaV13.RecordingRef] = [],
+            recordings: [GitaSchemaV14.RecordingRef] = [],
             createdAt: Date = Date(),
             updatedAt: Date = Date(),
             deletedAt: Date? = nil
@@ -460,6 +460,61 @@ enum GitaSchemaV13: VersionedSchema {
         var status: ProjectStatus {
             get { ProjectStatus(rawValue: statusRaw) ?? .active }
             set { statusRaw = newValue.rawValue }
+        }
+    }
+
+    @Model
+    final class AIInvocationLog {
+        @Attribute(.unique) var id: String
+        var profileId: String
+        var skillId: String
+        var skillVersion: String
+        var model: String
+        var startedAt: Date
+        var durationMs: Int
+        var statusRaw: String
+        var errorTypeRaw: String
+        var memoryIdsRaw: String
+        var formatRetryUsed: Bool
+        var draftOutcomeRaw: String
+        var taskId: String
+        var completedAt: Date?
+        var createdAt: Date
+        var updatedAt: Date
+
+        init(
+            id: String,
+            profileId: String,
+            skillId: String,
+            skillVersion: String,
+            model: String,
+            startedAt: Date,
+            durationMs: Int,
+            statusRaw: String,
+            errorTypeRaw: String = "",
+            memoryIdsRaw: String = "",
+            formatRetryUsed: Bool = false,
+            draftOutcomeRaw: String = "",
+            taskId: String = "",
+            completedAt: Date? = nil,
+            now: Date = Date()
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.skillId = skillId
+            self.skillVersion = skillVersion
+            self.model = model
+            self.startedAt = startedAt
+            self.durationMs = durationMs
+            self.statusRaw = statusRaw
+            self.errorTypeRaw = errorTypeRaw
+            self.memoryIdsRaw = memoryIdsRaw
+            self.formatRetryUsed = formatRetryUsed
+            self.draftOutcomeRaw = draftOutcomeRaw
+            self.taskId = taskId
+            self.completedAt = completedAt
+            self.createdAt = now
+            self.updatedAt = now
         }
     }
 }

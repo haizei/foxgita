@@ -147,6 +147,17 @@ enum StatsAggregator {
         }
     }
 
+    /// The pager must key off the Monday instance in `weekStarts`, not `Date ==`.
+    /// Matching the wrong identity used to spin a nested page `TabView` on device.
+    static func matchingWeekStart(
+        _ date: Date,
+        in weekStarts: [Date],
+        calendar: Calendar = .current
+    ) -> Date? {
+        let start = week(containing: date, calendar: calendar).start
+        return weekStarts.first { calendar.isDate($0, inSameDayAs: start) }
+    }
+
     /// Keep `selected` when it already sits in the week; otherwise today (if
     /// that week contains today) or the week's Monday.
     static func clampedDay(

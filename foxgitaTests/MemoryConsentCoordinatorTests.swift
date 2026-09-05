@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MemoryConsentCoordinatorTests {
     private func make() throws -> (MemoryConsentCoordinator, MemoryStore, LocalProfile) {
-        let schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let schema = Schema(versionedSchema: GitaSchemaV14.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]

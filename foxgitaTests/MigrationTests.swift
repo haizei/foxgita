@@ -55,7 +55,7 @@ struct MigrationTests {
         }
 
         // --- Phase 2: reopen under V10 + migration plan -------------------
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -114,7 +114,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -155,7 +155,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -201,7 +201,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -251,7 +251,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -287,7 +287,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -335,7 +335,7 @@ struct MigrationTests {
         let profileId = UUID()
 
         do {
-            let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+            let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
             let config = ModelConfiguration(schema: v10Schema, url: url)
             let container = try ModelContainer(
                 for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -370,7 +370,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -411,7 +411,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v10Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v10Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v10Schema, url: url)
         let container = try ModelContainer(
             for: v10Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -447,7 +447,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v11Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v11Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v11Schema, url: url)
         let container = try ModelContainer(
             for: v11Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -483,7 +483,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v12Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v12Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v12Schema, url: url)
         let container = try ModelContainer(
             for: v12Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -522,7 +522,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v13Schema = Schema(versionedSchema: GitaSchemaV13.self)
+        let v13Schema = Schema(versionedSchema: GitaSchemaV14.self)
         let config = ModelConfiguration(schema: v13Schema, url: url)
         let container = try ModelContainer(
             for: v13Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -534,6 +534,59 @@ struct MigrationTests {
         #expect(items[0].steps == ["慢扫"])
         #expect(items[0].subtitle == "")
         #expect(items[0].targetMin == 0)
+    }
+
+    /// Reproduces the on-device crash: a store written by V13 (PracticeItem
+    /// already has subtitle / targetMin, no AIInvocationLog entity yet) must
+    /// open under V14 instead of failing with "unknown model version".
+    @Test func v13StoreMigratesToV14KeepingSubtitleAndAcceptingInvocationLog() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v13-v14-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let itemId = UUID()
+        let profileId = UUID()
+        do {
+            let v13Schema = Schema(versionedSchema: GitaSchemaV13.self)
+            let config = ModelConfiguration(schema: v13Schema, url: url)
+            let container = try ModelContainer(for: v13Schema, configurations: [config])
+            let context = ModelContext(container)
+            context.insert(GitaSchemaV13.PracticeItem(
+                id: itemId,
+                profileId: profileId,
+                practiceDayKey: "2026-09-05",
+                title: "开放弦",
+                categoryRaw: PracticeCategory.left.rawValue,
+                durationSeconds: 90,
+                steps: ["慢扫"],
+                subtitle: "每天 5 分钟",
+                targetMin: 5
+            ))
+            try context.save()
+        }
+
+        let v14Schema = Schema(versionedSchema: GitaSchemaV14.self)
+        let config = ModelConfiguration(schema: v14Schema, url: url)
+        let container = try ModelContainer(
+            for: v14Schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
+        )
+        let context = ModelContext(container)
+        let items = try context.fetch(FetchDescriptor<PracticeItem>())
+        #expect(items.count == 1)
+        #expect(items[0].id == itemId)
+        #expect(items[0].durationSeconds == 90)
+        #expect(items[0].steps == ["慢扫"])
+        #expect(items[0].subtitle == "每天 5 分钟")
+        #expect(items[0].targetMin == 5)
+
+        context.insert(AIInvocationLog(
+            id: "inv-v14", profileId: profileId.uuidString,
+            skillId: SkillID.nextSession, skillVersion: "1.0.0",
+            model: "gpt-4o", startedAt: Date(), durationMs: 10,
+            statusRaw: "success"
+        ))
+        try context.save()
+        #expect(try context.fetch(FetchDescriptor<AIInvocationLog>()).map(\.id) == ["inv-v14"])
     }
 
     @Test func v12StoreMigratesToV13AndAcceptsInvocationLog() throws {
@@ -554,7 +607,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let v13 = Schema(versionedSchema: GitaSchemaV13.self)
+        let v13 = Schema(versionedSchema: GitaSchemaV14.self)
         let container = try ModelContainer(
             for: v13, migrationPlan: GitaMigrationPlan.self,
             configurations: [ModelConfiguration(schema: v13, url: url)]

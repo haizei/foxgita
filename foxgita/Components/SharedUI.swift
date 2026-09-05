@@ -7,7 +7,11 @@ import SwiftUI
 
 struct PageBackground: View {
     var body: some View {
-        GitaTheme.bgDefault.ignoresSafeArea()
+        GitaTheme.bgDefault
+            // Do not ignore the bottom edge — that draws over the tab bar
+            // and eats taps on 记录/设置 when running on a phone.
+            .ignoresSafeArea(edges: [.top, .horizontal])
+            .allowsHitTesting(false)
     }
 }
 
@@ -44,23 +48,44 @@ struct StreakCard: View {
     @Binding var selectedDay: Date
     @Binding var weekAnchor: Date
 
-    @State private var weekStarts = StatsAggregator.weekStarts(back: 26)
+    @State private var weekStarts: [Date]
+    @State private var scrolledWeek: Date?
     private var calendar: Calendar { .current }
+
+    init(
+        checkedInDayKeys: Set<String>,
+        selectedDay: Binding<Date>,
+        weekAnchor: Binding<Date>
+    ) {
+        self.checkedInDayKeys = checkedInDayKeys
+        _selectedDay = selectedDay
+        _weekAnchor = weekAnchor
+        let starts = StatsAggregator.weekStarts(back: 26)
+        _weekStarts = State(initialValue: starts)
+        _scrolledWeek = State(
+            initialValue: StatsAggregator.matchingWeekStart(weekAnchor.wrappedValue, in: starts)
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TabView(selection: $weekAnchor) {
-                ForEach(weekStarts, id: \.self) { start in
-                    weekStrip(
-                        days: StatsAggregator.weekDays(
-                            checkedInDayKeys: checkedInDayKeys,
-                            containing: start
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 0) {
+                    ForEach(weekStarts, id: \.self) { start in
+                        weekStrip(
+                            days: StatsAggregator.weekDays(
+                                checkedInDayKeys: checkedInDayKeys,
+                                containing: start
+                            )
                         )
-                    )
-                    .tag(start)
+                        .containerRelativeFrame(.horizontal)
+                        .id(start)
+                    }
                 }
+                .scrollTargetLayout()
             }
-            .tabViewStyle(.page(indexDisplayMode: .never))
+            .scrollTargetBehavior(.viewAligned)
+            .scrollPosition(id: $scrolledWeek)
             .frame(height: 62)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("week-pager")
@@ -71,20 +96,40 @@ struct StreakCard: View {
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
         .shadow(color: GitaTheme.shadowCard, radius: 10, y: 6)
-        .onAppear {
-            let latest = StatsAggregator.weekStarts(back: 26)
-            if latest.last != weekStarts.last {
-                weekStarts = latest
-            }
-            let start = StatsAggregator.week(containing: selectedDay).start
-            if !calendar.isDate(start, inSameDayAs: weekAnchor) {
-                weekAnchor = start
-            }
+        .onAppear { syncPager() }
+        .onChange(of: scrolledWeek) { _, newStart in
+            guard let newStart, !calendar.isDate(newStart, inSameDayAs: weekAnchor) else { return }
+            weekAnchor = newStart
         }
         .onChange(of: weekAnchor) { _, newStart in
-            selectedDay = StatsAggregator.clampedDay(
+            if let match = StatsAggregator.matchingWeekStart(newStart, in: weekStarts, calendar: calendar),
+               scrolledWeek != match {
+                scrolledWeek = match
+            }
+            let next = StatsAggregator.clampedDay(
                 selected: selectedDay, inWeekStarting: newStart
             )
+            if !calendar.isDate(next, inSameDayAs: selectedDay) {
+                selectedDay = next
+            }
+        }
+    }
+
+    private func syncPager() {
+        let latest = StatsAggregator.weekStarts(back: 26)
+        if latest.last != weekStarts.last {
+            weekStarts = latest
+        }
+        guard let match = StatsAggregator.matchingWeekStart(
+            selectedDay, in: weekStarts, calendar: calendar
+        ) else {
+            return
+        }
+        if weekAnchor != match {
+            weekAnchor = match
+        }
+        if scrolledWeek != match {
+            scrolledWeek = match
         }
     }
 
