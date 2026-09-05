@@ -20,6 +20,7 @@ private let metronomeLog = Logger(subsystem: "com.haizei.foxgita", category: "me
 final class MetronomeEngine {
     private(set) var isPlaying = false
     private(set) var bpm = 80
+    private(set) var currentBeatInBar = 0
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
@@ -68,6 +69,7 @@ final class MetronomeEngine {
             guard engine.isRunning else { throw MetronomeError.engineNotRunning }
             player.stop()
             beatIndex = 0
+            currentBeatInBar = 0
             runToken += 1
             player.play()
             nextBeatFrame = currentFrame() + frames(0.1)
@@ -97,6 +99,7 @@ final class MetronomeEngine {
         player.stop()
         isPlaying = false
         beatIndex = 0
+        currentBeatInBar = 0
         runToken += 1
         session.release(.playback)
         metronomeLog.debug(
@@ -123,10 +126,12 @@ final class MetronomeEngine {
         if nextBeatFrame < now {
             nextBeatFrame = now + frames(0.05)
             beatIndex = 0
+            currentBeatInBar = 0
         }
         let horizon = now + frames(Self.lead)
         let step = frames(60.0 / Double(bpm))
         while nextBeatFrame <= horizon {
+            currentBeatInBar = beatIndex % 4
             let isDownbeat = beatIndex % 4 == 0
             player.scheduleBuffer(
                 isDownbeat ? accent : beat,
