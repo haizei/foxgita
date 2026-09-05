@@ -8,6 +8,7 @@ import SwiftUI
 struct MetronomeDisplayCard: View {
     let metronome: MetronomeEngine
     let timeSignature: String
+    var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
 
     private var meterText: String {
         let trimmed = timeSignature.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -20,8 +21,39 @@ struct MetronomeDisplayCard: View {
 
     var body: some View {
         VStack(spacing: GitaTheme.s12) {
-            labelRow
-            valueRow
+            HStack(spacing: 0) {
+                entryColumn(anchor: .speed, label: String(localized: "速度 (BPM)")) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(GitaTheme.brand500)
+                        Text("\(metronome.bpm)")
+                            .font(GitaFont.timer(.semibold))
+                            .foregroundStyle(GitaTheme.brand500)
+                        Text(MetronomeTempoName.name(for: metronome.bpm))
+                            .font(GitaFont.micro())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                entryColumn(anchor: .meter, label: String(localized: "拍号")) {
+                    Text(meterText)
+                        .font(GitaFont.timer(.semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                }
+                .frame(width: 76)
+
+                entryColumn(anchor: .subdivision, label: String(localized: "切分")) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                }
+                .frame(width: 76)
+            }
+
             beatBars
             beatTrack
         }
@@ -30,49 +62,26 @@ struct MetronomeDisplayCard: View {
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius20))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
-        .allowsHitTesting(false)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilitySummary)
+        .accessibilityElement(children: .contain)
     }
 
-    private var labelRow: some View {
-        HStack(spacing: 0) {
-            metricLabel(String(localized: "速度 (BPM)"))
-                .frame(maxWidth: .infinity, alignment: .leading)
-            metricLabel(String(localized: "拍号"))
-                .frame(width: 76)
-            metricLabel(String(localized: "切分"))
-                .frame(width: 76, alignment: .trailing)
-        }
-    }
-
-    private var valueRow: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "music.note")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(GitaTheme.brand500)
-                Text("\(metronome.bpm)")
-                    .font(GitaFont.timer(.semibold))
-                    .foregroundStyle(GitaTheme.brand500)
-                Text(MetronomeTempoName.name(for: metronome.bpm))
-                    .font(GitaFont.micro())
-                    .foregroundStyle(GitaTheme.textSecondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+    private func entryColumn<Content: View>(
+        anchor: MetronomeSheetAnchor,
+        label: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Button {
+            onEntryTap(anchor)
+        } label: {
+            VStack(spacing: 6) {
+                metricLabel(label)
+                content()
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(meterText)
-                .font(GitaFont.timer(.semibold))
-                .foregroundStyle(GitaTheme.brand500)
-                .frame(width: 76)
-
-            Image(systemName: "music.note")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(GitaTheme.brand500)
-                .frame(width: 76)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(label)，打开节拍器设置"))
     }
 
     private var beatBars: some View {
@@ -139,13 +148,6 @@ struct MetronomeDisplayCard: View {
             .padding(.vertical, 4)
             .background(GitaTheme.bgSubtle)
             .clipShape(RoundedRectangle(cornerRadius: 6))
-    }
-
-    private var accessibilitySummary: String {
-        String(
-            localized: "节拍器，\(metronome.bpm) BPM，\(meterText) 拍，四分音符",
-            comment: "Metronome display card accessibility label"
-        )
     }
 }
 
