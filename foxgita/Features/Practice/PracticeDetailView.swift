@@ -51,7 +51,13 @@ enum PracticeDetailState {
         accentPatternRaw: String? = nil,
         storedAccentPatternRaw: String? = nil,
         subdivisionRaw: Int? = nil,
-        storedSubdivisionRaw: Int? = nil
+        storedSubdivisionRaw: Int? = nil,
+        metronomeSoundModeRaw: String? = nil,
+        storedMetronomeSoundModeRaw: String? = nil,
+        metronomeVolume: Int? = nil,
+        storedMetronomeVolume: Int? = nil,
+        metronomeStrongBeatBoost: Bool? = nil,
+        storedMetronomeStrongBeatBoost: Bool? = nil
     ) -> Bool {
         max(0, elapsedSeconds) != max(0, storedDurationSeconds)
             || note != storedNote
@@ -60,6 +66,9 @@ enum PracticeDetailState {
             || timeSignature != storedTimeSignature
             || accentPatternRaw != storedAccentPatternRaw
             || subdivisionRaw != storedSubdivisionRaw
+            || metronomeSoundModeRaw != storedMetronomeSoundModeRaw
+            || metronomeVolume != storedMetronomeVolume
+            || metronomeStrongBeatBoost != storedMetronomeStrongBeatBoost
     }
 
     static func initialSteps(_ stored: [String]) -> [String] {
@@ -124,6 +133,9 @@ struct PracticeDetailView: View {
     @State private var storedTimeSignature: String? = nil
     @State private var storedAccentPatternRaw: String? = nil
     @State private var storedSubdivisionRaw: Int? = nil
+    @State private var storedMetronomeSoundModeRaw: String? = nil
+    @State private var storedMetronomeVolume: Int? = nil
+    @State private var storedMetronomeStrongBeatBoost: Bool? = nil
     @State private var storedResumeState: ResumeState? = nil
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
@@ -142,6 +154,7 @@ struct PracticeDetailView: View {
     @State private var videoPlayURL: URL?
     @State private var showCreateFromPracticeSheet = false
     @State private var metronomeSheetAnchor: MetronomeSheetAnchor?
+    @State private var showMetronomeSoundSheet = false
     @FocusState private var noteFocused: Bool
 
     init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
@@ -177,7 +190,13 @@ struct PracticeDetailView: View {
             accentPatternRaw: metronome.accentPatternRaw,
             storedAccentPatternRaw: storedAccentPatternRaw,
             subdivisionRaw: metronome.subdivisionRaw,
-            storedSubdivisionRaw: storedSubdivisionRaw
+            storedSubdivisionRaw: storedSubdivisionRaw,
+            metronomeSoundModeRaw: metronome.soundMode.rawValue,
+            storedMetronomeSoundModeRaw: storedMetronomeSoundModeRaw,
+            metronomeVolume: metronome.volume,
+            storedMetronomeVolume: storedMetronomeVolume,
+            metronomeStrongBeatBoost: metronome.strongBeatBoost,
+            storedMetronomeStrongBeatBoost: storedMetronomeStrongBeatBoost
         )
     }
 
@@ -258,9 +277,17 @@ struct PracticeDetailView: View {
                     accentRaw: item.metronomeAccentRaw
                 )
                 metronome.configureSubdivision(raw: item.metronomeSubdivisionRaw)
+                metronome.configureSound(
+                    modeRaw: item.metronomeSoundModeRaw,
+                    volume: item.metronomeVolume,
+                    strongBeatBoost: item.metronomeStrongBeatBoost
+                )
                 storedTimeSignature = metronome.timeSignatureText
                 storedAccentPatternRaw = metronome.accentPatternRaw
                 storedSubdivisionRaw = metronome.subdivisionRaw
+                storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+                storedMetronomeVolume = metronome.volume
+                storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
                 if let projectId = item.projectId,
                    projects.contains(where: { $0.id == projectId }) {
                     sessionProjectId = projectId
@@ -401,7 +428,14 @@ struct PracticeDetailView: View {
                         onEntryTap: { anchor in
                             guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
                             noteFocused = false
+                            showMetronomeSoundSheet = false
                             metronomeSheetAnchor = anchor
+                        },
+                        onSoundTap: {
+                            guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+                            noteFocused = false
+                            metronomeSheetAnchor = nil
+                            showMetronomeSoundSheet = true
                         }
                     )
                     timerCard
@@ -485,6 +519,11 @@ struct PracticeDetailView: View {
                 anchor: anchor,
                 onDone: { metronomeSheetAnchor = nil }
             )
+        }
+        .sheet(isPresented: $showMetronomeSoundSheet) {
+            MetronomeSoundSheet(metronome: metronome) {
+                showMetronomeSoundSheet = false
+            }
         }
     }
 
@@ -1015,7 +1054,10 @@ struct PracticeDetailView: View {
                 bpm: metronome.bpm,
                 timeSignature: metronome.timeSignatureText,
                 metronomeAccentRaw: metronome.accentPatternRaw,
-                metronomeSubdivisionRaw: metronome.subdivisionRaw
+                metronomeSubdivisionRaw: metronome.subdivisionRaw,
+                metronomeSoundModeRaw: metronome.soundMode.rawValue,
+                metronomeVolume: metronome.volume,
+                metronomeStrongBeatBoost: metronome.strongBeatBoost
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
@@ -1024,6 +1066,9 @@ struct PracticeDetailView: View {
             storedTimeSignature = metronome.timeSignatureText
             storedAccentPatternRaw = metronome.accentPatternRaw
             storedSubdivisionRaw = metronome.subdivisionRaw
+            storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+            storedMetronomeVolume = metronome.volume
+            storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -1065,6 +1110,11 @@ struct PracticeDetailView: View {
                 accentRaw: storedAccentPatternRaw
             )
             metronome.configureSubdivision(raw: storedSubdivisionRaw)
+            metronome.configureSound(
+                modeRaw: storedMetronomeSoundModeRaw,
+                volume: storedMetronomeVolume,
+                strongBeatBoost: storedMetronomeStrongBeatBoost
+            )
         }
     }
 
