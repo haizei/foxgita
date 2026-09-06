@@ -7,13 +7,9 @@ import SwiftUI
 
 struct MetronomeDisplayCard: View {
     let metronome: MetronomeEngine
-    let timeSignature: String
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
 
-    private var meterText: String {
-        let trimmed = timeSignature.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed.isEmpty ? "4/4" : trimmed
-    }
+    private var meterText: String { metronome.timeSignatureText }
 
     private var activeBeat: Int? {
         metronome.isPlaying ? metronome.currentBeatInBar : nil
@@ -86,13 +82,14 @@ struct MetronomeDisplayCard: View {
 
     private var beatBars: some View {
         HStack(spacing: GitaTheme.s8) {
-            ForEach(0..<4, id: \.self) { index in
+            ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                 beatBar(index: index)
             }
         }
         .frame(height: 58)
         .animation(.easeInOut(duration: 0.12), value: activeBeat)
-        .animation(.easeInOut(duration: 0.12), value: metronome.isPlaying)
+        .animation(.easeInOut(duration: 0.12), value: metronome.beatsPerBar)
+        .animation(.easeInOut(duration: 0.12), value: metronome.accentPattern)
     }
 
     private func beatBar(index: Int) -> some View {
@@ -110,14 +107,32 @@ struct MetronomeDisplayCard: View {
     }
 
     private func barFill(for index: Int, isActive: Bool) -> CGFloat {
-        if isActive { return 0.72 }
+        if isActive { return accentBarFill(for: index) }
         if !metronome.isPlaying && index == 0 { return 0.18 }
-        return 0.12
+        return idleBarFill(for: index)
+    }
+
+    private func accentBarFill(for index: Int) -> CGFloat {
+        guard metronome.accentPattern.indices.contains(index) else { return 0.72 }
+        switch metronome.accentPattern[index] {
+        case .accent: return 0.72
+        case .normal: return 0.52
+        case .mute: return 0.28
+        }
+    }
+
+    private func idleBarFill(for index: Int) -> CGFloat {
+        guard metronome.accentPattern.indices.contains(index) else { return 0.12 }
+        switch metronome.accentPattern[index] {
+        case .accent: return 0.18
+        case .normal: return 0.12
+        case .mute: return 0.06
+        }
     }
 
     private var beatTrack: some View {
         HStack(spacing: 0) {
-            ForEach(0..<4, id: \.self) { index in
+            ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                 let emphasized = trackDotEmphasized(index: index)
                 Circle()
                     .fill(emphasized ? GitaTheme.brand500 : GitaTheme.borderInactive)
@@ -137,7 +152,8 @@ struct MetronomeDisplayCard: View {
 
     private func trackDotEmphasized(index: Int) -> Bool {
         if let activeBeat { return index == activeBeat }
-        return index == 0
+        guard metronome.accentPattern.indices.contains(index) else { return index == 0 }
+        return metronome.accentPattern[index] == .accent
     }
 
     private func metricLabel(_ text: String) -> some View {
@@ -153,8 +169,7 @@ struct MetronomeDisplayCard: View {
 
 #Preview {
     MetronomeDisplayCard(
-        metronome: MetronomeEngine(),
-        timeSignature: "4/4"
+        metronome: MetronomeEngine()
     )
     .padding()
     .background(GitaTheme.bgDefault)

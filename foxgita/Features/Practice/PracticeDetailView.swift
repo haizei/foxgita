@@ -45,12 +45,18 @@ enum PracticeDetailState {
         steps: [String] = [],
         storedSteps: [String] = [],
         bpm: Int? = nil,
-        storedBpm: Int? = nil
+        storedBpm: Int? = nil,
+        timeSignature: String? = nil,
+        storedTimeSignature: String? = nil,
+        accentPatternRaw: String? = nil,
+        storedAccentPatternRaw: String? = nil
     ) -> Bool {
         max(0, elapsedSeconds) != max(0, storedDurationSeconds)
             || note != storedNote
             || steps != storedSteps
             || bpm != storedBpm
+            || timeSignature != storedTimeSignature
+            || accentPatternRaw != storedAccentPatternRaw
     }
 
     static func initialSteps(_ stored: [String]) -> [String] {
@@ -112,6 +118,8 @@ struct PracticeDetailView: View {
     @State private var steps: [String] = []
     @State private var storedSteps: [String] = []
     @State private var storedBpm: Int? = nil
+    @State private var storedTimeSignature: String? = nil
+    @State private var storedAccentPatternRaw: String? = nil
     @State private var storedResumeState: ResumeState? = nil
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
@@ -159,7 +167,11 @@ struct PracticeDetailView: View {
             steps: steps,
             storedSteps: storedSteps,
             bpm: metronome.bpm,
-            storedBpm: storedBpm
+            storedBpm: storedBpm,
+            timeSignature: metronome.timeSignatureText,
+            storedTimeSignature: storedTimeSignature,
+            accentPatternRaw: metronome.accentPatternRaw,
+            storedAccentPatternRaw: storedAccentPatternRaw
         )
     }
 
@@ -234,6 +246,13 @@ struct PracticeDetailView: View {
                 storedResumeState = resume
                 metronome.setBpm(resume.bpm)
                 storedBpm = resume.bpm
+                let loadedTimeSignature = normalizedTimeSignature(item.timeSignature)
+                metronome.configureMeter(
+                    timeSignature: loadedTimeSignature,
+                    accentRaw: item.metronomeAccentRaw
+                )
+                storedTimeSignature = metronome.timeSignatureText
+                storedAccentPatternRaw = metronome.accentPatternRaw
                 if let projectId = item.projectId,
                    projects.contains(where: { $0.id == projectId }) {
                     sessionProjectId = projectId
@@ -371,7 +390,6 @@ struct PracticeDetailView: View {
 
                     MetronomeDisplayCard(
                         metronome: metronome,
-                        timeSignature: item.timeSignature ?? "4/4",
                         onEntryTap: { anchor in
                             guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
                             noteFocused = false
@@ -457,7 +475,6 @@ struct PracticeDetailView: View {
             MetronomeSettingsSheet(
                 metronome: metronome,
                 anchor: anchor,
-                meterText: normalizedTimeSignature(item.timeSignature),
                 onDone: { metronomeSheetAnchor = nil }
             )
         }
@@ -987,12 +1004,16 @@ struct PracticeDetailView: View {
                 note: noteText,
                 now: Date(),
                 steps: steps,
-                bpm: metronome.bpm
+                bpm: metronome.bpm,
+                timeSignature: metronome.timeSignatureText,
+                metronomeAccentRaw: metronome.accentPatternRaw
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
             storedSteps = steps
             storedBpm = metronome.bpm
+            storedTimeSignature = metronome.timeSignatureText
+            storedAccentPatternRaw = metronome.accentPatternRaw
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -1027,6 +1048,12 @@ struct PracticeDetailView: View {
         steps = storedSteps
         if let storedBpm {
             metronome.setBpm(storedBpm)
+        }
+        if let storedTimeSignature {
+            metronome.configureMeter(
+                timeSignature: storedTimeSignature,
+                accentRaw: storedAccentPatternRaw
+            )
         }
     }
 

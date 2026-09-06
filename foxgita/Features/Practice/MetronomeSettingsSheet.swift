@@ -8,7 +8,6 @@ import SwiftUI
 struct MetronomeSettingsSheet: View {
     let metronome: MetronomeEngine
     let anchor: MetronomeSheetAnchor
-    let meterText: String
     var onDone: () -> Void
 
     private let subdivisionCellCount = 8
@@ -72,35 +71,82 @@ struct MetronomeSettingsSheet: View {
 
     private var meterSection: some View {
         VStack(alignment: .leading, spacing: GitaTheme.s8) {
-            sectionHeader(String(localized: "拍号"), comingSoon: true)
+            sectionHeader(String(localized: "拍号"), comingSoon: false)
             HStack(spacing: GitaTheme.s12) {
-                disabledStepperPlaceholder
+                stepButton("－", accent: false, enabled: metronome.beatsPerBar > MetronomeMeter.minBeats) {
+                    metronome.bumpBeatsPerBar(-1)
+                }
                 VStack(spacing: 4) {
                     Text(String(localized: "拍号"))
                         .font(GitaFont.micro())
                         .foregroundStyle(GitaTheme.textSecondary)
-                    Text(meterText)
+                    Text(metronome.timeSignatureText)
                         .font(GitaFont.title(.semibold))
                         .foregroundStyle(GitaTheme.brand500)
                 }
                 .frame(maxWidth: .infinity)
-                disabledStepperPlaceholder
+                stepButton("＋", accent: true, enabled: metronome.beatsPerBar < MetronomeMeter.maxBeats) {
+                    metronome.bumpBeatsPerBar(1)
+                }
             }
             Text(String(localized: "重音"))
                 .font(GitaFont.caption())
                 .foregroundStyle(GitaTheme.textSecondary)
             HStack(spacing: GitaTheme.s12) {
-                ForEach(0..<4, id: \.self) { index in
-                    Image(systemName: "music.note")
-                        .font(.system(size: 22))
-                        .foregroundStyle(index == 0 ? GitaTheme.brand500 : GitaTheme.textSecondary)
-                        .frame(maxWidth: .infinity)
+                ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                    Button {
+                        metronome.cycleAccent(at: index)
+                    } label: {
+                        accentBeatIcon(for: index)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(accentAccessibilityLabel(for: index))
                 }
             }
             .padding(.vertical, GitaTheme.s8)
         }
-        .opacity(0.45)
-        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func accentBeatIcon(for index: Int) -> some View {
+        let kind = metronome.accentPattern.indices.contains(index)
+            ? metronome.accentPattern[index]
+            : MetronomeBeatKind.normal
+        switch kind {
+        case .accent:
+            Image(systemName: "music.note")
+                .font(.system(size: 22))
+                .foregroundStyle(GitaTheme.brand500)
+        case .normal:
+            Image(systemName: "music.note")
+                .font(.system(size: 22))
+                .foregroundStyle(GitaTheme.textSecondary)
+        case .mute:
+            Image(systemName: "music.note")
+                .font(.system(size: 22))
+                .foregroundStyle(GitaTheme.textTertiary.opacity(0.45))
+                .overlay {
+                    Image(systemName: "slash.circle")
+                        .font(.system(size: 14))
+                        .foregroundStyle(GitaTheme.textTertiary)
+                }
+        }
+    }
+
+    private func accentAccessibilityLabel(for index: Int) -> Text {
+        let beat = index + 1
+        guard metronome.accentPattern.indices.contains(index) else {
+            return Text("第 \(beat) 拍")
+        }
+        switch metronome.accentPattern[index] {
+        case .accent:
+            return Text("第 \(beat) 拍，强拍")
+        case .normal:
+            return Text("第 \(beat) 拍，弱拍")
+        case .mute:
+            return Text("第 \(beat) 拍，静音")
+        }
     }
 
     private var subdivisionSection: some View {
