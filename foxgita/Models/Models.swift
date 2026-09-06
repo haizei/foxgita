@@ -6,14 +6,14 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV16.TaskItem
-typealias PracticeSession = GitaSchemaV16.PracticeSession
-typealias RecordingRef = GitaSchemaV16.RecordingRef
-typealias LocalProfile = GitaSchemaV16.LocalProfile
-typealias MemoryItem = GitaSchemaV16.MemoryItem
-typealias PracticeItem = GitaSchemaV16.PracticeItem
-typealias Project = GitaSchemaV16.Project
-typealias AIInvocationLog = GitaSchemaV16.AIInvocationLog
+typealias TaskItem = GitaSchemaV17.TaskItem
+typealias PracticeSession = GitaSchemaV17.PracticeSession
+typealias RecordingRef = GitaSchemaV17.RecordingRef
+typealias LocalProfile = GitaSchemaV17.LocalProfile
+typealias MemoryItem = GitaSchemaV17.MemoryItem
+typealias PracticeItem = GitaSchemaV17.PracticeItem
+typealias Project = GitaSchemaV17.Project
+typealias AIInvocationLog = GitaSchemaV17.AIInvocationLog
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -722,6 +722,7 @@ enum StepCoding {
 /// V13 → V14 adds AIInvocationLog.
 /// V14 → V15 adds PracticeItem.metronomeAccentRaw for per-beat accent/mute.
 /// V15 → V16 adds PracticeItem.metronomeSubdivisionRaw for rhythm subdivision.
+/// V16 → V17 adds PracticeItem metronome sound settings (mode, volume, strong-beat boost).
 ///
 /// Never edit a shipped version in place. Two branches once each declared a
 /// different "V13"; merging them into one shape left installed stores with a
@@ -737,6 +738,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             GitaSchemaV14.self,
             GitaSchemaV15.self,
             GitaSchemaV16.self,
+            GitaSchemaV17.self,
         ]
     }
 
@@ -756,6 +758,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV13.self, toVersion: GitaSchemaV14.self),
             .lightweight(fromVersion: GitaSchemaV14.self, toVersion: GitaSchemaV15.self),
             .lightweight(fromVersion: GitaSchemaV15.self, toVersion: GitaSchemaV16.self),
+            .lightweight(fromVersion: GitaSchemaV16.self, toVersion: GitaSchemaV17.self),
         ]
     }
 }

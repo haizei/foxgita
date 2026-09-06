@@ -118,4 +118,40 @@ struct MetronomeEngineTests {
         #expect(metronome.subdivision == .fourSixteenths)
         metronome.stop()
     }
+
+    @Test func setSoundModeWhilePlayingKeepsPlaying() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.setSoundMode(.drums)
+        #expect(metronome.isPlaying)
+        #expect(metronome.soundMode == .drums)
+        metronome.stop()
+    }
+
+    @Test func volumeClamps() {
+        let metronome = MetronomeEngine()
+        metronome.setVolume(150)
+        #expect(metronome.volume == 100)
+        metronome.setVolume(-5)
+        #expect(metronome.volume == 0)
+    }
+
+    @Test func previewRequiresIdle() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        #expect(throws: MetronomeError.previewUnavailableWhilePlaying) {
+            try metronome.preview(bars: 2)
+        }
+        metronome.stop()
+    }
+
+    @Test func previewStopsAfterBars() async throws {
+        let metronome = MetronomeEngine()
+        metronome.setBpm(200)
+        metronome.configureMeter(timeSignature: "1/4", accentRaw: "2")
+        try metronome.preview(bars: 1)
+        #expect(metronome.isPlaying)
+        try await Task.sleep(for: .seconds(1.5))
+        #expect(!metronome.isPlaying)
+    }
 }

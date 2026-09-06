@@ -8,6 +8,7 @@ import SwiftUI
 struct MetronomeDisplayCard: View {
     let metronome: MetronomeEngine
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
+    var onSoundTap: () -> Void = {}
 
     private var meterText: String { metronome.timeSignatureText }
 
@@ -18,11 +19,8 @@ struct MetronomeDisplayCard: View {
     var body: some View {
         VStack(spacing: GitaTheme.s12) {
             HStack(spacing: 0) {
-                entryColumn(anchor: .speed, label: String(localized: "速度 (BPM)")) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(GitaTheme.brand500)
+                entryColumn(anchor: .speed, label: String(localized: "速度")) {
+                    VStack(spacing: 2) {
                         Text("\(metronome.bpm)")
                             .font(GitaFont.timer(.semibold))
                             .foregroundStyle(GitaTheme.brand500)
@@ -33,22 +31,25 @@ struct MetronomeDisplayCard: View {
                             .minimumScaleFactor(0.8)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
 
                 entryColumn(anchor: .meter, label: String(localized: "拍号")) {
                     Text(meterText)
                         .font(GitaFont.timer(.semibold))
                         .foregroundStyle(GitaTheme.brand500)
                 }
-                .frame(width: 76)
+                .frame(maxWidth: .infinity)
 
-                entryColumn(anchor: .subdivision, label: String(localized: "切分")) {
+                entryColumn(anchor: .subdivision, label: String(localized: "音符")) {
                     Image(metronome.subdivision.assetName)
                         .resizable()
                         .scaledToFit()
                         .frame(height: 18)
                 }
-                .frame(width: 76)
+                .frame(maxWidth: .infinity)
+
+                soundColumn
+                    .frame(maxWidth: .infinity)
             }
 
             beatBars
@@ -60,6 +61,22 @@ struct MetronomeDisplayCard: View {
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius20))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
         .accessibilityElement(children: .contain)
+    }
+
+    private var soundColumn: some View {
+        Button(action: onSoundTap) {
+            VStack(spacing: 6) {
+                metricLabel(String(localized: "声音"))
+                Image("MetronomeSoundIcon")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 18)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(String(localized: "声音，打开节拍提示")))
     }
 
     private func entryColumn<Content: View>(
@@ -103,7 +120,14 @@ struct MetronomeDisplayCard: View {
                     .fill(isActive ? GitaTheme.brand500 : GitaTheme.brand50.opacity(0.85))
                     .frame(height: 58 * fill)
             }
+            .overlay {
+                if metronome.flashOnAccent, isActive, accentBarFill(for: index) >= 0.72 {
+                    RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                        .fill(Color.white.opacity(0.35))
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+            .animation(.easeOut(duration: 0.08), value: activeBeat)
             .accessibilityHidden(true)
     }
 
