@@ -109,4 +109,13 @@ struct MetronomeEngineTests {
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .accent)
     }
+
+    @Test func setSubdivisionWhilePlayingKeepsPlaying() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.setSubdivision(.fourSixteenths)
+        #expect(metronome.isPlaying)
+        #expect(metronome.subdivision == .fourSixteenths)
+        metronome.stop()
+    }
 }
