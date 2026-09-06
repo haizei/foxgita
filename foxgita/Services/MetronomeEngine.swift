@@ -21,6 +21,17 @@ final class MetronomeEngine {
     private(set) var isPlaying = false
     private(set) var bpm = 80
     private(set) var currentBeatInBar = 0
+    private(set) var beatsPerBar = 4
+    private(set) var denominator = MetronomeMeter.defaultDenominator
+    private(set) var accentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
+
+    var timeSignatureText: String {
+        MetronomeMeter.format(beats: beatsPerBar, denominator: denominator)
+    }
+
+    var accentPatternRaw: String {
+        MetronomeMeter.encodeAccent(accentPattern)
+    }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
@@ -55,6 +66,33 @@ final class MetronomeEngine {
     }
 
     func bump(_ delta: Int) { setBpm(bpm + delta) }
+
+    func configureMeter(timeSignature: String?, accentRaw: String?) {
+        let parsed = MetronomeMeter.parseTimeSignature(timeSignature)
+        beatsPerBar = parsed.beats
+        denominator = parsed.denominator
+        accentPattern = MetronomeMeter.decodeAccent(accentRaw, beats: parsed.beats)
+    }
+
+    func setBeatsPerBar(_ value: Int) {
+        let clamped = min(MetronomeMeter.maxBeats, max(MetronomeMeter.minBeats, value))
+        guard clamped != beatsPerBar else { return }
+        if clamped > beatsPerBar {
+            accentPattern.append(
+                contentsOf: Array(repeating: MetronomeBeatKind.normal, count: clamped - beatsPerBar)
+            )
+        } else {
+            accentPattern = Array(accentPattern.prefix(clamped))
+        }
+        beatsPerBar = clamped
+    }
+
+    func bumpBeatsPerBar(_ delta: Int) { setBeatsPerBar(beatsPerBar + delta) }
+
+    func cycleAccent(at index: Int) {
+        guard accentPattern.indices.contains(index) else { return }
+        accentPattern[index].cycle()
+    }
 
     func start() throws {
         guard !isPlaying else { return }
@@ -131,15 +169,19 @@ final class MetronomeEngine {
         let horizon = now + frames(Self.lead)
         let step = frames(60.0 / Double(bpm))
         while nextBeatFrame <= horizon {
-            currentBeatInBar = beatIndex % 4
-            let isDownbeat = beatIndex % 4 == 0
-            player.scheduleBuffer(
-                isDownbeat ? accent : beat,
-                at: AVAudioTime(sampleTime: nextBeatFrame, atRate: format.sampleRate),
-                options: [],
-                completionHandler: nil
-            )
-            if isDownbeat { scheduleDownbeatHaptic(at: nextBeatFrame, now: now) }
+            let beatInBar = beatIndex % beatsPerBar
+            currentBeatInBar = beatInBar
+            let kind = accentPattern[beatInBar]
+            if kind != .mute {
+                let buffer = kind == .accent ? accent : beat
+                player.scheduleBuffer(
+                    buffer,
+                    at: AVAudioTime(sampleTime: nextBeatFrame, atRate: format.sampleRate),
+                    options: [],
+                    completionHandler: nil
+                )
+                if kind == .accent { scheduleDownbeatHaptic(at: nextBeatFrame, now: now) }
+            }
             nextBeatFrame += step
             beatIndex += 1
         }
