@@ -89,4 +89,33 @@ struct MetronomeEngineTests {
         #expect(metronome.bpm == 100)
         metronome.stop()
     }
+
+    @Test func variableBeatsPerBarUpdatesDisplayState() {
+        let metronome = MetronomeEngine()
+        metronome.configureMeter(timeSignature: "3/4", accentRaw: "211")
+        #expect(metronome.beatsPerBar == 3)
+        #expect(metronome.timeSignatureText == "3/4")
+        #expect(metronome.accentPattern == [.accent, .normal, .normal])
+        metronome.bumpBeatsPerBar(1)
+        #expect(metronome.beatsPerBar == 4)
+        #expect(metronome.accentPattern.count == 4)
+    }
+
+    @Test func cycleAccentRotatesKind() {
+        let metronome = MetronomeEngine()
+        metronome.configureMeter(timeSignature: "2/4", accentRaw: "21")
+        metronome.cycleAccent(at: 1)
+        #expect(metronome.accentPattern[1] == .mute)
+        metronome.cycleAccent(at: 1)
+        #expect(metronome.accentPattern[1] == .accent)
+    }
+
+    @Test func setSubdivisionWhilePlayingKeepsPlaying() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.setSubdivision(.fourSixteenths)
+        #expect(metronome.isPlaying)
+        #expect(metronome.subdivision == .fourSixteenths)
+        metronome.stop()
+    }
 }

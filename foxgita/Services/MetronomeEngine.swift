@@ -21,6 +21,20 @@ final class MetronomeEngine {
     private(set) var isPlaying = false
     private(set) var bpm = 80
     private(set) var currentBeatInBar = 0
+    private(set) var beatsPerBar = 4
+    private(set) var denominator = MetronomeMeter.defaultDenominator
+    private(set) var accentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
+    private(set) var subdivision: MetronomeSubdivision = .quarter
+
+    var timeSignatureText: String {
+        MetronomeMeter.format(beats: beatsPerBar, denominator: denominator)
+    }
+
+    var accentPatternRaw: String {
+        MetronomeMeter.encodeAccent(accentPattern)
+    }
+
+    var subdivisionRaw: Int { subdivision.rawValue }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
@@ -34,8 +48,9 @@ final class MetronomeEngine {
     @ObservationIgnored private var accentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
-    @ObservationIgnored private var nextBeatFrame: AVAudioFramePosition = 0
+    @ObservationIgnored private var nextClickFrame: AVAudioFramePosition = 0
     @ObservationIgnored private var beatIndex = 0
+    @ObservationIgnored private var subClickIndex = 0
     @ObservationIgnored private var graphConfigured = false
     @ObservationIgnored private var runToken = 0
 
@@ -56,6 +71,42 @@ final class MetronomeEngine {
 
     func bump(_ delta: Int) { setBpm(bpm + delta) }
 
+    func configureMeter(timeSignature: String?, accentRaw: String?) {
+        let parsed = MetronomeMeter.parseTimeSignature(timeSignature)
+        beatsPerBar = parsed.beats
+        denominator = parsed.denominator
+        accentPattern = MetronomeMeter.decodeAccent(accentRaw, beats: parsed.beats)
+    }
+
+    func setBeatsPerBar(_ value: Int) {
+        let clamped = min(MetronomeMeter.maxBeats, max(MetronomeMeter.minBeats, value))
+        guard clamped != beatsPerBar else { return }
+        if clamped > beatsPerBar {
+            accentPattern.append(
+                contentsOf: Array(repeating: MetronomeBeatKind.normal, count: clamped - beatsPerBar)
+            )
+        } else {
+            accentPattern = Array(accentPattern.prefix(clamped))
+        }
+        beatsPerBar = clamped
+    }
+
+    func bumpBeatsPerBar(_ delta: Int) { setBeatsPerBar(beatsPerBar + delta) }
+
+    func cycleAccent(at index: Int) {
+        guard accentPattern.indices.contains(index) else { return }
+        accentPattern[index].cycle()
+    }
+
+    func configureSubdivision(raw: Int?) {
+        subdivision = MetronomeSubdivision.decode(raw)
+    }
+
+    func setSubdivision(_ value: MetronomeSubdivision) {
+        guard value != subdivision else { return }
+        subdivision = value
+    }
+
     func start() throws {
         guard !isPlaying else { return }
         var acquired = false
@@ -69,10 +120,11 @@ final class MetronomeEngine {
             guard engine.isRunning else { throw MetronomeError.engineNotRunning }
             player.stop()
             beatIndex = 0
+            subClickIndex = 0
             currentBeatInBar = 0
             runToken += 1
             player.play()
-            nextBeatFrame = currentFrame() + frames(0.1)
+            nextClickFrame = currentFrame() + frames(0.1)
             isPlaying = true
             fill()
             pump = Timer.scheduledTimer(withTimeInterval: Self.pumpInterval, repeats: true) { [weak self] _ in
@@ -99,6 +151,7 @@ final class MetronomeEngine {
         player.stop()
         isPlaying = false
         beatIndex = 0
+        subClickIndex = 0
         currentBeatInBar = 0
         runToken += 1
         session.release(.playback)
@@ -123,27 +176,54 @@ final class MetronomeEngine {
     private func fill() {
         guard isPlaying, let accent = accentClick, let beat = beatClick else { return }
         let now = currentFrame()
-        if nextBeatFrame < now {
-            nextBeatFrame = now + frames(0.05)
+        if nextClickFrame < now {
+            nextClickFrame = now + frames(0.05)
             beatIndex = 0
+            subClickIndex = 0
             currentBeatInBar = 0
         }
         let horizon = now + frames(Self.lead)
-        let step = frames(60.0 / Double(bpm))
-        while nextBeatFrame <= horizon {
-            currentBeatInBar = beatIndex % 4
-            let isDownbeat = beatIndex % 4 == 0
-            player.scheduleBuffer(
-                isDownbeat ? accent : beat,
-                at: AVAudioTime(sampleTime: nextBeatFrame, atRate: format.sampleRate),
-                options: [],
-                completionHandler: nil
-            )
-            if isDownbeat { scheduleDownbeatHaptic(at: nextBeatFrame, now: now) }
-            nextBeatFrame += step
-            beatIndex += 1
+        while nextClickFrame <= horizon {
+            let beatInBar = beatIndex % beatsPerBar
+            if subClickIndex == 0 { currentBeatInBar = beatInBar }
+            let beatKind = accentPattern[beatInBar]
+            if beatKind != .mute {
+                let useAccent = beatKind == .accent && subClickIndex == 0
+                let buffer = useAccent ? accent : beat
+                player.scheduleBuffer(
+                    buffer,
+                    at: AVAudioTime(sampleTime: nextClickFrame, atRate: format.sampleRate),
+                    options: [],
+                    completionHandler: nil
+                )
+                if useAccent { scheduleDownbeatHaptic(at: nextClickFrame, now: now) }
+            }
+            nextClickFrame += intervalToNextClick()
+            advanceClickPosition()
         }
         if !player.isPlaying { player.play() }
+    }
+
+    private func intervalToNextClick() -> AVAudioFramePosition {
+        let beatDuration = 60.0 / Double(bpm)
+        let offsets = subdivision.clickOffsets
+        let currentOffset = offsets[subClickIndex]
+        let delta: Double
+        if subClickIndex + 1 < offsets.count {
+            delta = offsets[subClickIndex + 1] - currentOffset
+        } else {
+            delta = 1.0 - currentOffset + offsets[0]
+        }
+        return frames(delta * beatDuration)
+    }
+
+    private func advanceClickPosition() {
+        if subClickIndex + 1 < subdivision.clickOffsets.count {
+            subClickIndex += 1
+        } else {
+            subClickIndex = 0
+            beatIndex += 1
+        }
     }
 
     private func scheduleDownbeatHaptic(at frame: AVAudioFramePosition, now: AVAudioFramePosition) {
