@@ -10,7 +10,6 @@ struct MetronomeSettingsSheet: View {
     let anchor: MetronomeSheetAnchor
     var onDone: () -> Void
 
-    private let subdivisionCellCount = 8
     private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
 
     var body: some View {
@@ -151,25 +150,30 @@ struct MetronomeSettingsSheet: View {
 
     private var subdivisionSection: some View {
         VStack(alignment: .leading, spacing: GitaTheme.s8) {
-            sectionHeader(String(localized: "切分"), comingSoon: true)
+            sectionHeader(String(localized: "切分"), comingSoon: false)
             LazyVGrid(columns: gridColumns, spacing: 0) {
-                ForEach(0..<subdivisionCellCount, id: \.self) { index in
-                    ZStack {
-                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                            .stroke(
-                                index == 0 ? GitaTheme.brand500 : Color.clear,
-                                lineWidth: 2
-                            )
-                        Image(systemName: "music.note")
-                            .font(.system(size: 20))
-                            .foregroundStyle(index == 0 ? GitaTheme.brand500 : GitaTheme.textSecondary)
+                ForEach(MetronomeSubdivision.allCases) { value in
+                    Button {
+                        metronome.setSubdivision(value)
+                    } label: {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                                .stroke(
+                                    metronome.subdivision == value ? GitaTheme.brand500 : Color.clear,
+                                    lineWidth: 2
+                                )
+                            Image(value.assetName)
+                                .resizable()
+                                .scaledToFit()
+                                .padding(8)
+                        }
+                        .frame(height: 52)
                     }
-                    .frame(height: 52)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text(value.accessibilityLabel))
                 }
             }
         }
-        .opacity(0.45)
-        .allowsHitTesting(false)
     }
 
     private func sectionHeader(_ title: String, comingSoon: Bool) -> some View {

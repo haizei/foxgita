@@ -49,7 +49,9 @@ enum PracticeDetailState {
         timeSignature: String? = nil,
         storedTimeSignature: String? = nil,
         accentPatternRaw: String? = nil,
-        storedAccentPatternRaw: String? = nil
+        storedAccentPatternRaw: String? = nil,
+        subdivisionRaw: Int? = nil,
+        storedSubdivisionRaw: Int? = nil
     ) -> Bool {
         max(0, elapsedSeconds) != max(0, storedDurationSeconds)
             || note != storedNote
@@ -57,6 +59,7 @@ enum PracticeDetailState {
             || bpm != storedBpm
             || timeSignature != storedTimeSignature
             || accentPatternRaw != storedAccentPatternRaw
+            || subdivisionRaw != storedSubdivisionRaw
     }
 
     static func initialSteps(_ stored: [String]) -> [String] {
@@ -120,6 +123,7 @@ struct PracticeDetailView: View {
     @State private var storedBpm: Int? = nil
     @State private var storedTimeSignature: String? = nil
     @State private var storedAccentPatternRaw: String? = nil
+    @State private var storedSubdivisionRaw: Int? = nil
     @State private var storedResumeState: ResumeState? = nil
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
@@ -171,7 +175,9 @@ struct PracticeDetailView: View {
             timeSignature: metronome.timeSignatureText,
             storedTimeSignature: storedTimeSignature,
             accentPatternRaw: metronome.accentPatternRaw,
-            storedAccentPatternRaw: storedAccentPatternRaw
+            storedAccentPatternRaw: storedAccentPatternRaw,
+            subdivisionRaw: metronome.subdivisionRaw,
+            storedSubdivisionRaw: storedSubdivisionRaw
         )
     }
 
@@ -251,8 +257,10 @@ struct PracticeDetailView: View {
                     timeSignature: loadedTimeSignature,
                     accentRaw: item.metronomeAccentRaw
                 )
+                metronome.configureSubdivision(raw: item.metronomeSubdivisionRaw)
                 storedTimeSignature = metronome.timeSignatureText
                 storedAccentPatternRaw = metronome.accentPatternRaw
+                storedSubdivisionRaw = metronome.subdivisionRaw
                 if let projectId = item.projectId,
                    projects.contains(where: { $0.id == projectId }) {
                     sessionProjectId = projectId
@@ -1006,7 +1014,8 @@ struct PracticeDetailView: View {
                 steps: steps,
                 bpm: metronome.bpm,
                 timeSignature: metronome.timeSignatureText,
-                metronomeAccentRaw: metronome.accentPatternRaw
+                metronomeAccentRaw: metronome.accentPatternRaw,
+                metronomeSubdivisionRaw: metronome.subdivisionRaw
             )
             storedDurationSeconds = max(0, practiceTimer.elapsedSec)
             storedNote = noteText
@@ -1014,6 +1023,7 @@ struct PracticeDetailView: View {
             storedBpm = metronome.bpm
             storedTimeSignature = metronome.timeSignatureText
             storedAccentPatternRaw = metronome.accentPatternRaw
+            storedSubdivisionRaw = metronome.subdivisionRaw
         } catch {
             show(store.lastError?.localizedDescription ?? error.localizedDescription)
         }
@@ -1054,6 +1064,7 @@ struct PracticeDetailView: View {
                 timeSignature: storedTimeSignature,
                 accentRaw: storedAccentPatternRaw
             )
+            metronome.configureSubdivision(raw: storedSubdivisionRaw)
         }
     }
 

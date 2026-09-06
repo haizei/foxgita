@@ -43,9 +43,10 @@ struct MetronomeDisplayCard: View {
                 .frame(width: 76)
 
                 entryColumn(anchor: .subdivision, label: String(localized: "切分")) {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(GitaTheme.brand500)
+                    Image(metronome.subdivision.assetName)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(height: 18)
                 }
                 .frame(width: 76)
             }

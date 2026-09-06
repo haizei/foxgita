@@ -358,7 +358,8 @@ final class PracticeStore {
         steps: [String]? = nil,
         bpm: Int? = nil,
         timeSignature: String? = nil,
-        metronomeAccentRaw: String? = nil
+        metronomeAccentRaw: String? = nil,
+        metronomeSubdivisionRaw: Int? = nil
     ) throws {
         let item = try requireLivePracticeItem(id: id)
         item.durationSeconds = max(0, durationSeconds)
@@ -374,6 +375,9 @@ final class PracticeStore {
         }
         if let metronomeAccentRaw {
             item.metronomeAccentRaw = metronomeAccentRaw
+        }
+        if let metronomeSubdivisionRaw {
+            item.metronomeSubdivisionRaw = metronomeSubdivisionRaw
         }
         item.updatedAt = now
         if let projectId = item.projectId,
