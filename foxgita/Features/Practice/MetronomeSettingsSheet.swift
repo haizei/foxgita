@@ -11,16 +11,28 @@ struct MetronomeSettingsSheet: View {
     var onDone: () -> Void
 
     private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
+    private let stepButtonSize: CGFloat = 36
+
+    private var subdivisionCases: [MetronomeSubdivision] {
+        Array(MetronomeSubdivision.allCases)
+    }
+
+    private var canDecreaseSubdivision: Bool {
+        subdivisionCases.first != metronome.subdivision
+    }
+
+    private var canIncreaseSubdivision: Bool {
+        subdivisionCases.last != metronome.subdivision
+    }
 
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: GitaTheme.s20) {
-                        bpmSection
-                            .id(MetronomeSheetAnchor.speed.scrollSectionID)
-                        meterSection
+                    VStack(alignment: .leading, spacing: GitaTheme.s12) {
+                        meterControls
                             .id(MetronomeSheetAnchor.meter.scrollSectionID)
+                        accentSection
                         subdivisionSection
                             .id(MetronomeSheetAnchor.subdivision.scrollSectionID)
                     }
@@ -45,53 +57,86 @@ struct MetronomeSettingsSheet: View {
         .presentationDragIndicator(.visible)
     }
 
-    private var bpmSection: some View {
-        VStack(spacing: GitaTheme.s8) {
-            HStack {
-                stepButton("－", accent: false, enabled: metronome.bpm > 40) {
-                    metronome.bump(-1)
+    private var meterControls: some View {
+        HStack(spacing: 10) {
+            controlColumn(title: String(localized: "节拍")) {
+                HStack {
+                    MetronomeStepButton(
+                        kind: .decrease,
+                        diameter: stepButtonSize,
+                        enabled: metronome.beatsPerBar > MetronomeMeter.minBeats
+                    ) {
+                        metronome.bumpBeatsPerBar(-1)
+                    }
+                    MetronomeStepButton(
+                        kind: .increase,
+                        diameter: stepButtonSize,
+                        enabled: metronome.beatsPerBar < MetronomeMeter.maxBeats
+                    ) {
+                        metronome.bumpBeatsPerBar(1)
+                    }
                 }
-                VStack(spacing: 2) {
-                    Text("\(metronome.bpm)")
-                        .font(GitaFont.timer(.semibold))
-                        .foregroundStyle(GitaTheme.brand500)
-                    Text(MetronomeTempoName.name(for: metronome.bpm))
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                }
-                .frame(maxWidth: .infinity)
-                stepButton("＋", accent: true, enabled: metronome.bpm < 200) {
-                    metronome.bump(1)
+            }
+
+            VStack(spacing: 4) {
+                Text(String(localized: "拍号"))
+                    .font(GitaFont.micro())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Text("\(metronome.beatsPerBar) / \(metronome.denominator)")
+                    .font(GitaFont.metric(.bold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .monospacedDigit()
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 74)
+            .background(GitaTheme.brand50)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+
+            controlColumn(title: String(localized: "音符")) {
+                HStack {
+                    MetronomeStepButton(
+                        kind: .decrease,
+                        diameter: stepButtonSize,
+                        enabled: canDecreaseSubdivision
+                    ) {
+                        metronome.bumpSubdivision(-1)
+                    }
+                    MetronomeStepButton(
+                        kind: .increase,
+                        diameter: stepButtonSize,
+                        enabled: canIncreaseSubdivision
+                    ) {
+                        metronome.bumpSubdivision(1)
+                    }
                 }
             }
         }
-        .padding(.top, GitaTheme.s8)
     }
 
-    private var meterSection: some View {
-        VStack(alignment: .leading, spacing: GitaTheme.s8) {
-            sectionHeader(String(localized: "拍号"), comingSoon: false)
-            HStack(spacing: GitaTheme.s12) {
-                stepButton("－", accent: false, enabled: metronome.beatsPerBar > MetronomeMeter.minBeats) {
-                    metronome.bumpBeatsPerBar(-1)
-                }
-                VStack(spacing: 4) {
-                    Text(String(localized: "拍号"))
-                        .font(GitaFont.micro())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                    Text(metronome.timeSignatureText)
-                        .font(GitaFont.title(.semibold))
-                        .foregroundStyle(GitaTheme.brand500)
-                }
-                .frame(maxWidth: .infinity)
-                stepButton("＋", accent: true, enabled: metronome.beatsPerBar < MetronomeMeter.maxBeats) {
-                    metronome.bumpBeatsPerBar(1)
-                }
-            }
-            Text(String(localized: "重音"))
-                .font(GitaFont.caption())
+    private func controlColumn<Content: View>(
+        title: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(GitaFont.micro())
                 .foregroundStyle(GitaTheme.textSecondary)
-            HStack(spacing: GitaTheme.s12) {
+            content()
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: 74)
+        .padding(GitaTheme.s8)
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+    }
+
+    private var accentSection: some View {
+        VStack(alignment: .leading, spacing: GitaTheme.s8) {
+            Text(String(localized: "重音"))
+                .font(GitaFont.footnote(.medium))
+                .foregroundStyle(GitaTheme.textPrimary)
+
+            HStack(spacing: 0) {
                 ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                     Button {
                         metronome.cycleAccent(at: index)
@@ -103,7 +148,10 @@ struct MetronomeSettingsSheet: View {
                     .accessibilityLabel(accentAccessibilityLabel(for: index))
                 }
             }
-            .padding(.vertical, GitaTheme.s8)
+            .padding(.horizontal, GitaTheme.s16)
+            .frame(height: 48)
+            .background(GitaTheme.bgSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
         }
     }
 
@@ -112,25 +160,36 @@ struct MetronomeSettingsSheet: View {
         let kind = metronome.accentPattern.indices.contains(index)
             ? metronome.accentPattern[index]
             : MetronomeBeatKind.normal
-        switch kind {
-        case .accent:
-            Image(systemName: "music.note")
-                .font(.system(size: 22))
-                .foregroundStyle(GitaTheme.brand500)
-        case .normal:
-            Image(systemName: "music.note")
-                .font(.system(size: 22))
-                .foregroundStyle(GitaTheme.textSecondary)
-        case .mute:
-            Image(systemName: "music.note")
-                .font(.system(size: 22))
-                .foregroundStyle(GitaTheme.textTertiary.opacity(0.45))
-                .overlay {
-                    Image(systemName: "slash.circle")
-                        .font(.system(size: 14))
-                        .foregroundStyle(GitaTheme.textTertiary)
+
+        VStack(spacing: 2) {
+            Group {
+                switch kind {
+                case .accent, .normal:
+                    Image(systemName: "music.note")
+                        .font(.system(size: 22))
+                        .foregroundStyle(GitaTheme.brand500)
+                case .mute:
+                    Image(systemName: "music.note")
+                        .font(.system(size: 22))
+                        .foregroundStyle(GitaTheme.textTertiary.opacity(0.45))
+                        .overlay {
+                            Image(systemName: "slash.circle")
+                                .font(.system(size: 14))
+                                .foregroundStyle(GitaTheme.textTertiary)
+                        }
                 }
+            }
+
+            if kind == .accent {
+                Text("›")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .offset(y: -2)
+            } else {
+                Color.clear.frame(height: 12)
+            }
         }
+        .frame(height: 42)
     }
 
     private func accentAccessibilityLabel(for index: Int) -> Text {
@@ -149,81 +208,47 @@ struct MetronomeSettingsSheet: View {
     }
 
     private var subdivisionSection: some View {
-        VStack(alignment: .leading, spacing: GitaTheme.s8) {
-            sectionHeader(String(localized: "切分"), comingSoon: false)
-            LazyVGrid(columns: gridColumns, spacing: 0) {
-                ForEach(MetronomeSubdivision.allCases) { value in
-                    Button {
-                        metronome.setSubdivision(value)
-                    } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                                .stroke(
-                                    metronome.subdivision == value ? GitaTheme.brand500 : Color.clear,
-                                    lineWidth: 2
-                                )
-                            Image(value.assetName)
-                                .resizable()
-                                .scaledToFit()
-                                .padding(8)
-                        }
-                        .frame(height: 52)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text(value.accessibilityLabel))
+        LazyVGrid(columns: gridColumns, spacing: 0) {
+            ForEach(MetronomeSubdivision.allCases) { value in
+                subdivisionCell(value)
+            }
+        }
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+        .overlay {
+            RoundedRectangle(cornerRadius: GitaTheme.radius12)
+                .stroke(GitaTheme.borderSubtle, lineWidth: 0)
+        }
+    }
+
+    private func subdivisionCell(_ value: MetronomeSubdivision) -> some View {
+        let selected = metronome.subdivision == value
+        return Button {
+            metronome.setSubdivision(value)
+        } label: {
+            ZStack {
+                Rectangle()
+                    .fill(selected ? GitaTheme.brand50 : GitaTheme.bgSurface)
+                Image(value.assetName)
+                    .resizable()
+                    .scaledToFit()
+                    .padding(12)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 103.5)
+            .overlay {
+                if selected {
+                    RoundedRectangle(cornerRadius: 0)
+                        .stroke(GitaTheme.brand500, lineWidth: 2)
+                } else {
+                    RoundedRectangle(cornerRadius: 0)
+                        .stroke(GitaTheme.borderSubtle, lineWidth: 1)
                 }
             }
         }
-    }
-
-    private func sectionHeader(_ title: String, comingSoon: Bool) -> some View {
-        HStack(spacing: GitaTheme.s8) {
-            Text(title)
-                .font(GitaFont.headline())
-            if comingSoon {
-                Text(String(localized: "即将支持"))
-                    .font(GitaFont.micro())
-                    .foregroundStyle(GitaTheme.textSecondary)
-            }
-        }
-    }
-
-    private var disabledStepperPlaceholder: some View {
-        HStack(spacing: GitaTheme.s8) {
-            circlePlaceholder
-            circlePlaceholder
-        }
-    }
-
-    private var circlePlaceholder: some View {
-        Circle()
-            .fill(GitaTheme.bgSubtle)
-            .frame(width: 36, height: 36)
-            .overlay {
-                Text("±")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(GitaTheme.textTertiary)
-            }
-    }
-
-    private func stepButton(
-        _ title: String,
-        accent: Bool,
-        enabled: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(accent ? GitaTheme.brand500 : GitaTheme.textSecondary)
-                .frame(width: 44, height: 44)
-                .background(accent ? GitaTheme.brand50 : GitaTheme.bgSubtle)
-                .clipShape(Circle())
-        }
         .buttonStyle(.plain)
-        .disabled(!enabled)
-        .opacity(enabled ? 1 : 0.4)
-        .accessibilityLabel(Text(accent ? String(localized: "提高 1 BPM") : String(localized: "降低 1 BPM")))
+        .accessibilityLabel(Text(value.accessibilityLabel))
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private func scrollToAnchor(_ proxy: ScrollViewProxy) {

@@ -514,11 +514,18 @@ struct PracticeDetailView: View {
             )
         }
         .sheet(item: $metronomeSheetAnchor) { anchor in
-            MetronomeSettingsSheet(
-                metronome: metronome,
-                anchor: anchor,
-                onDone: { metronomeSheetAnchor = nil }
-            )
+            switch anchor {
+            case .speed:
+                MetronomeSpeedSheet(metronome: metronome) {
+                    metronomeSheetAnchor = nil
+                }
+            case .meter, .subdivision:
+                MetronomeSettingsSheet(
+                    metronome: metronome,
+                    anchor: anchor,
+                    onDone: { metronomeSheetAnchor = nil }
+                )
+            }
         }
         .sheet(isPresented: $showMetronomeSoundSheet) {
             MetronomeSoundSheet(metronome: metronome) {

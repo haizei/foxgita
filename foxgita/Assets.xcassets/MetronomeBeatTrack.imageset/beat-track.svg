@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="346" height="24" viewBox="0 0 346 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Beat Track">
+<path d="M0 8C0 3.58172 3.58172 0 8 0H338C342.418 0 346 3.58172 346 8V16C346 20.4183 342.418 24 338 24H8.00001C3.58173 24 0 20.4183 0 16V8Z" fill="#F6F6F6"/>
+<circle id="Tick 1" cx="44" cy="14" r="4" fill="#FF7925"/>
+<circle id="Tick 2" cx="131" cy="13" r="3" fill="#D6D9DE"/>
+<circle id="Tick 3" cx="219" cy="13" r="3" fill="#D6D9DE"/>
+<circle id="Tick 4" cx="307" cy="13" r="3" fill="#D6D9DE"/>
+</g>
+</svg>

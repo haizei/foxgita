@@ -40,6 +40,7 @@ enum GitaTheme {
     // Category
     static let categoryBlue = Color(.categoryBlue)
     static let categoryOrange = Color(.categoryOrange)
+    static let categoryOrangeSoft = Color(.categoryOrangeSoft)
     static let categoryYellow = Color(.categoryYellow)
     static let categoryPurple = Color(.categoryPurple)
     static let categoryCyan = Color(.categoryCyan)

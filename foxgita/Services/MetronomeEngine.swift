@@ -115,6 +115,14 @@ final class MetronomeEngine {
         subdivision = value
     }
 
+    func bumpSubdivision(_ delta: Int) {
+        let all = Array(MetronomeSubdivision.allCases)
+        guard let index = all.firstIndex(of: subdivision) else { return }
+        let next = index + delta
+        guard all.indices.contains(next) else { return }
+        setSubdivision(all[next])
+    }
+
     func configureSound(modeRaw: String?, volume: Int?, strongBeatBoost: Bool?) {
         setSoundMode(MetronomeSoundMode.decode(modeRaw))
         setVolume(volume ?? 80)

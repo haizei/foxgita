@@ -20,4 +20,16 @@ struct MetronomeSubdivisionTests {
         #expect(MetronomeSubdivision.decode(99) == .quarter)
         #expect(MetronomeSubdivision.decode(3) == .triplet)
     }
+
+    @MainActor
+    @Test func bumpSubdivisionStepsThroughCases() {
+        let metronome = MetronomeEngine()
+        #expect(metronome.subdivision == .quarter)
+        metronome.bumpSubdivision(1)
+        #expect(metronome.subdivision == .twoEighths)
+        metronome.bumpSubdivision(-1)
+        #expect(metronome.subdivision == .quarter)
+        metronome.bumpSubdivision(-1)
+        #expect(metronome.subdivision == .quarter)
+    }
 }

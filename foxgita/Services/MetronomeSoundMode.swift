@@ -28,6 +28,14 @@ enum MetronomeSoundMode: String, CaseIterable, Identifiable, Equatable {
         }
     }
 
+    var iconAssetName: String {
+        switch self {
+        case .standard: "MetronomeSoundModeStandard"
+        case .acousticGuitar: "MetronomeSoundModeAcousticGuitar"
+        case .drums: "MetronomeSoundModeDrums"
+        }
+    }
+
     static func decode(_ raw: String?) -> MetronomeSoundMode {
         guard let raw, let value = MetronomeSoundMode(rawValue: raw) else { return .standard }
         return value
