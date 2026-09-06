@@ -139,9 +139,19 @@ struct MetronomeEngineTests {
     @Test func previewRequiresIdle() throws {
         let metronome = MetronomeEngine()
         try metronome.start()
-        #expect(throws: (any Error).self) {
+        #expect(throws: MetronomeError.previewUnavailableWhilePlaying) {
             try metronome.preview(bars: 2)
         }
         metronome.stop()
+    }
+
+    @Test func previewStopsAfterBars() async throws {
+        let metronome = MetronomeEngine()
+        metronome.setBpm(200)
+        metronome.configureMeter(timeSignature: "1/4", accentRaw: "2")
+        try metronome.preview(bars: 1)
+        #expect(metronome.isPlaying)
+        try await Task.sleep(for: .seconds(1.5))
+        #expect(!metronome.isPlaying)
     }
 }

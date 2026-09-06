@@ -9,6 +9,7 @@ import os
 
 enum MetronomeError: Error, Equatable {
     case engineNotRunning
+    case previewUnavailableWhilePlaying
 }
 
 private let metronomeLog = Logger(subsystem: "com.haizei.foxgita", category: "metronome")
@@ -141,7 +142,7 @@ final class MetronomeEngine {
     }
 
     func preview(bars: Int = 2) throws {
-        guard !isPlaying else { throw MetronomeError.engineNotRunning }
+        guard !isPlaying else { throw MetronomeError.previewUnavailableWhilePlaying }
         previewRemainingBeats = bars * beatsPerBar
         try start()
     }
@@ -312,7 +313,7 @@ final class MetronomeEngine {
         strongAccentClick = Self.makeClick(
             format: format,
             frequency: recipe.accentFrequency,
-            amplitude: recipe.accentAmplitude * volumeScale * 1.4,
+            amplitude: min(1.0, recipe.accentAmplitude * volumeScale * 1.4),
             decay: recipe.decay
         )
         beatClick = Self.makeClick(
