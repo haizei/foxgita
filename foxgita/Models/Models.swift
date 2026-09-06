@@ -6,14 +6,14 @@
 import Foundation
 import SwiftData
 
-typealias TaskItem = GitaSchemaV14.TaskItem
-typealias PracticeSession = GitaSchemaV14.PracticeSession
-typealias RecordingRef = GitaSchemaV14.RecordingRef
-typealias LocalProfile = GitaSchemaV14.LocalProfile
-typealias MemoryItem = GitaSchemaV14.MemoryItem
-typealias PracticeItem = GitaSchemaV14.PracticeItem
-typealias Project = GitaSchemaV14.Project
-typealias AIInvocationLog = GitaSchemaV14.AIInvocationLog
+typealias TaskItem = GitaSchemaV15.TaskItem
+typealias PracticeSession = GitaSchemaV15.PracticeSession
+typealias RecordingRef = GitaSchemaV15.RecordingRef
+typealias LocalProfile = GitaSchemaV15.LocalProfile
+typealias MemoryItem = GitaSchemaV15.MemoryItem
+typealias PracticeItem = GitaSchemaV15.PracticeItem
+typealias Project = GitaSchemaV15.Project
+typealias AIInvocationLog = GitaSchemaV15.AIInvocationLog
 
 /// Per-record sync bookkeeping. Everything is `local` until a remote backend
 /// exists; the field is here so migrating to sync later is not a schema break.
@@ -720,6 +720,7 @@ enum StepCoding {
 /// V11 → V12 adds PracticeItem.stepsRaw;
 /// V12 → V13 adds PracticeItem.subtitle and PracticeItem.targetMin;
 /// V13 → V14 adds AIInvocationLog.
+/// V14 → V15 adds PracticeItem.metronomeAccentRaw for per-beat accent/mute.
 ///
 /// Never edit a shipped version in place. Two branches once each declared a
 /// different "V13"; merging them into one shape left installed stores with a
@@ -733,6 +734,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             GitaSchemaV8.self, GitaSchemaV9.self, GitaSchemaV10.self,
             GitaSchemaV11.self, GitaSchemaV12.self, GitaSchemaV13.self,
             GitaSchemaV14.self,
+            GitaSchemaV15.self,
         ]
     }
 
@@ -750,6 +752,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV11.self, toVersion: GitaSchemaV12.self),
             .lightweight(fromVersion: GitaSchemaV12.self, toVersion: GitaSchemaV13.self),
             .lightweight(fromVersion: GitaSchemaV13.self, toVersion: GitaSchemaV14.self),
+            .lightweight(fromVersion: GitaSchemaV14.self, toVersion: GitaSchemaV15.self),
         ]
     }
 }
