@@ -118,4 +118,30 @@ struct MetronomeEngineTests {
         #expect(metronome.subdivision == .fourSixteenths)
         metronome.stop()
     }
+
+    @Test func setSoundModeWhilePlayingKeepsPlaying() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.setSoundMode(.drums)
+        #expect(metronome.isPlaying)
+        #expect(metronome.soundMode == .drums)
+        metronome.stop()
+    }
+
+    @Test func volumeClamps() {
+        let metronome = MetronomeEngine()
+        metronome.setVolume(150)
+        #expect(metronome.volume == 100)
+        metronome.setVolume(-5)
+        #expect(metronome.volume == 0)
+    }
+
+    @Test func previewRequiresIdle() throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        #expect(throws: (any Error).self) {
+            try metronome.preview(bars: 2)
+        }
+        metronome.stop()
+    }
 }

@@ -25,6 +25,9 @@ final class MetronomeEngine {
     private(set) var denominator = MetronomeMeter.defaultDenominator
     private(set) var accentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
     private(set) var subdivision: MetronomeSubdivision = .quarter
+    private(set) var soundMode: MetronomeSoundMode = .standard
+    private(set) var volume = 80
+    private(set) var strongBeatBoost = true
 
     var timeSignatureText: String {
         MetronomeMeter.format(beats: beatsPerBar, denominator: denominator)
@@ -35,6 +38,7 @@ final class MetronomeEngine {
     }
 
     var subdivisionRaw: Int { subdivision.rawValue }
+    var flashOnAccent: Bool { soundMode == .drums && isPlaying }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
@@ -46,6 +50,7 @@ final class MetronomeEngine {
     )!
     @ObservationIgnored private let session: AudioSessionCoordinator
     @ObservationIgnored private var accentClick: AVAudioPCMBuffer?
+    @ObservationIgnored private var strongAccentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
     @ObservationIgnored private var nextClickFrame: AVAudioFramePosition = 0
@@ -53,6 +58,8 @@ final class MetronomeEngine {
     @ObservationIgnored private var subClickIndex = 0
     @ObservationIgnored private var graphConfigured = false
     @ObservationIgnored private var runToken = 0
+    @ObservationIgnored private var previewRemainingBeats: Int?
+    @ObservationIgnored private var previewStopScheduled = false
 
     var hapticsEnabled = true
 
@@ -107,6 +114,38 @@ final class MetronomeEngine {
         subdivision = value
     }
 
+    func configureSound(modeRaw: String?, volume: Int?, strongBeatBoost: Bool?) {
+        setSoundMode(MetronomeSoundMode.decode(modeRaw))
+        setVolume(volume ?? 80)
+        setStrongBeatBoost(strongBeatBoost ?? true)
+    }
+
+    func setSoundMode(_ value: MetronomeSoundMode) {
+        guard value != soundMode else { return }
+        soundMode = value
+        if value == .drums { hapticsEnabled = true }
+        rebuildClickBuffers()
+    }
+
+    func setVolume(_ value: Int) {
+        let clamped = min(100, max(0, value))
+        guard clamped != volume else { return }
+        volume = clamped
+        rebuildClickBuffers()
+    }
+
+    func setStrongBeatBoost(_ value: Bool) {
+        guard value != strongBeatBoost else { return }
+        strongBeatBoost = value
+        rebuildClickBuffers()
+    }
+
+    func preview(bars: Int = 2) throws {
+        guard !isPlaying else { throw MetronomeError.engineNotRunning }
+        previewRemainingBeats = bars * beatsPerBar
+        try start()
+    }
+
     func start() throws {
         guard !isPlaying else { return }
         var acquired = false
@@ -136,6 +175,8 @@ final class MetronomeEngine {
             )
         } catch {
             isPlaying = false
+            previewRemainingBeats = nil
+            previewStopScheduled = false
             pump?.invalidate()
             pump = nil
             if acquired { session.release(.playback) }
@@ -154,6 +195,8 @@ final class MetronomeEngine {
         subClickIndex = 0
         currentBeatInBar = 0
         runToken += 1
+        previewRemainingBeats = nil
+        previewStopScheduled = false
         session.release(.playback)
         metronomeLog.debug(
             "stop running=\(self.engine.isRunning, privacy: .public) other=\(AVAudioSession.sharedInstance().isOtherAudioPlaying, privacy: .public)"
@@ -168,13 +211,15 @@ final class MetronomeEngine {
         guard !graphConfigured else { return }
         engine.attach(player)
         engine.connect(player, to: engine.mainMixerNode, format: format)
-        accentClick = Self.makeClick(format: format, frequency: 1_000, amplitude: 0.9)
-        beatClick = Self.makeClick(format: format, frequency: 800, amplitude: 0.5)
+        rebuildClickBuffers()
         graphConfigured = true
     }
 
     private func fill() {
-        guard isPlaying, let accent = accentClick, let beat = beatClick else { return }
+        guard isPlaying, !previewStopScheduled,
+              let accent = accentClick,
+              let strongAccent = strongAccentClick,
+              let beat = beatClick else { return }
         let now = currentFrame()
         if nextClickFrame < now {
             nextClickFrame = now + frames(0.05)
@@ -184,12 +229,13 @@ final class MetronomeEngine {
         }
         let horizon = now + frames(Self.lead)
         while nextClickFrame <= horizon {
+            let scheduledFrame = nextClickFrame
             let beatInBar = beatIndex % beatsPerBar
             if subClickIndex == 0 { currentBeatInBar = beatInBar }
             let beatKind = accentPattern[beatInBar]
             if beatKind != .mute {
                 let useAccent = beatKind == .accent && subClickIndex == 0
-                let buffer = useAccent ? accent : beat
+                let buffer = useAccent ? (strongBeatBoost ? strongAccent : accent) : beat
                 player.scheduleBuffer(
                     buffer,
                     at: AVAudioTime(sampleTime: nextClickFrame, atRate: format.sampleRate),
@@ -200,8 +246,81 @@ final class MetronomeEngine {
             }
             nextClickFrame += intervalToNextClick()
             advanceClickPosition()
+            if subClickIndex == 0, let remaining = previewRemainingBeats {
+                previewRemainingBeats = remaining - 1
+                if remaining <= 1 {
+                    previewStopScheduled = true
+                    schedulePreviewStop(at: scheduledFrame + frames(0.03), now: now)
+                    return
+                }
+            }
         }
         if !player.isPlaying { player.play() }
+    }
+
+    private func schedulePreviewStop(
+        at frame: AVAudioFramePosition, now: AVAudioFramePosition
+    ) {
+        let token = runToken
+        let delay = Double(frame - now) / format.sampleRate
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.isPlaying, self.runToken == token else { return }
+                self.stop()
+            }
+        }
+    }
+
+    private struct ClickRecipe {
+        let accentFrequency: Double
+        let accentAmplitude: Double
+        let beatFrequency: Double
+        let beatAmplitude: Double
+        let decay: Double
+    }
+
+    private func recipe(for mode: MetronomeSoundMode) -> ClickRecipe {
+        switch mode {
+        case .standard:
+            ClickRecipe(
+                accentFrequency: 1_000, accentAmplitude: 0.9,
+                beatFrequency: 800, beatAmplitude: 0.5, decay: 90
+            )
+        case .acousticGuitar:
+            ClickRecipe(
+                accentFrequency: 1_400, accentAmplitude: 1.0,
+                beatFrequency: 1_200, beatAmplitude: 0.6, decay: 120
+            )
+        case .drums:
+            ClickRecipe(
+                accentFrequency: 200, accentAmplitude: 1.0,
+                beatFrequency: 180, beatAmplitude: 0.7, decay: 90
+            )
+        }
+    }
+
+    private var volumeScale: Double { Double(volume) / 100.0 }
+
+    private func rebuildClickBuffers() {
+        let recipe = recipe(for: soundMode)
+        accentClick = Self.makeClick(
+            format: format,
+            frequency: recipe.accentFrequency,
+            amplitude: recipe.accentAmplitude * volumeScale,
+            decay: recipe.decay
+        )
+        strongAccentClick = Self.makeClick(
+            format: format,
+            frequency: recipe.accentFrequency,
+            amplitude: recipe.accentAmplitude * volumeScale * 1.4,
+            decay: recipe.decay
+        )
+        beatClick = Self.makeClick(
+            format: format,
+            frequency: recipe.beatFrequency,
+            amplitude: recipe.beatAmplitude * volumeScale,
+            decay: recipe.decay
+        )
     }
 
     private func intervalToNextClick() -> AVAudioFramePosition {
@@ -254,7 +373,7 @@ final class MetronomeEngine {
     }
 
     private static func makeClick(
-        format: AVAudioFormat, frequency: Double, amplitude: Double
+        format: AVAudioFormat, frequency: Double, amplitude: Double, decay: Double = 90
     ) -> AVAudioPCMBuffer {
         let sampleRate = format.sampleRate
         let frameCount = AVAudioFrameCount(sampleRate * 0.03)
@@ -263,7 +382,7 @@ final class MetronomeEngine {
         guard let channel = buffer.floatChannelData?[0] else { return buffer }
         for i in 0..<Int(frameCount) {
             let t = Double(i) / sampleRate
-            channel[i] = Float(sin(2 * .pi * frequency * t) * exp(-t * 90) * amplitude)
+            channel[i] = Float(sin(2 * .pi * frequency * t) * exp(-t * decay) * amplitude)
         }
         return buffer
     }
