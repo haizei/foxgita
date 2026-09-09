@@ -60,7 +60,7 @@ struct MetronomeSettingsSheet: View {
     private var meterControls: some View {
         HStack(spacing: 10) {
             controlColumn(title: String(localized: "节拍")) {
-                HStack {
+                HStack(spacing: 8) {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
@@ -78,12 +78,12 @@ struct MetronomeSettingsSheet: View {
                 }
             }
 
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text(String(localized: "拍号"))
                     .font(GitaFont.micro())
                     .foregroundStyle(GitaTheme.textSecondary)
                 Text("\(metronome.beatsPerBar) / \(metronome.denominator)")
-                    .font(GitaFont.metric(.bold))
+                    .font(GitaFont.title(.bold))
                     .foregroundStyle(GitaTheme.brand500)
                     .monospacedDigit()
             }
@@ -93,7 +93,7 @@ struct MetronomeSettingsSheet: View {
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
 
             controlColumn(title: String(localized: "音符")) {
-                HStack {
+                HStack(spacing: 8) {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
@@ -140,6 +140,7 @@ struct MetronomeSettingsSheet: View {
                 ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                     Button {
                         metronome.cycleAccent(at: index)
+                        Haptics.selection()
                     } label: {
                         accentBeatIcon(for: index)
                             .frame(maxWidth: .infinity)
@@ -159,37 +160,55 @@ struct MetronomeSettingsSheet: View {
     private func accentBeatIcon(for index: Int) -> some View {
         let kind = metronome.accentPattern.indices.contains(index)
             ? metronome.accentPattern[index]
-            : MetronomeBeatKind.normal
+            : MetronomeBeatKind.weak
 
         VStack(spacing: 2) {
             Group {
                 switch kind {
-                case .accent, .normal:
-                    Image(systemName: "music.note")
-                        .font(.system(size: 22))
+                case .strong, .medium:
+                    Image("note-1")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 14, height: 22)
                         .foregroundStyle(GitaTheme.brand500)
+                case .weak:
+                    Image("note-1")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 14, height: 22)
+                        .foregroundStyle(GitaTheme.textSecondary)
                 case .mute:
-                    Image(systemName: "music.note")
-                        .font(.system(size: 22))
-                        .foregroundStyle(GitaTheme.textTertiary.opacity(0.45))
+                    Image("note-1")
+                        .resizable()
+                        .renderingMode(.template)
+                        .scaledToFit()
+                        .frame(width: 14, height: 22)
+                        .foregroundStyle(GitaTheme.textTertiary.opacity(0.35))
                         .overlay {
                             Image(systemName: "slash.circle")
-                                .font(.system(size: 14))
+                                .font(.system(size: 13))
                                 .foregroundStyle(GitaTheme.textTertiary)
                         }
                 }
             }
 
-            if kind == .accent {
-                Text("›")
+            if kind == .strong {
+                Text(">")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .offset(y: -4)
+            } else if kind == .medium {
+                Text("-")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(GitaTheme.brand500)
-                    .offset(y: -2)
+                    .offset(y: -4)
             } else {
-                Color.clear.frame(height: 12)
+                Color.clear.frame(height: 10)
             }
         }
-        .frame(height: 42)
+        .frame(height: 40)
     }
 
     private func accentAccessibilityLabel(for index: Int) -> Text {
@@ -198,10 +217,12 @@ struct MetronomeSettingsSheet: View {
             return Text("第 \(beat) 拍")
         }
         switch metronome.accentPattern[index] {
-        case .accent:
+        case .strong:
             return Text("第 \(beat) 拍，强拍")
-        case .normal:
-            return Text("第 \(beat) 拍，弱拍")
+        case .medium:
+            return Text("第 \(beat) 拍，次强拍")
+        case .weak:
+            return Text("第 \(beat) 拍，普通拍")
         case .mute:
             return Text("第 \(beat) 拍，静音")
         }
@@ -225,14 +246,18 @@ struct MetronomeSettingsSheet: View {
         let selected = metronome.subdivision == value
         return Button {
             metronome.setSubdivision(value)
+            Haptics.selection()
         } label: {
             ZStack {
                 Rectangle()
                     .fill(selected ? GitaTheme.brand50 : GitaTheme.bgSurface)
                 Image(value.assetName)
                     .resizable()
+                    .renderingMode(.template)
+                    .foregroundStyle(GitaTheme.textPrimary)
                     .scaledToFit()
-                    .padding(12)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 20)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 103.5)
