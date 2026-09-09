@@ -15,6 +15,10 @@ enum Haptics {
         UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 
+    static func selection() {
+        UISelectionFeedbackGenerator().selectionChanged()
+    }
+
     static func downbeat() {
         UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.7)
     }
