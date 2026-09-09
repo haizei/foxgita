@@ -52,6 +52,7 @@ final class MetronomeEngine {
     @ObservationIgnored private let session: AudioSessionCoordinator
     @ObservationIgnored private var accentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var strongAccentClick: AVAudioPCMBuffer?
+    @ObservationIgnored private var mediumAccentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
     @ObservationIgnored private var nextClickFrame: AVAudioFramePosition = 0
@@ -91,7 +92,7 @@ final class MetronomeEngine {
         guard clamped != beatsPerBar else { return }
         if clamped > beatsPerBar {
             accentPattern.append(
-                contentsOf: Array(repeating: MetronomeBeatKind.normal, count: clamped - beatsPerBar)
+                contentsOf: Array(repeating: MetronomeBeatKind.weak, count: clamped - beatsPerBar)
             )
         } else {
             accentPattern = Array(accentPattern.prefix(clamped))
@@ -228,6 +229,7 @@ final class MetronomeEngine {
         guard isPlaying, !previewStopScheduled,
               let accent = accentClick,
               let strongAccent = strongAccentClick,
+              let mediumAccent = mediumAccentClick,
               let beat = beatClick else { return }
         let now = currentFrame()
         if nextClickFrame < now {
@@ -243,15 +245,27 @@ final class MetronomeEngine {
             if subClickIndex == 0 { currentBeatInBar = beatInBar }
             let beatKind = accentPattern[beatInBar]
             if beatKind != .mute {
-                let useAccent = beatKind == .accent && subClickIndex == 0
-                let buffer = useAccent ? (strongBeatBoost ? strongAccent : accent) : beat
+                let buffer: AVAudioPCMBuffer
+                switch beatKind {
+                case .strong:
+                    let strongBuffer = strongBeatBoost ? strongAccent : accent
+                    buffer = (subClickIndex == 0) ? strongBuffer : beat
+                case .medium:
+                    buffer = (subClickIndex == 0) ? mediumAccent : beat
+                case .weak:
+                    buffer = beat
+                case .mute:
+                    buffer = beat
+                }
                 player.scheduleBuffer(
                     buffer,
                     at: AVAudioTime(sampleTime: nextClickFrame, atRate: format.sampleRate),
                     options: [],
                     completionHandler: nil
                 )
-                if useAccent { scheduleDownbeatHaptic(at: nextClickFrame, now: now) }
+                if beatKind == .strong && subClickIndex == 0 {
+                    scheduleDownbeatHaptic(at: nextClickFrame, now: now)
+                }
             }
             nextClickFrame += intervalToNextClick()
             advanceClickPosition()
@@ -322,6 +336,12 @@ final class MetronomeEngine {
             format: format,
             frequency: recipe.accentFrequency,
             amplitude: min(1.0, recipe.accentAmplitude * volumeScale * 1.4),
+            decay: recipe.decay
+        )
+        mediumAccentClick = Self.makeClick(
+            format: format,
+            frequency: (recipe.accentFrequency + recipe.beatFrequency) / 2.0,
+            amplitude: recipe.accentAmplitude * volumeScale * 0.75,
             decay: recipe.decay
         )
         beatClick = Self.makeClick(
