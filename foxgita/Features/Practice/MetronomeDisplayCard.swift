@@ -10,6 +10,8 @@ struct MetronomeDisplayCard: View {
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
     var onSoundTap: () -> Void = {}
 
+    @State private var isBeatFlashing = false
+
     private var meterText: String { metronome.timeSignatureText }
 
     private var activeBeat: Int? {
@@ -17,38 +19,39 @@ struct MetronomeDisplayCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             HStack(spacing: 0) {
                 entryColumn(anchor: .speed, label: String(localized: "速度 (BPM)")) {
                     speedValue
                 }
-                .frame(maxWidth: .infinity)
 
                 entryColumn(anchor: .meter, label: String(localized: "拍号")) {
                     Text(meterText)
                         .font(GitaFont.largeTitle(.bold))
                         .foregroundStyle(GitaTheme.brand500)
                         .monospacedDigit()
+                        .frame(height: 40)
                 }
-                .frame(maxWidth: .infinity)
 
                 entryColumn(anchor: .subdivision, label: String(localized: "音符")) {
                     Image(metronome.subdivision.assetName)
                         .resizable()
+                        .renderingMode(.template)
                         .scaledToFit()
-                        .frame(width: 32, height: 32)
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(width: 28, height: 28)
+                        .frame(height: 40)
                 }
-                .frame(maxWidth: .infinity)
 
                 soundColumn
-                    .frame(maxWidth: .infinity)
             }
 
             beatBars
             beatTrack
         }
-        .padding(.horizontal, GitaTheme.s12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, GitaTheme.s16)
+        .padding(.vertical, 12)
+        .frame(height: 214)
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
         .overlay {
@@ -56,31 +59,41 @@ struct MetronomeDisplayCard: View {
                 .stroke(GitaTheme.borderSubtle, lineWidth: 1)
         }
         .shadow(color: GitaTheme.shadowCard, radius: 16, y: 4)
+        .onChange(of: metronome.currentBeatInBar) { _, _ in
+            guard metronome.isPlaying else { return }
+            isBeatFlashing = true
+            withAnimation(.easeOut(duration: 0.18)) {
+                isBeatFlashing = false
+            }
+        }
         .accessibilityElement(children: .contain)
     }
 
     private var speedValue: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 4) {
             Image("MetronomeSpeedIcon")
                 .resizable()
                 .scaledToFit()
-                .frame(width: 28, height: 28)
+                .frame(width: 26, height: 26)
             Text("\(metronome.bpm)")
                 .font(GitaFont.largeTitle(.bold))
                 .foregroundStyle(GitaTheme.brand500)
                 .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(height: 40)
     }
 
     private var soundColumn: some View {
         Button(action: onSoundTap) {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 metricLabel(String(localized: "声音"))
                 Image("MetronomeSoundIcon")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 32, height: 32)
+                    .frame(width: 28, height: 28)
+                    .frame(height: 40)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -97,7 +110,7 @@ struct MetronomeDisplayCard: View {
         Button {
             onEntryTap(anchor)
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 metricLabel(label)
                 content()
             }
@@ -114,15 +127,15 @@ struct MetronomeDisplayCard: View {
                 beatBar(index: index)
             }
         }
-        .frame(height: 58)
+        .frame(height: 80)
         .animation(.easeInOut(duration: 0.12), value: activeBeat)
         .animation(.easeInOut(duration: 0.12), value: metronome.beatsPerBar)
-        .animation(.easeInOut(duration: 0.12), value: metronome.accentPattern)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: metronome.accentPattern)
     }
 
     private func beatBar(index: Int) -> some View {
         let isActive = activeBeat == index
-        let fillHeight = barFill(for: index, isActive: isActive)
+        let fillRatio = barHeightRatio(for: index)
         let fillColor = barFillColor(for: index, isActive: isActive)
         let markerColor = isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle
 
@@ -136,10 +149,10 @@ struct MetronomeDisplayCard: View {
             .overlay(alignment: .bottom) {
                 Rectangle()
                     .fill(fillColor)
-                    .frame(height: 58 * fillHeight)
+                    .frame(height: 80 * fillRatio)
             }
             .overlay {
-                if metronome.flashOnAccent, isActive, accentBarFill(for: index) >= 0.72 {
+                if metronome.flashOnAccent, isActive, fillRatio >= 0.72 {
                     RoundedRectangle(cornerRadius: GitaTheme.radius8)
                         .fill(Color.white.opacity(0.35))
                 }
@@ -153,111 +166,32 @@ struct MetronomeDisplayCard: View {
             .accessibilityHidden(true)
     }
 
+    private func barHeightRatio(for index: Int) -> CGFloat {
+        guard metronome.accentPattern.indices.contains(index) else {
+            return 1.0 / 3.0
+        }
+        return metronome.accentPattern[index].heightRatio
+    }
+
     private func barFillColor(for index: Int, isActive: Bool) -> Color {
         guard metronome.accentPattern.indices.contains(index) else {
             return GitaTheme.categoryOrangeSoft
         }
-        if isActive, metronome.accentPattern[index] == .accent {
+        if isActive {
             return GitaTheme.brand500
+        }
+        let kind = metronome.accentPattern[index]
+        if kind == .mute {
+            return Color.clear
         }
         return GitaTheme.categoryOrangeSoft
     }
 
-    private func barFill(for index: Int, isActive: Bool) -> CGFloat {
-        if isActive { return accentBarFill(for: index) }
-        if !metronome.isPlaying && index == 0 { return 38 / 58 }
-        return idleBarFill(for: index)
-    }
-
-    private func accentBarFill(for index: Int) -> CGFloat {
-        guard metronome.accentPattern.indices.contains(index) else { return 0.72 }
-        switch metronome.accentPattern[index] {
-        case .accent: return 38 / 58
-        case .normal: return 22 / 58
-        case .mute: return 0.12
-        }
-    }
-
-    private func idleBarFill(for index: Int) -> CGFloat {
-        guard metronome.accentPattern.indices.contains(index) else { return 0.12 }
-        switch metronome.accentPattern[index] {
-        case .accent: return 22 / 58
-        case .normal: return 56 / 58
-        case .mute: return 0.06
-        }
-    }
-
     private var beatTrack: some View {
-        Group {
-            if metronome.beatsPerBar == 4 {
-                beatTrackAsset
-            } else {
-                beatTrackProgrammatic
-            }
-        }
-        .animation(.easeInOut(duration: 0.12), value: activeBeat)
-    }
-
-    private static let beatTrackDotPositions: [CGFloat] = [44 / 346, 131 / 346, 219 / 346, 307 / 346]
-
-    private var beatTrackAsset: some View {
-        GeometryReader { geo in
-            ZStack {
-                Image("MetronomeBeatTrack")
-                    .resizable()
-                    .scaledToFill()
-
-                ForEach(0..<4, id: \.self) { index in
-                    Circle()
-                        .fill(GitaTheme.bgSubtle)
-                        .frame(width: 10, height: 10)
-                        .position(
-                            x: geo.size.width * Self.beatTrackDotPositions[index],
-                            y: geo.size.height * (14 / 24)
-                        )
-                }
-
-                ForEach(0..<4, id: \.self) { index in
-                    let emphasized = trackDotEmphasized(index: index)
-                    Circle()
-                        .fill(emphasized ? GitaTheme.brand500 : GitaTheme.borderInactive)
-                        .frame(
-                            width: emphasized ? 8 : 6,
-                            height: emphasized ? 8 : 6
-                        )
-                        .position(
-                            x: geo.size.width * Self.beatTrackDotPositions[index],
-                            y: geo.size.height * (14 / 24)
-                        )
-                }
-            }
-        }
-        .frame(height: 24)
-    }
-
-    private var beatTrackProgrammatic: some View {
-        HStack(spacing: 0) {
-            ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
-                let emphasized = trackDotEmphasized(index: index)
-                Circle()
-                    .fill(emphasized ? GitaTheme.brand500 : GitaTheme.borderInactive)
-                    .frame(
-                        width: emphasized ? 8 : 6,
-                        height: emphasized ? 8 : 6
-                    )
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, GitaTheme.s8)
-        .background(GitaTheme.bgSubtle)
-        .clipShape(Capsule())
-    }
-
-    private func trackDotEmphasized(index: Int) -> Bool {
-        if let activeBeat { return index == activeBeat }
-        guard metronome.accentPattern.indices.contains(index) else { return index == 0 }
-        return metronome.accentPattern[index] == .accent
+        RoundedRectangle(cornerRadius: GitaTheme.radius8)
+            .fill(isBeatFlashing ? GitaTheme.brand500 : GitaTheme.bgSubtle)
+            .frame(height: 24)
+            .accessibilityHidden(true)
     }
 
     private func metricLabel(_ text: String) -> some View {
