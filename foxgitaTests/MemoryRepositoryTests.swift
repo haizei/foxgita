@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct MemoryRepositoryTests {
     private func makeRepo() throws -> SwiftDataMemoryRepository {

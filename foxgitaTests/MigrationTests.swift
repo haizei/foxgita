@@ -12,6 +12,7 @@ import Testing
 /// Boots a V2 store on disk, then reopens it under the V11 migration plan
 /// (V2→V3→…→V11) and checks that user rows survive — the exact failure mode
 /// of the old "delete everything on seed bump" path.
+@Suite(.serialized)
 @MainActor
 struct MigrationTests {
     @Test func v2StoreMigratesToV3WithoutLosingRows() throws {

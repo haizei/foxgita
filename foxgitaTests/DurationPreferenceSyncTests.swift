@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct DurationPreferenceSyncTests {
     private func make(consent: MemoryConsentState = .enabled) throws -> (

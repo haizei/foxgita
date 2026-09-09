@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct TaskMemorySyncTests {
     private func make() throws -> (TaskMemorySync, SwiftDataMemoryRepository, ModelContext, LocalProfile) {

@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct MemoryConsentCoordinatorTests {
     private func make() throws -> (MemoryConsentCoordinator, MemoryStore, LocalProfile) {

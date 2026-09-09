@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct MemoryStoreTests {
     private func makeStore() throws -> (MemoryStore, LocalProfile) {

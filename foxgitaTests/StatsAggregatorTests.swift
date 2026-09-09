@@ -9,6 +9,7 @@ import Testing
 
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct StatsAggregatorTests {
     /// Fixed anchor so day/week arithmetic never depends on when tests run.

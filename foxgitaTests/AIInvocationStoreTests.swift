@@ -3,6 +3,7 @@ import SwiftData
 import Testing
 @testable import foxgita
 
+@Suite(.serialized)
 @MainActor
 struct AIInvocationStoreTests {
     private func makeStore() throws -> (AIInvocationStore, ModelContext) {
