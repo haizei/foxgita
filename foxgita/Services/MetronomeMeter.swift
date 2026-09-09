@@ -7,14 +7,34 @@ import Foundation
 
 enum MetronomeBeatKind: Int, CaseIterable, Equatable {
     case mute = 0
-    case normal = 1
-    case accent = 2
+    case weak = 1
+    case medium = 2
+    case strong = 3
 
     mutating func cycle() {
         switch self {
-        case .accent: self = .normal
-        case .normal: self = .mute
-        case .mute: self = .accent
+        case .mute: self = .weak
+        case .weak: self = .medium
+        case .medium: self = .strong
+        case .strong: self = .mute
+        }
+    }
+
+    var heightRatio: CGFloat {
+        switch self {
+        case .mute: return 0.06
+        case .weak: return 1.0 / 3.0
+        case .medium: return 2.0 / 3.0
+        case .strong: return 1.0
+        }
+    }
+
+    var displayName: String {
+        switch self {
+        case .mute: return String(localized: "静音")
+        case .weak: return String(localized: "普通")
+        case .medium: return String(localized: "次强")
+        case .strong: return String(localized: "强")
         }
     }
 }
@@ -46,7 +66,7 @@ enum MetronomeMeter {
 
     static func defaultAccentPattern(beats: Int) -> [MetronomeBeatKind] {
         guard beats > 0 else { return [] }
-        return (0..<beats).map { $0 == 0 ? .accent : .normal }
+        return (0..<beats).map { $0 == 0 ? .strong : .weak }
     }
 
     static func encodeAccent(_ pattern: [MetronomeBeatKind]) -> String {
@@ -58,12 +78,21 @@ enum MetronomeMeter {
         guard let raw, !raw.isEmpty else {
             return defaultAccentPattern(beats: beats)
         }
+
+        // Backward compatibility migration:
+        // In legacy versions, '2' was used for strong accent. If string has no '3' and contains '2',
+        // promote legacy '2' to '3' (.strong).
+        let isLegacyFormat = !raw.contains("3") && raw.contains("2")
+
         var pattern = raw.compactMap { char -> MetronomeBeatKind? in
             guard let value = Int(String(char)) else { return nil }
+            if isLegacyFormat && value == 2 {
+                return .strong
+            }
             return MetronomeBeatKind(rawValue: value)
         }
         if pattern.count < beats {
-            pattern.append(contentsOf: Array(repeating: MetronomeBeatKind.normal, count: beats - pattern.count))
+            pattern.append(contentsOf: Array(repeating: MetronomeBeatKind.weak, count: beats - pattern.count))
         }
         if pattern.count > beats {
             pattern = Array(pattern.prefix(beats))
