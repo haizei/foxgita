@@ -1,22 +1,11 @@
 import Foundation
 
-actor ApprovalReplayStore {
+actor ApprovalAuthority {
+    private let issuer: ApprovalTokenIssuer
     private var consumed: Set<UUID> = []
 
-    func consume(_ id: UUID) throws {
-        guard consumed.insert(id).inserted else {
-            throw GateRefusal.approvalReplayed
-        }
-    }
-}
-
-struct MutationGate: Sendable {
-    let issuer: ApprovalTokenIssuer
-    let replayStore: ApprovalReplayStore
-
-    init(issuer: ApprovalTokenIssuer, replayStore: ApprovalReplayStore = ApprovalReplayStore()) {
+    init(issuer: ApprovalTokenIssuer) {
         self.issuer = issuer
-        self.replayStore = replayStore
     }
 
     func validate(
@@ -26,7 +15,7 @@ struct MutationGate: Sendable {
         draftID: String,
         draftHash: String,
         now: Date
-    ) async throws {
+    ) throws {
         guard issuer.verifies(token) else {
             throw GateRefusal.approvalMismatch
         }
@@ -39,6 +28,34 @@ struct MutationGate: Sendable {
         guard token.expiresAt > now else {
             throw GateRefusal.approvalExpired
         }
-        try await replayStore.consume(token.id)
+        guard consumed.insert(token.id).inserted else {
+            throw GateRefusal.approvalReplayed
+        }
+    }
+}
+
+struct MutationGate: Sendable {
+    let authority: ApprovalAuthority
+
+    init(authority: ApprovalAuthority) {
+        self.authority = authority
+    }
+
+    func validate(
+        _ token: ApprovalToken,
+        userID: String,
+        sessionID: String,
+        draftID: String,
+        draftHash: String,
+        now: Date
+    ) async throws {
+        try await authority.validate(
+            token,
+            userID: userID,
+            sessionID: sessionID,
+            draftID: draftID,
+            draftHash: draftHash,
+            now: now
+        )
     }
 }

@@ -19,7 +19,7 @@ struct AISecurityGateTests {
             draftHash: "h1",
             expiresAt: Date(timeIntervalSinceReferenceDate: 10_000)
         )
-        let gate = MutationGate(issuer: issuer)
+        let gate = MutationGate(authority: ApprovalAuthority(issuer: issuer))
 
         await #expect(throws: GateRefusal.approvalMismatch) {
             try await gate.validate(
@@ -76,7 +76,7 @@ struct AISecurityGateTests {
             expiresAt: valid.expiresAt,
             signature: valid.signature
         )
-        let gate = MutationGate(issuer: issuer)
+        let gate = MutationGate(authority: ApprovalAuthority(issuer: issuer))
         let now = Date(timeIntervalSinceReferenceDate: 10_001)
 
         await #expect(throws: GateRefusal.approvalExpired) {
@@ -89,5 +89,46 @@ struct AISecurityGateTests {
                 forged, userID: "u1", sessionID: "s1", draftID: "d1", draftHash: "h2", now: now
             )
         }
+    }
+
+    @Test func approvalAuthorityRejectsReplayAcrossGatesUnderConcurrency() async {
+        let issuer = ApprovalTokenIssuer(secret: Data(repeating: 7, count: 32))
+        let token = issuer.issue(
+            userID: "u1",
+            sessionID: "s1",
+            draftID: "d1",
+            draftHash: "h1",
+            expiresAt: Date(timeIntervalSinceReferenceDate: 10_000)
+        )
+        let authority = ApprovalAuthority(issuer: issuer)
+        let firstGate = MutationGate(authority: authority)
+        let secondGate = MutationGate(authority: authority)
+        let now = Date(timeIntervalSinceReferenceDate: 9_999)
+
+        let outcomes = await withTaskGroup(of: GateRefusal?.self, returning: [GateRefusal?].self) { group in
+            for gate in [firstGate, secondGate] {
+                group.addTask {
+                    do {
+                        try await gate.validate(
+                            token, userID: "u1", sessionID: "s1", draftID: "d1", draftHash: "h1", now: now
+                        )
+                        return nil
+                    } catch let refusal as GateRefusal {
+                        return refusal
+                    } catch {
+                        return .constraintViolated("unexpected validation failure")
+                    }
+                }
+            }
+
+            var results: [GateRefusal?] = []
+            for await outcome in group {
+                results.append(outcome)
+            }
+            return results
+        }
+
+        #expect(outcomes.filter { $0 == nil }.count == 1)
+        #expect(outcomes.contains(GateRefusal.approvalReplayed))
     }
 }
