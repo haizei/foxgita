@@ -105,11 +105,11 @@ struct MetronomeEngineTests {
         let metronome = MetronomeEngine()
         metronome.configureMeter(timeSignature: "2/4", accentRaw: "31")
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .medium)
+        #expect(metronome.accentPattern[1] == .mute)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .strong)
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .mute)
+        #expect(metronome.accentPattern[1] == .medium)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .weak)
     }

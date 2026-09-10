@@ -13,10 +13,10 @@ enum MetronomeBeatKind: Int, CaseIterable, Equatable {
 
     mutating func cycle() {
         switch self {
-        case .mute: self = .weak
-        case .weak: self = .medium
-        case .medium: self = .strong
-        case .strong: self = .mute
+        case .strong: self = .medium
+        case .medium: self = .weak
+        case .weak:   self = .mute
+        case .mute:   self = .strong
         }
     }
 
