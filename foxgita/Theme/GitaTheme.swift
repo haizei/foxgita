@@ -45,6 +45,16 @@ enum GitaTheme {
     static let categoryPurple = Color(.categoryPurple)
     static let categoryCyan = Color(.categoryCyan)
 
+    // Accent (four-state beat intensity)
+    static let accentMedium = Color(.accentMedium)
+    static let accentWeak = Color(.accentWeak)
+    static let accentTrackBase = Color(.accentTrackBase)
+    static let accentCardStrongBg = Color(.accentCardStrongBg)
+    static let accentCardMediumBg = Color(.accentCardMediumBg)
+    static let accentCardMediumText = Color(.accentCardMediumText)
+    static let accentCardWeakBg = Color(.accentCardWeakBg)
+    static let accentCardMuteBg = Color(.accentCardMuteBg)
+
     // Radius
     static let radius8: CGFloat = 8
     static let radius12: CGFloat = 12
