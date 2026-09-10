@@ -19,21 +19,8 @@ protocol InputGating: Sendable {
     ) throws
 }
 
-struct AllowingInputGate: InputGating {
-    func validate(
-        request: InteractionRequest,
-        recipe: RecipeDefinition,
-        snapshot: ContextSnapshot,
-        prompt: PromptAssembly
-    ) throws {}
-}
-
 protocol PresentationGating: Sendable {
     func validate(artifact: AnySkillArtifact, plan: AgentExecutionPlan) throws
-}
-
-struct AllowingPresentationGate: PresentationGating {
-    func validate(artifact: AnySkillArtifact, plan: AgentExecutionPlan) throws {}
 }
 
 struct OrchestrationResult: Sendable {
@@ -69,8 +56,12 @@ struct AgentOrchestrator: Sendable {
             policy: resolved.recipe.fetchPolicy,
             scope: scope
         )
-        guard seenSet.snapshotID == snapshot.id else {
-            throw GateRefusal.constraintViolated("seen set does not match context snapshot")
+        let snapshotResources = Set(snapshot.sections.map(\.ref))
+        let authorizedResources = Set(request.selectedResources)
+        guard seenSet.snapshotID == snapshot.id,
+              seenSet.resources == snapshotResources,
+              snapshotResources.isSubset(of: authorizedResources) else {
+            throw GateRefusal.constraintViolated("context snapshot and seen set are outside request scope")
         }
 
         let plan = AgentExecutionPlan(
@@ -135,7 +126,12 @@ struct AgentOrchestrator: Sendable {
 
     private func dynamicContext(from snapshot: ContextSnapshot) -> String {
         snapshot.sections.map { section in
-            "\(section.ref.kind):\(section.ref.id)\n\(section.text)"
+            "kind_b64=\(encodeMetadata(section.ref.kind))\nid_b64=\(encodeMetadata(section.ref.id))\ntext=\(section.text)"
         }.joined(separator: "\n\n")
+    }
+
+    private func encodeMetadata(_ value: String) -> String {
+        let fenced = ContextFencer.fence(value, limit: 128)
+        return Data(fenced.text.utf8).base64EncodedString()
     }
 }
