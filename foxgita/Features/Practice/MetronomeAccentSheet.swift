@@ -69,21 +69,21 @@ struct MetronomeAccentSheet: View {
         if metronome.beatsPerBar <= 4 {
             HStack(spacing: cardSpacing) {
                 ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
-                    accentCard(index: index)
+                    accentCard(index: index, fillsWidth: true)
                 }
             }
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: cardSpacing) {
                     ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
-                        accentCard(index: index)
+                        accentCard(index: index, fillsWidth: false)
                     }
                 }
             }
         }
     }
 
-    private func accentCard(index: Int) -> some View {
+    private func accentCard(index: Int, fillsWidth: Bool = false) -> some View {
         let kind = metronome.accentPattern.indices.contains(index)
             ? metronome.accentPattern[index]
             : MetronomeBeatKind.weak
@@ -104,7 +104,8 @@ struct MetronomeAccentSheet: View {
                     .foregroundStyle(cardForegroundColor(for: kind))
             }
             .padding(10)
-            .frame(width: cardWidth, height: cardHeight)
+            .frame(width: fillsWidth ? nil : cardWidth, height: cardHeight)
+            .frame(maxWidth: fillsWidth ? .infinity : nil)
             .background(cardBackgroundColor(for: kind))
             .clipShape(RoundedRectangle(cornerRadius: 14))
         }
