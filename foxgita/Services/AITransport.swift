@@ -60,6 +60,32 @@ struct AITransport: Sendable {
         allowsFormatRetry: Bool,
         timeout: TimeInterval?
     ) async throws -> AITransportResult {
+        try await complete(
+            url: url,
+            apiKey: apiKey,
+            model: model,
+            systemPrompt: systemPrompt,
+            userText: userText,
+            imageJPEGData: imageJPEGData,
+            orderedTools: [],
+            includeResponseFormat: includeResponseFormat,
+            allowsFormatRetry: allowsFormatRetry,
+            timeout: timeout
+        )
+    }
+
+    private func complete(
+        url: URL,
+        apiKey: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        imageJPEGData: [Data],
+        orderedTools: [VersionedToolSchema],
+        includeResponseFormat: Bool,
+        allowsFormatRetry: Bool,
+        timeout: TimeInterval?
+    ) async throws -> AITransportResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         if let timeout {
@@ -73,6 +99,7 @@ struct AITransport: Sendable {
                 systemPrompt: systemPrompt,
                 userText: userText,
                 imageJPEGData: imageJPEGData,
+                orderedTools: orderedTools,
                 includeResponseFormat: includeResponseFormat
             )
         } catch {
@@ -106,6 +133,7 @@ struct AITransport: Sendable {
                     systemPrompt: systemPrompt,
                     userText: userText,
                     imageJPEGData: imageJPEGData,
+                    orderedTools: orderedTools,
                     includeResponseFormat: false,
                     allowsFormatRetry: false,
                     timeout: timeout
@@ -182,19 +210,26 @@ struct AITransport: Sendable {
 
     func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
         guard let url = Self.completionsURL(from: request.baseURL) else {
-            throw VisionPracticeError.invalidURL
+            throw AIRuntimeError.invalidURL
         }
-        return try await complete(
-            url: url,
-            apiKey: request.apiKey,
-            model: request.model,
-            systemPrompt: request.systemPrompt,
-            userText: request.userText,
-            imageJPEGData: [],
-            includeResponseFormat: request.includeResponseFormat,
-            allowsFormatRetry: request.allowsFormatRetry,
-            timeout: request.timeout
-        )
+        do {
+            return try await complete(
+                url: url,
+                apiKey: request.apiKey,
+                model: request.model,
+                systemPrompt: request.systemPrompt,
+                userText: request.userText,
+                imageJPEGData: [],
+                orderedTools: request.orderedTools,
+                includeResponseFormat: request.includeResponseFormat,
+                allowsFormatRetry: request.allowsFormatRetry,
+                timeout: request.timeout
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            throw Self.runtimeError(from: error)
+        }
     }
 
     private static func mapSessionError(_ error: Error) throws -> Never {
@@ -208,6 +243,7 @@ struct AITransport: Sendable {
         systemPrompt: String,
         userText: String,
         imageJPEGData: [Data],
+        orderedTools: [VersionedToolSchema],
         includeResponseFormat: Bool
     ) throws -> Data {
         var userContent: [[String: Any]] = [
@@ -231,7 +267,59 @@ struct AITransport: Sendable {
         if includeResponseFormat {
             body["response_format"] = ["type": "json_object"]
         }
+        if !orderedTools.isEmpty {
+            body["tools"] = try orderedTools.map(providerTool)
+        }
         return try JSONSerialization.data(withJSONObject: body)
+    }
+
+    private nonisolated static func providerTool(_ schema: VersionedToolSchema) throws -> [String: Any] {
+        let parameters = try JSONSerialization.jsonObject(with: Data(schema.json.utf8))
+        guard parameters is [String: Any] else {
+            throw VisionPracticeError.transport
+        }
+        return [
+            "type": "function",
+            "function": [
+                "name": schema.id,
+                "parameters": parameters,
+            ],
+        ]
+    }
+
+    private static func runtimeError(from error: Error) -> AIRuntimeError {
+        if let runtimeError = error as? AIRuntimeError {
+            return runtimeError
+        }
+        if let legacyError = error as? VisionPracticeError {
+            switch legacyError {
+            case .invalidURL:
+                return .invalidURL
+            case .unauthorized:
+                return .unauthorized
+            case .httpStatus(let status):
+                return .httpStatus(status)
+            case .emptyContent:
+                return .emptyContent
+            case .invalidJSON:
+                return .invalidResponse
+            case .timeout:
+                return .timeout
+            case .transport, .unregisteredSkill:
+                return .transport
+            }
+        }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cancelled:
+                return .cancelled
+            case .timedOut:
+                return .timeout
+            default:
+                return .transport
+            }
+        }
+        return .transport
     }
 }
 

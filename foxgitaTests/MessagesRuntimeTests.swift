@@ -10,15 +10,32 @@ private struct RuntimeTransportStub: MessagesTransporting {
     }
 }
 
-private struct UnauthorizedRuntimeTransportStub: MessagesTransporting {
+private struct TypedRuntimeErrorTransportStub: MessagesTransporting {
+    let error: AIRuntimeError
+
     func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
-        throw VisionPracticeError.unauthorized
+        throw error
     }
 }
 
 private struct CancelledRuntimeTransportStub: MessagesTransporting {
     func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
         throw CancellationError()
+    }
+}
+
+private actor CapturingRuntimeTransport: MessagesTransporting {
+    private var request: MessagesTransportRequest?
+
+    func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
+        self.request = request
+        return await MainActor.run {
+            AITransportResult(content: "{}", formatRetryUsed: false)
+        }
+    }
+
+    func receivedRequest() -> MessagesTransportRequest? {
+        request
     }
 }
 
@@ -58,16 +75,37 @@ struct MessagesRuntimeTests {
         ])
     }
 
-    @Test func mapsTransportFailureToNeutralFailureEvent() async throws {
+    @Test func keepsOrderedToolsOutOfSystemPrompt() async throws {
+        let tools = [
+            VersionedToolSchema(id: "first", version: "1", json: #"{"type":"object"}"#),
+            VersionedToolSchema(id: "second", version: "2", json: #"{"type":"object"}"#),
+        ]
+        let transport = CapturingRuntimeTransport()
+        let runtime = MessagesRuntime(transport: transport)
+
+        _ = try await RuntimeTestFixtures.collect(
+            runtime.execute(
+                plan: RuntimeTestFixtures.plan,
+                prompt: RuntimeTestFixtures.prompt(withTools: tools),
+                credentials: RuntimeTestFixtures.credentials
+            )
+        )
+
+        let request = await transport.receivedRequest()
+        #expect(request?.systemPrompt == "system")
+        #expect(request?.orderedTools.map(\.id) == ["first", "second"])
+    }
+
+    @Test func preservesTypedRuntimeErrorInFailureEvent() async throws {
         let events = try await RuntimeTestFixtures.collect(
-            MessagesRuntime(transport: UnauthorizedRuntimeTransportStub()).execute(
+            MessagesRuntime(transport: TypedRuntimeErrorTransportStub(error: .httpStatus(429))).execute(
                 plan: RuntimeTestFixtures.plan,
                 prompt: RuntimeTestFixtures.prompt,
                 credentials: RuntimeTestFixtures.credentials
             )
         )
 
-        #expect(events == [.accepted, .started, .failed(.unauthorized)])
+        #expect(events == [.accepted, .started, .failed(.httpStatus(429))])
     }
 
     @Test func mapsCancellationToCancelledEvent() async throws {
@@ -109,17 +147,21 @@ private enum RuntimeTestFixtures {
         seenSet: SeenSet(snapshotID: UUID(), resources: [])
     )
 
-    static let prompt = PromptAssembly(
-        orderedTools: [],
-        staticSystem: "system",
-        dynamicContext: "context",
-        history: ["history"],
-        currentInput: "input",
-        toolsetFingerprint: "tools",
-        staticPromptFingerprint: "static",
-        historyPrefixFingerprint: "history",
-        contextFingerprint: "context"
-    )
+    static func prompt(withTools orderedTools: [VersionedToolSchema] = []) -> PromptAssembly {
+        PromptAssembly(
+            orderedTools: orderedTools,
+            staticSystem: "system",
+            dynamicContext: "context",
+            history: ["history"],
+            currentInput: "input",
+            toolsetFingerprint: "tools",
+            staticPromptFingerprint: "static",
+            historyPrefixFingerprint: "history",
+            contextFingerprint: "context"
+        )
+    }
+
+    static let prompt = prompt()
 
     static let credentials = RuntimeCredentials(
         baseURL: "https://example.com/v1",

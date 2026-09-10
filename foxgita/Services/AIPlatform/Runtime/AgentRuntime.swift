@@ -55,6 +55,7 @@ struct MessagesTransportRequest: Sendable {
     let model: String
     let systemPrompt: String
     let userText: String
+    let orderedTools: [VersionedToolSchema]
     let includeResponseFormat: Bool
     let allowsFormatRetry: Bool
     let timeout: TimeInterval?

@@ -119,6 +119,63 @@ struct AITransportTests {
         ))
     }
 
+    @Test func messagesAdapterEncodesOrderedToolsInProviderBody() async throws {
+        let ok = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": ["content": "{}"]]]
+        ])
+        var bodyJSON: [String: Any] = [:]
+        TransportMockURLProtocol.handler = { request in
+            let body = Self.requestBodyString(request)
+            bodyJSON = (try? JSONSerialization.jsonObject(with: Data(body.utf8))) as? [String: Any] ?? [:]
+            return (200, ok)
+        }
+        defer { TransportMockURLProtocol.handler = nil }
+
+        let result = try await makeTransport().complete(MessagesTransportRequest(
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk",
+            model: "gpt-4o",
+            systemPrompt: "system only",
+            userText: "user",
+            orderedTools: [
+                VersionedToolSchema(id: "first", version: "1", json: #"{"type":"object","properties":{"a":{"type":"string"}}}"#),
+                VersionedToolSchema(id: "second", version: "2", json: #"{"type":"object","properties":{"b":{"type":"number"}}}"#),
+            ],
+            includeResponseFormat: true,
+            allowsFormatRetry: true,
+            timeout: nil
+        ))
+
+        #expect(result.content == "{}")
+        let messages = bodyJSON["messages"] as? [[String: Any]]
+        #expect(messages?[0]["content"] as? String == "system only")
+        let tools = bodyJSON["tools"] as? [[String: Any]]
+        #expect(tools?.map { (($0["function"] as? [String: Any])?["name"] as? String) } == ["first", "second"])
+        let first = tools?.first?["function"] as? [String: Any]
+        let parameters = first?["parameters"] as? [String: Any]
+        #expect(parameters?["type"] as? String == "object")
+        #expect((parameters?["properties"] as? [String: Any])?["a"] != nil)
+    }
+
+    @Test func messagesAdapterNormalizesLegacyUnauthorizedError() async {
+        TransportMockURLProtocol.handler = { _ in (401, Data()) }
+        defer { TransportMockURLProtocol.handler = nil }
+
+        await #expect(throws: AIRuntimeError.unauthorized) {
+            try await makeTransport().complete(MessagesTransportRequest(
+                baseURL: "https://api.openai.com/v1",
+                apiKey: "bad",
+                model: "gpt-4o",
+                systemPrompt: "system",
+                userText: "user",
+                orderedTools: [],
+                includeResponseFormat: true,
+                allowsFormatRetry: true,
+                timeout: nil
+            ))
+        }
+    }
+
     @Test func completeUnauthorized() async {
         TransportMockURLProtocol.handler = { _ in (401, Data()) }
         defer { TransportMockURLProtocol.handler = nil }

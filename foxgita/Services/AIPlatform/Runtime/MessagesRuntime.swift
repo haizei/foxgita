@@ -21,8 +21,9 @@ struct MessagesRuntime: AgentRuntime {
                             baseURL: credentials.baseURL,
                             apiKey: credentials.apiKey,
                             model: credentials.model,
-                            systemPrompt: systemPrompt(for: prompt),
+                            systemPrompt: prompt.staticSystem,
                             userText: userText(for: prompt),
+                            orderedTools: prompt.orderedTools,
                             includeResponseFormat: true,
                             allowsFormatRetry: plan.recipe.allowsFormatRepair,
                             timeout: plan.recipe.timeoutSeconds
@@ -38,10 +39,14 @@ struct MessagesRuntime: AgentRuntime {
 
                     continuation.yield(.artifactProduced(Data(result.content.utf8)))
                     continuation.yield(.completed(result.usage))
+                } catch let error as AIRuntimeError where error == .cancelled {
+                    continuation.yield(.cancelled)
+                } catch let error as AIRuntimeError {
+                    continuation.yield(.failed(error))
                 } catch is CancellationError {
                     continuation.yield(.cancelled)
                 } catch {
-                    continuation.yield(.failed(mapError(error)))
+                    continuation.yield(.failed(.transport))
                 }
 
                 continuation.finish()
@@ -53,41 +58,10 @@ struct MessagesRuntime: AgentRuntime {
         }
     }
 
-    private func systemPrompt(for prompt: PromptAssembly) -> String {
-        let toolSchemas = prompt.orderedTools.map(\.json)
-        return ([prompt.staticSystem] + toolSchemas)
-            .filter { !$0.isEmpty }
-            .joined(separator: "\n\n")
-    }
-
     private func userText(for prompt: PromptAssembly) -> String {
         ([prompt.dynamicContext] + prompt.history + [prompt.currentInput])
             .filter { !$0.isEmpty }
             .joined(separator: "\n\n")
     }
 
-    private func mapError(_ error: Error) -> AIRuntimeError {
-        if let error = error as? VisionPracticeError {
-            switch error {
-            case .invalidURL:
-                return .invalidURL
-            case .unauthorized:
-                return .unauthorized
-            case .httpStatus(let status):
-                return .httpStatus(status)
-            case .emptyContent:
-                return .emptyContent
-            case .invalidJSON:
-                return .invalidResponse
-            case .timeout:
-                return .timeout
-            case .transport, .unregisteredSkill:
-                return .transport
-            }
-        }
-        if let error = error as? URLError, error.code == .timedOut {
-            return .timeout
-        }
-        return .transport
-    }
 }
