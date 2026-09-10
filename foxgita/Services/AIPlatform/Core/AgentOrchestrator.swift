@@ -126,12 +126,20 @@ struct AgentOrchestrator: Sendable {
 
     private func dynamicContext(from snapshot: ContextSnapshot) -> String {
         snapshot.sections.map { section in
-            "kind_b64=\(encodeMetadata(section.ref.kind))\nid_b64=\(encodeMetadata(section.ref.id))\ntext=\(section.text)"
+            "kind=\(encodeMetadata(section.ref.kind))\nid=\(encodeMetadata(section.ref.id))\ntext=\(section.text)"
         }.joined(separator: "\n\n")
     }
 
     private func encodeMetadata(_ value: String) -> String {
         let fenced = ContextFencer.fence(value, limit: 128)
-        return Data(fenced.text.utf8).base64EncodedString()
+        let escaped = fenced.text
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: "\\n")
+            .replacingOccurrences(of: "\r", with: "\\r")
+            .replacingOccurrences(of: "\t", with: "\\t")
+            .replacingOccurrences(of: "\u{2028}", with: "\\u2028")
+            .replacingOccurrences(of: "\u{2029}", with: "\\u2029")
+        return "\"\(escaped)\""
     }
 }
