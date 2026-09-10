@@ -150,7 +150,7 @@ struct MetronomeAccentSheet: View {
     }
 
     private var scrollHintBanner: some View {
-        Text(String(localized: "12 拍时横向滚动 · 每格 ≥ 44 pt"))
+        Text("\(metronome.beatsPerBar) 拍时横向滚动 · 每格 ≥ 44 pt")
             .font(GitaFont.footnote(.medium))
             .foregroundStyle(GitaTheme.textPrimary)
             .frame(maxWidth: .infinity)
