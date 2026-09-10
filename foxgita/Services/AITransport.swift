@@ -1,19 +1,37 @@
+import CryptoKit
 import Foundation
 
 struct AITransportResult: Equatable, Sendable {
     var content: String
     var formatRetryUsed: Bool
     var usage: RuntimeUsage
+    var toolCalls: [RuntimeToolCall]
 
-    init(content: String, formatRetryUsed: Bool, usage: RuntimeUsage = .zero) {
+    init(
+        content: String,
+        formatRetryUsed: Bool,
+        usage: RuntimeUsage = .zero,
+        toolCalls: [RuntimeToolCall] = []
+    ) {
         self.content = content
         self.formatRetryUsed = formatRetryUsed
         self.usage = usage
+        self.toolCalls = toolCalls
     }
 }
 
 struct AITransport: Sendable {
     private let session: URLSession
+
+    private struct ProviderToolCall: Decodable {
+        struct Function: Decodable {
+            let name: String?
+            let arguments: String?
+        }
+
+        let id: String?
+        let function: Function?
+    }
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -93,13 +111,15 @@ struct AITransport: Sendable {
         }
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let toolNameMap: ProviderToolNameMap
         do {
+            toolNameMap = try ProviderToolNameMap(schemas: orderedTools)
             request.httpBody = try Self.buildBody(
                 model: model,
                 systemPrompt: systemPrompt,
                 userText: userText,
                 imageJPEGData: imageJPEGData,
-                orderedTools: orderedTools,
+                providerTools: toolNameMap.entries,
                 includeResponseFormat: includeResponseFormat
             )
         } catch {
@@ -141,7 +161,8 @@ struct AITransport: Sendable {
                 return AITransportResult(
                     content: nested.content,
                     formatRetryUsed: true,
-                    usage: nested.usage
+                    usage: nested.usage,
+                    toolCalls: nested.toolCalls
                 )
             }
             throw VisionPracticeError.httpStatus(http.statusCode)
@@ -151,6 +172,12 @@ struct AITransport: Sendable {
             struct Choice: Decodable {
                 struct Message: Decodable {
                     var content: String?
+                    let toolCalls: [ProviderToolCall]?
+
+                    enum CodingKeys: String, CodingKey {
+                        case content
+                        case toolCalls = "tool_calls"
+                    }
                 }
                 var message: Message?
             }
@@ -194,6 +221,9 @@ struct AITransport: Sendable {
         }
         let content = chat.choices?.first?.message?.content?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let toolCalls = try (chat.choices?.first?.message?.toolCalls ?? []).map {
+            try toolNameMap.runtimeToolCall(from: $0)
+        }
         let providerUsage = chat.usage
         let usage = RuntimeUsage(
             inputTokens: providerUsage?.promptTokens ?? providerUsage?.inputTokens ?? 0,
@@ -205,7 +235,12 @@ struct AITransport: Sendable {
                 ?? providerUsage?.cacheReadInputTokens
                 ?? 0
         )
-        return AITransportResult(content: content, formatRetryUsed: false, usage: usage)
+        return AITransportResult(
+            content: content,
+            formatRetryUsed: false,
+            usage: usage,
+            toolCalls: toolCalls
+        )
     }
 
     func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
@@ -243,7 +278,7 @@ struct AITransport: Sendable {
         systemPrompt: String,
         userText: String,
         imageJPEGData: [Data],
-        orderedTools: [VersionedToolSchema],
+        providerTools: [ProviderToolEntry],
         includeResponseFormat: Bool
     ) throws -> Data {
         var userContent: [[String: Any]] = [
@@ -267,24 +302,98 @@ struct AITransport: Sendable {
         if includeResponseFormat {
             body["response_format"] = ["type": "json_object"]
         }
-        if !orderedTools.isEmpty {
-            body["tools"] = try orderedTools.map(providerTool)
+        if !providerTools.isEmpty {
+            body["tools"] = try providerTools.map(providerTool)
         }
         return try JSONSerialization.data(withJSONObject: body)
     }
 
-    private nonisolated static func providerTool(_ schema: VersionedToolSchema) throws -> [String: Any] {
-        let parameters = try JSONSerialization.jsonObject(with: Data(schema.json.utf8))
+    private nonisolated static func providerTool(_ entry: ProviderToolEntry) throws -> [String: Any] {
+        let parameters = try JSONSerialization.jsonObject(with: Data(entry.schema.json.utf8))
         guard parameters is [String: Any] else {
             throw VisionPracticeError.transport
         }
         return [
             "type": "function",
             "function": [
-                "name": schema.id,
+                "name": entry.providerName,
                 "parameters": parameters,
             ],
         ]
+    }
+
+    private struct ProviderToolEntry: Sendable {
+        let providerName: String
+        let schema: VersionedToolSchema
+    }
+
+    private struct ProviderToolNameMap: Sendable {
+        let entries: [ProviderToolEntry]
+        private let schemasByProviderName: [String: VersionedToolSchema]
+
+        init(schemas: [VersionedToolSchema]) throws {
+            var entries: [ProviderToolEntry] = []
+            var schemasByProviderName: [String: VersionedToolSchema] = [:]
+            for schema in schemas {
+                let providerName = Self.providerName(for: schema)
+                guard schemasByProviderName[providerName] == nil else {
+                    throw ProviderToolMappingError.nameCollision
+                }
+                entries.append(ProviderToolEntry(providerName: providerName, schema: schema))
+                schemasByProviderName[providerName] = schema
+            }
+            self.entries = entries
+            self.schemasByProviderName = schemasByProviderName
+        }
+
+        func runtimeToolCall(
+            from call: ProviderToolCall
+        ) throws -> RuntimeToolCall {
+            guard let id = call.id,
+                  let function = call.function,
+                  let providerName = function.name,
+                  let schema = schemasByProviderName[providerName] else {
+                throw ProviderToolMappingError.unknownToolCall
+            }
+            return RuntimeToolCall(
+                id: id,
+                toolID: schema.id,
+                toolVersion: schema.version,
+                argumentsJSON: function.arguments ?? ""
+            )
+        }
+
+        private static func providerName(for schema: VersionedToolSchema) -> String {
+            let safeIdentity = safeFragment("\(schema.id)_v_\(schema.version)")
+            let digest = SHA256.hash(
+                data: Data(PromptFingerprint.frame([schema.id, schema.version]).utf8)
+            )
+            .prefix(16)
+            .map { String(format: "%02x", $0) }
+            .joined()
+            let suffix = "_\(digest)"
+            let prefixLimit = 64 - suffix.count
+            let prefix = String(("tool_\(safeIdentity)").prefix(prefixLimit))
+            return prefix + suffix
+        }
+
+        private static func safeFragment(_ text: String) -> String {
+            let result = text.unicodeScalars.map { scalar -> String in
+                switch scalar.value {
+                case 48...57, 65...90, 97...122, 45, 95:
+                    return String(scalar)
+                default:
+                    return "_"
+                }
+            }
+            .joined()
+            return result.isEmpty ? "tool" : result
+        }
+    }
+
+    private enum ProviderToolMappingError: Error {
+        case nameCollision
+        case unknownToolCall
     }
 
     private static func runtimeError(from error: Error) -> AIRuntimeError {

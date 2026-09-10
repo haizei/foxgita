@@ -150,11 +150,95 @@ struct AITransportTests {
         let messages = bodyJSON["messages"] as? [[String: Any]]
         #expect(messages?[0]["content"] as? String == "system only")
         let tools = bodyJSON["tools"] as? [[String: Any]]
-        #expect(tools?.map { (($0["function"] as? [String: Any])?["name"] as? String) } == ["first", "second"])
+        let providerNames = tools?.compactMap { ($0["function"] as? [String: Any])?["name"] as? String } ?? []
+        #expect(providerNames.count == 2)
+        #expect(providerNames != ["first", "second"])
+        #expect(providerNames.allSatisfy(Self.isProviderSafeToolName))
         let first = tools?.first?["function"] as? [String: Any]
         let parameters = first?["parameters"] as? [String: Any]
         #expect(parameters?["type"] as? String == "object")
         #expect((parameters?["properties"] as? [String: Any])?["a"] != nil)
+    }
+
+    @Test func messagesAdapterMapsVersionedNamesAndReturnedToolCalls() async throws {
+        var providerNames: [String] = []
+        TransportMockURLProtocol.handler = { request in
+            let body = try JSONSerialization.jsonObject(with: Data(Self.requestBodyString(request).utf8)) as? [String: Any]
+            let tools = body?["tools"] as? [[String: Any]] ?? []
+            providerNames = tools.compactMap { ($0["function"] as? [String: Any])?["name"] as? String }
+            let response = try JSONSerialization.data(withJSONObject: [
+                "choices": [["message": [
+                    "content": "{}",
+                    "tool_calls": [[
+                        "id": "call-1",
+                        "type": "function",
+                        "function": [
+                            "name": providerNames[0],
+                            "arguments": #"{"query":"warmup"}"#,
+                        ],
+                    ]],
+                ]]],
+            ])
+            return (200, response)
+        }
+        defer { TransportMockURLProtocol.handler = nil }
+
+        let longID = String(repeating: "very.long.tool.identifier.", count: 5)
+        let result = try await makeTransport().complete(MessagesTransportRequest(
+            baseURL: "https://api.openai.com/v1",
+            apiKey: "sk",
+            model: "gpt-4o",
+            systemPrompt: "system",
+            userText: "user",
+            orderedTools: [
+                VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
+                VersionedToolSchema(id: "task.read", version: "2.0", json: #"{"type":"object"}"#),
+                VersionedToolSchema(id: longID, version: "2026.09.10-beta", json: #"{"type":"object"}"#),
+            ],
+            includeResponseFormat: true,
+            allowsFormatRetry: true,
+            timeout: nil
+        ))
+
+        #expect(providerNames.count == 3)
+        #expect(providerNames[0] != "task.read")
+        #expect(providerNames[0] != providerNames[1])
+        #expect(providerNames.allSatisfy(Self.isProviderSafeToolName))
+        #expect(result.toolCalls == [
+            RuntimeToolCall(
+                id: "call-1",
+                toolID: "task.read",
+                toolVersion: "1.0",
+                argumentsJSON: #"{"query":"warmup"}"#
+            )
+        ])
+    }
+
+    @Test func messagesAdapterRejectsProviderNameCollisions() async {
+        TransportMockURLProtocol.handler = { _ in
+            let response = try JSONSerialization.data(withJSONObject: [
+                "choices": [["message": ["content": "{}"]]]
+            ])
+            return (200, response)
+        }
+        defer { TransportMockURLProtocol.handler = nil }
+
+        await #expect(throws: AIRuntimeError.transport) {
+            try await makeTransport().complete(MessagesTransportRequest(
+                baseURL: "https://api.openai.com/v1",
+                apiKey: "sk",
+                model: "gpt-4o",
+                systemPrompt: "system",
+                userText: "user",
+                orderedTools: [
+                    VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
+                    VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
+                ],
+                includeResponseFormat: true,
+                allowsFormatRetry: true,
+                timeout: nil
+            ))
+        }
     }
 
     @Test func messagesAdapterNormalizesLegacyUnauthorizedError() async {
@@ -330,5 +414,9 @@ struct AITransportTests {
             data.append(buffer, count: read)
         }
         return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    private static func isProviderSafeToolName(_ name: String) -> Bool {
+        name.range(of: "^[A-Za-z0-9_-]{1,64}$", options: .regularExpression) != nil
     }
 }

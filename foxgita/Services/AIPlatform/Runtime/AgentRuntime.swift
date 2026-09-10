@@ -31,6 +31,13 @@ enum AIRuntimeError: Error, Equatable, Sendable {
     case cancelled
 }
 
+struct RuntimeToolCall: Equatable, Sendable {
+    let id: String
+    let toolID: String
+    let toolVersion: String
+    let argumentsJSON: String
+}
+
 enum RuntimeEvent: Equatable, Sendable {
     case accepted
     case started
