@@ -79,6 +79,44 @@ struct AITransportTests {
         )
         #expect(result.content == "```json\n{\"ok\":true}\n```")
         #expect(result.formatRetryUsed == false)
+        #expect(result.usage == RuntimeUsage(
+            inputTokens: 0,
+            outputTokens: 0,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 0
+        ))
+    }
+
+    @Test func completeDecodesUsageAndCacheEvidence() async throws {
+        let payload: [String: Any] = [
+            "choices": [["message": ["content": "{}"]]],
+            "usage": [
+                "prompt_tokens": 20,
+                "completion_tokens": 5,
+                "prompt_tokens_details": [
+                    "cache_creation_input_tokens": 3,
+                    "cached_tokens": 12,
+                ],
+            ],
+        ]
+        let data = try JSONSerialization.data(withJSONObject: payload)
+        TransportMockURLProtocol.handler = { _ in (200, data) }
+        defer { TransportMockURLProtocol.handler = nil }
+
+        let url = AITransport.completionsURL(from: "https://api.openai.com/v1")!
+        let result = try await makeTransport().complete(
+            url: url, apiKey: "sk", model: "gpt-4o",
+            systemPrompt: "sys", userText: "user",
+            imageJPEGData: [],
+            includeResponseFormat: true, allowsFormatRetry: true, timeout: nil
+        )
+
+        #expect(result.usage == RuntimeUsage(
+            inputTokens: 20,
+            outputTokens: 5,
+            cacheWriteTokens: 3,
+            cacheReadTokens: 12
+        ))
     }
 
     @Test func completeUnauthorized() async {
@@ -132,7 +170,12 @@ struct AITransportTests {
         }
         let counter = Counter()
         let ok = try JSONSerialization.data(withJSONObject: [
-            "choices": [["message": ["content": " {\"x\":1} "]]]
+            "choices": [["message": ["content": " {\"x\":1} "]]],
+            "usage": [
+                "prompt_tokens": 9,
+                "completion_tokens": 4,
+                "prompt_tokens_details": ["cached_tokens": 2],
+            ],
         ])
         TransportMockURLProtocol.handler = { req in
             counter.hit()
@@ -155,6 +198,12 @@ struct AITransportTests {
         )
         #expect(result.content == "{\"x\":1}")
         #expect(result.formatRetryUsed == true)
+        #expect(result.usage == RuntimeUsage(
+            inputTokens: 9,
+            outputTokens: 4,
+            cacheWriteTokens: 0,
+            cacheReadTokens: 2
+        ))
         #expect(counter.count() == 2)
     }
 

@@ -3,6 +3,13 @@ import Foundation
 struct AITransportResult: Equatable, Sendable {
     var content: String
     var formatRetryUsed: Bool
+    var usage: RuntimeUsage
+
+    init(content: String, formatRetryUsed: Bool, usage: RuntimeUsage = .zero) {
+        self.content = content
+        self.formatRetryUsed = formatRetryUsed
+        self.usage = usage
+    }
 }
 
 struct AITransport: Sendable {
@@ -103,7 +110,11 @@ struct AITransport: Sendable {
                     allowsFormatRetry: false,
                     timeout: timeout
                 )
-                return AITransportResult(content: nested.content, formatRetryUsed: true)
+                return AITransportResult(
+                    content: nested.content,
+                    formatRetryUsed: true,
+                    usage: nested.usage
+                )
             }
             throw VisionPracticeError.httpStatus(http.statusCode)
         }
@@ -115,7 +126,37 @@ struct AITransport: Sendable {
                 }
                 var message: Message?
             }
+            struct Usage: Decodable {
+                struct PromptTokenDetails: Decodable {
+                    let cacheCreationInputTokens: Int?
+                    let cachedTokens: Int?
+
+                    enum CodingKeys: String, CodingKey {
+                        case cacheCreationInputTokens = "cache_creation_input_tokens"
+                        case cachedTokens = "cached_tokens"
+                    }
+                }
+
+                let promptTokens: Int?
+                let completionTokens: Int?
+                let inputTokens: Int?
+                let outputTokens: Int?
+                let cacheCreationInputTokens: Int?
+                let cacheReadInputTokens: Int?
+                let promptTokenDetails: PromptTokenDetails?
+
+                enum CodingKeys: String, CodingKey {
+                    case promptTokens = "prompt_tokens"
+                    case completionTokens = "completion_tokens"
+                    case inputTokens = "input_tokens"
+                    case outputTokens = "output_tokens"
+                    case cacheCreationInputTokens = "cache_creation_input_tokens"
+                    case cacheReadInputTokens = "cache_read_input_tokens"
+                    case promptTokenDetails = "prompt_tokens_details"
+                }
+            }
             var choices: [Choice]?
+            let usage: Usage?
         }
         let chat: ChatResponse
         do {
@@ -125,7 +166,35 @@ struct AITransport: Sendable {
         }
         let content = chat.choices?.first?.message?.content?
             .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return AITransportResult(content: content, formatRetryUsed: false)
+        let providerUsage = chat.usage
+        let usage = RuntimeUsage(
+            inputTokens: providerUsage?.promptTokens ?? providerUsage?.inputTokens ?? 0,
+            outputTokens: providerUsage?.completionTokens ?? providerUsage?.outputTokens ?? 0,
+            cacheWriteTokens: providerUsage?.promptTokenDetails?.cacheCreationInputTokens
+                ?? providerUsage?.cacheCreationInputTokens
+                ?? 0,
+            cacheReadTokens: providerUsage?.promptTokenDetails?.cachedTokens
+                ?? providerUsage?.cacheReadInputTokens
+                ?? 0
+        )
+        return AITransportResult(content: content, formatRetryUsed: false, usage: usage)
+    }
+
+    func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult {
+        guard let url = Self.completionsURL(from: request.baseURL) else {
+            throw VisionPracticeError.invalidURL
+        }
+        return try await complete(
+            url: url,
+            apiKey: request.apiKey,
+            model: request.model,
+            systemPrompt: request.systemPrompt,
+            userText: request.userText,
+            imageJPEGData: [],
+            includeResponseFormat: request.includeResponseFormat,
+            allowsFormatRetry: request.allowsFormatRetry,
+            timeout: request.timeout
+        )
     }
 
     private static func mapSessionError(_ error: Error) throws -> Never {
@@ -165,3 +234,5 @@ struct AITransport: Sendable {
         return try JSONSerialization.data(withJSONObject: body)
     }
 }
+
+extension AITransport: MessagesTransporting {}
