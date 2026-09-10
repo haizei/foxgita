@@ -10,6 +10,8 @@ struct MetronomeSettingsSheet: View {
     let anchor: MetronomeSheetAnchor
     var onDone: () -> Void
 
+    @State private var showAccentSheet = false
+
     private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
     private let stepButtonSize: CGFloat = 36
 
@@ -55,6 +57,11 @@ struct MetronomeSettingsSheet: View {
         }
         .presentationDetents([.fraction(0.6)])
         .presentationDragIndicator(.visible)
+        .sheet(isPresented: $showAccentSheet) {
+            MetronomeAccentSheet(metronome: metronome) {
+                showAccentSheet = false
+            }
+        }
     }
 
     private var meterControls: some View {
@@ -131,101 +138,29 @@ struct MetronomeSettingsSheet: View {
     }
 
     private var accentSection: some View {
-        VStack(alignment: .leading, spacing: GitaTheme.s8) {
-            Text(String(localized: "重音"))
-                .font(GitaFont.footnote(.medium))
-                .foregroundStyle(GitaTheme.textPrimary)
-
-            HStack(spacing: 0) {
-                ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
-                    Button {
-                        metronome.cycleAccent(at: index)
-                        Haptics.selection()
-                    } label: {
-                        accentBeatIcon(for: index)
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(accentAccessibilityLabel(for: index))
-                }
+        Button {
+            showAccentSheet = true
+        } label: {
+            HStack {
+                Text(String(localized: "重音"))
+                    .font(GitaFont.footnote(.medium))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Spacer()
+                Text("\(metronome.beatsPerBar) 拍")
+                    .font(GitaFont.footnote())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(GitaTheme.textTertiary)
             }
             .padding(.horizontal, GitaTheme.s16)
             .frame(height: 48)
             .background(GitaTheme.bgSubtle)
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+            .contentShape(Rectangle())
         }
-    }
-
-    @ViewBuilder
-    private func accentBeatIcon(for index: Int) -> some View {
-        let kind = metronome.accentPattern.indices.contains(index)
-            ? metronome.accentPattern[index]
-            : MetronomeBeatKind.weak
-
-        VStack(spacing: 2) {
-            Group {
-                switch kind {
-                case .strong, .medium:
-                    Image("note-1")
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .frame(width: 14, height: 22)
-                        .foregroundStyle(GitaTheme.brand500)
-                case .weak:
-                    Image("note-1")
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .frame(width: 14, height: 22)
-                        .foregroundStyle(GitaTheme.textSecondary)
-                case .mute:
-                    Image("note-1")
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .frame(width: 14, height: 22)
-                        .foregroundStyle(GitaTheme.textTertiary.opacity(0.35))
-                        .overlay {
-                            Image(systemName: "slash.circle")
-                                .font(.system(size: 13))
-                                .foregroundStyle(GitaTheme.textTertiary)
-                        }
-                }
-            }
-
-            if kind == .strong {
-                Text(">")
-                    .font(.system(size: 10, weight: .black))
-                    .foregroundStyle(GitaTheme.brand500)
-                    .offset(y: -4)
-            } else if kind == .medium {
-                Text("-")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(GitaTheme.brand500)
-                    .offset(y: -4)
-            } else {
-                Color.clear.frame(height: 10)
-            }
-        }
-        .frame(height: 40)
-    }
-
-    private func accentAccessibilityLabel(for index: Int) -> Text {
-        let beat = index + 1
-        guard metronome.accentPattern.indices.contains(index) else {
-            return Text("第 \(beat) 拍")
-        }
-        switch metronome.accentPattern[index] {
-        case .strong:
-            return Text("第 \(beat) 拍，强拍")
-        case .medium:
-            return Text("第 \(beat) 拍，次强拍")
-        case .weak:
-            return Text("第 \(beat) 拍，普通拍")
-        case .mute:
-            return Text("第 \(beat) 拍，静音")
-        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(String(localized: "重音，打开每拍重音设置")))
     }
 
     private var subdivisionSection: some View {
