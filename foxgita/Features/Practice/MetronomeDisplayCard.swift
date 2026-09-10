@@ -140,7 +140,7 @@ struct MetronomeDisplayCard: View {
         let markerColor = isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle
 
         return RoundedRectangle(cornerRadius: GitaTheme.radius8)
-            .fill(GitaTheme.bgSubtle)
+            .fill(GitaTheme.accentTrackBase)
             .overlay(alignment: .top) {
                 Rectangle()
                     .fill(markerColor)
@@ -174,17 +174,26 @@ struct MetronomeDisplayCard: View {
     }
 
     private func barFillColor(for index: Int, isActive: Bool) -> Color {
-        guard metronome.accentPattern.indices.contains(index) else {
-            return GitaTheme.categoryOrangeSoft
-        }
+        let kind = metronome.accentPattern.indices.contains(index)
+            ? metronome.accentPattern[index]
+            : nil
+        return Self.fillColor(for: kind, isActive: isActive)
+    }
+
+    static func fillColor(for kind: MetronomeBeatKind?, isActive: Bool) -> Color {
         if isActive {
             return GitaTheme.brand500
         }
-        let kind = metronome.accentPattern[index]
-        if kind == .mute {
+        switch kind {
+        case nil, .weak:
+            return GitaTheme.accentWeak
+        case .medium:
+            return GitaTheme.accentMedium
+        case .strong:
+            return GitaTheme.brand500
+        case .mute:
             return Color.clear
         }
-        return GitaTheme.categoryOrangeSoft
     }
 
     private var beatTrack: some View {
