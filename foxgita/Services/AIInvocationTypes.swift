@@ -9,7 +9,7 @@ enum AIInvocationErrorType: String, Sendable {
 }
 
 enum AIDraftOutcome: String, Sendable {
-    case accepted, edited, regenerated, abandoned
+    case accepted, edited, regenerated, abandoned, failed
 }
 
 struct AIInvocationRecordInput: Equatable, Sendable {
@@ -24,6 +24,16 @@ struct AIInvocationRecordInput: Equatable, Sendable {
     var memoryIds: [String]
     var formatRetryUsed: Bool
     var draftOutcome: AIDraftOutcome?
+    var runtime: String? = nil
+    var executionState: AIExecutionState? = nil
+    var sessionID: String? = nil
+    var staticPromptFingerprint: String? = nil
+    var historyPrefixFingerprint: String? = nil
+    var contextFingerprint: String? = nil
+    var toolsetFingerprint: String? = nil
+    var usage: RuntimeUsage? = nil
+    var refusalType: String? = nil
+    var fallbackUsed: Bool? = nil
 }
 
 protocol AIInvocationRecording: Sendable {
@@ -47,6 +57,13 @@ enum AIInvocationClientRecord {
     ) -> AIInvocationRecordInput {
         let cancelled = error.map { AIInvocationStore.errorType(from: $0) } == .cancelled
         let practiceSkill = skill.id == SkillID.nextSession || skill.id == SkillID.planFromImage
+        let outcome: AIDraftOutcome? = if cancelled && practiceSkill {
+            .abandoned
+        } else if status == .failure {
+            .failed
+        } else {
+            nil
+        }
         return AIInvocationRecordInput(
             id: id,
             skillId: skill.id,
@@ -58,7 +75,7 @@ enum AIInvocationClientRecord {
             errorType: error.map(AIInvocationStore.errorType(from:)),
             memoryIds: memoryIds,
             formatRetryUsed: formatRetryUsed,
-            draftOutcome: (cancelled && practiceSkill) ? .abandoned : nil
+            draftOutcome: outcome
         )
     }
 

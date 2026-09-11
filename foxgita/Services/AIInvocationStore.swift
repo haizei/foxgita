@@ -13,24 +13,40 @@ final class AIInvocationStore {
     func record(_ input: AIInvocationRecordInput, now: Date = Date()) {
         do {
             guard let profileId = try activeProfileId(), !profileId.isEmpty else { return }
+            guard let safeID = Self.safeIdentifier(input.id),
+                  let safeSkillID = Self.safeIdentifier(input.skillId),
+                  let safeSkillVersion = Self.safeIdentifier(input.skillVersion) else { return }
             let invocationId = input.id
             let existing = try context.fetch(
                 FetchDescriptor<AIInvocationLog>(predicate: #Predicate { $0.id == invocationId })
             )
             if !existing.isEmpty { return }
             context.insert(AIInvocationLog(
-                id: input.id,
+                id: safeID,
                 profileId: profileId,
-                skillId: input.skillId,
-                skillVersion: input.skillVersion,
-                model: input.model,
+                sessionId: Self.safeMetadata(input.sessionID),
+                skillId: safeSkillID,
+                skillVersion: safeSkillVersion,
+                runtime: Self.safeMetadata(input.runtime),
+                model: Self.safeMetadata(input.model) ?? "redacted",
+                executionStateRaw: input.executionState?.rawValue,
                 startedAt: input.startedAt,
                 durationMs: input.durationMs,
                 statusRaw: input.status.rawValue,
                 errorTypeRaw: input.errorType?.rawValue ?? "",
-                memoryIdsRaw: input.memoryIds.joined(separator: ","),
+                refusalTypeRaw: Self.safeMetadata(input.refusalType),
+                memoryIdsRaw: input.memoryIds.compactMap(Self.safeIdentifier).joined(separator: ","),
+                staticPromptFingerprint: Self.safeMetadata(input.staticPromptFingerprint),
+                historyPrefixFingerprint: Self.safeMetadata(input.historyPrefixFingerprint),
+                contextFingerprint: Self.safeMetadata(input.contextFingerprint),
+                toolsetFingerprint: Self.safeMetadata(input.toolsetFingerprint),
+                inputTokens: input.usage?.inputTokens,
+                outputTokens: input.usage?.outputTokens,
+                cacheWriteTokens: input.usage?.cacheWriteTokens,
+                cacheReadTokens: input.usage?.cacheReadTokens,
                 formatRetryUsed: input.formatRetryUsed,
-                draftOutcomeRaw: input.draftOutcome?.rawValue ?? "",
+                fallbackUsed: input.fallbackUsed,
+                draftOutcomeRaw: (input.draftOutcome ?? (input.status == .failure ? .failed : nil))?.rawValue ?? "",
                 now: now
             ))
             try context.save()
@@ -48,7 +64,9 @@ final class AIInvocationStore {
             guard let row = rows.first else { return }
             row.draftOutcomeRaw = outcome.rawValue
             if let taskId {
-                row.taskId = taskId
+                guard let safeTaskID = Self.safeIdentifier(taskId) else { return }
+                row.taskId = safeTaskID
+                row.businessObjectId = safeTaskID
             }
             row.updatedAt = now
             try context.save()
@@ -66,6 +84,66 @@ final class AIInvocationStore {
             )
             guard let row = rows.first else { return }
             row.completedAt = now
+            row.businessObjectCompletedAt = now
+            row.updatedAt = now
+            try context.save()
+        } catch {
+            return
+        }
+    }
+
+    func markArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) {
+        guard let artifactID = Self.safeIdentifier(artifactID),
+              let contextSnapshotID = Self.safeIdentifier(contextSnapshotID) else { return }
+        update(invocationID: invocationID) { row in
+            guard row.artifactId == nil else { return }
+            row.artifactId = artifactID
+            row.contextSnapshotId = contextSnapshotID
+        }
+    }
+
+    func markBusinessObject(invocationID: String, businessObjectID: String) {
+        guard let businessObjectID = Self.safeIdentifier(businessObjectID) else { return }
+        update(invocationID: invocationID) { row in
+            guard row.businessObjectId == nil else { return }
+            row.businessObjectId = businessObjectID
+        }
+    }
+
+    func markStarted(invocationID: String, at: Date) {
+        update(invocationID: invocationID) { row in
+            guard row.businessObjectStartedAt == nil else { return }
+            row.businessObjectStartedAt = at
+        }
+    }
+
+    func markCompleted(invocationID: String, at: Date) {
+        update(invocationID: invocationID) { row in
+            guard row.businessObjectCompletedAt == nil else { return }
+            row.businessObjectCompletedAt = at
+            row.completedAt = at
+            row.executionState = AIExecutionState.completed.rawValue
+        }
+    }
+
+    func markRegenerated(invocationID: String, successorInvocationID: String, now: Date = Date()) {
+        do {
+            guard invocationID != successorInvocationID else { return }
+            let invocationId = invocationID
+            let successorId = successorInvocationID
+            let predecessors = try context.fetch(
+                FetchDescriptor<AIInvocationLog>(predicate: #Predicate { $0.id == invocationId })
+            )
+            let successors = try context.fetch(
+                FetchDescriptor<AIInvocationLog>(predicate: #Predicate { $0.id == successorId })
+            )
+            guard let predecessor = predecessors.first, let successor = successors.first else { return }
+            guard predecessor.successorInvocationId == nil, successor.predecessorInvocationId == nil else { return }
+            predecessor.draftOutcomeRaw = AIDraftOutcome.regenerated.rawValue
+            predecessor.successorInvocationId = successorInvocationID
+            predecessor.updatedAt = now
+            successor.predecessorInvocationId = invocationID
+            successor.updatedAt = now
             try context.save()
         } catch {
             return
@@ -111,7 +189,20 @@ final class AIInvocationStore {
             log.model,
             log.statusRaw,
             log.errorTypeRaw,
+            log.refusalTypeRaw ?? "",
             log.memoryIdsRaw,
+            log.runtime ?? "",
+            log.executionState ?? "",
+            log.sessionId ?? "",
+            log.staticPromptFingerprint ?? "",
+            log.historyPrefixFingerprint ?? "",
+            log.contextFingerprint ?? "",
+            log.toolsetFingerprint ?? "",
+            log.artifactId ?? "",
+            log.contextSnapshotId ?? "",
+            log.businessObjectId ?? "",
+            log.predecessorInvocationId ?? "",
+            log.successorInvocationId ?? "",
             log.draftOutcomeRaw,
             log.taskId,
         ].joined(separator: " ")
@@ -121,6 +212,41 @@ final class AIInvocationStore {
         try context.fetch(
             FetchDescriptor<LocalProfile>(predicate: #Predicate { $0.isActive == true })
         ).first?.id
+    }
+
+    private func update(invocationID: String, mutation: (AIInvocationLog) -> Void) {
+        do {
+            let rows = try context.fetch(
+                FetchDescriptor<AIInvocationLog>(predicate: #Predicate { $0.id == invocationID })
+            )
+            guard let row = rows.first else { return }
+            mutation(row)
+            row.updatedAt = Date()
+            try context.save()
+        } catch {
+            return
+        }
+    }
+
+    private static func safeMetadata(_ value: String?) -> String? {
+        guard let value, !value.isEmpty else { return nil }
+        guard value.count <= 256,
+              !value.localizedCaseInsensitiveContains("bearer "),
+              !value.localizedCaseInsensitiveContains("authorization"),
+              !value.localizedCaseInsensitiveContains("file:"),
+              !value.contains("sk-"),
+              !value.hasPrefix("/"),
+              !value.contains("\\Users\\") else {
+            return "redacted"
+        }
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._:/-"))
+        guard value.unicodeScalars.allSatisfy(allowed.contains) else { return "redacted" }
+        return value
+    }
+
+    private static func safeIdentifier(_ value: String) -> String? {
+        guard let safe = safeMetadata(value), safe != "redacted" else { return nil }
+        return safe
     }
 
     private func prune(profileId: String) throws {
