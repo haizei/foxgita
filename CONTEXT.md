@@ -4,6 +4,42 @@ Gita 吉他练习 iOS 应用。用户在日常练习中配置节拍器、计时�
 
 ## Language
 
+### AI 能力
+
+**AI Recipe**:
+一个用户可触发的、具有固定输入范围、Artifact 类型与批准策略的 AI 业务能力；当前共有下一次练习、图片计划、媒体复盘和视频诊断四种。
+_Avoid_: AI 接口、AI Client、模型功能
+
+**AI Artifact**:
+模型输出经结构和领域规则校验后形成的不可变候选结果，尚不等于已经写入的业务对象。
+_Avoid_: 模型响应、JSON 结果、最终数据
+
+**Practice Draft**:
+由下一次练习或图片计划 Recipe 生成、允许用户编辑且尚未加入今日练习的计划草稿。
+_Avoid_: AI 练习、自动创建任务
+
+**Review Result**:
+针对既有录音或视频生成的派生分析结果；校验通过后可自动关联到原 Recording，但不等同于长期用户画像。
+_Avoid_: Candidate Memory、用户能力结论
+
+**Invocation Outcome**:
+AI Invocation 经过 Artifact 展示后产生的业务采用结果，包括 accepted、abandoned、regenerated 或 failed。
+_Avoid_: 请求状态、模型状态
+
+**Candidate Memory**:
+从 Review Result 提炼、拟进入用户长期画像但尚未获得用户批准的信息。
+_Avoid_: Review Result、自动记忆、用户画像
+
+**Host Approval**:
+用户在预览界面针对特定草稿或 Candidate Memory 作出的明确批准；聊天文字不构成 Host Approval。
+_Avoid_: 默认同意、生成即批准、聊天确认
+
+**Recipe Migration State**:
+单个 AI Recipe 的迁移生命周期：legacy、internalPlatform、platformDefault 或 removed。
+_Avoid_: 新版 AI 开关、全局迁移状态
+
+### 节拍器
+
 **Metronome Display Card**:
 练习详情页内嵌的四列节拍器卡片（速度 / 拍号 / 音符 / 声音 + 四拍柱 + Beat Track）。
 _Avoid_: 节拍器卡片、metronome card
