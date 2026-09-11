@@ -44,4 +44,21 @@ struct AudioSessionCoordinatorTests {
         coordinator.release(.playback)
         #expect(coordinator.count(for: .playback) == 0)
     }
+
+    @Test func interruptionObserversReceiveBeganAndEndedIndependently() throws {
+        let coordinator = AudioSessionCoordinator(apply: { })
+        var first: [AudioSessionCoordinator.InterruptionEvent] = []
+        var second: [AudioSessionCoordinator.InterruptionEvent] = []
+        let firstToken = coordinator.addInterruptionObserver { first.append($0) }
+        _ = coordinator.addInterruptionObserver { second.append($0) }
+        try coordinator.acquire(.playback)
+
+        coordinator.notifyInterruptionForTesting(.began)
+        coordinator.removeInterruptionObserver(firstToken)
+        coordinator.notifyInterruptionForTesting(.ended(shouldResume: true))
+
+        #expect(first == [.began])
+        #expect(second == [.began, .ended(shouldResume: true)])
+        #expect(coordinator.count(for: .playback) == 0)
+    }
 }

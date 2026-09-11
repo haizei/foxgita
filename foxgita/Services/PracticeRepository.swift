@@ -32,6 +32,7 @@ protocol PracticeRepository: AnyObject {
     func practiceItem(id: UUID, profileId: UUID) throws -> PracticeItem?
     func insertPracticeItem(_ item: PracticeItem) throws
     func practiceItemsIncludingDeleted() throws -> [PracticeItem]
+    func deleteMetronomeTrainingData(practiceItemId: UUID) throws
 
     func projects(profileId: UUID) throws -> [Project]
     func project(id: UUID, profileId: UUID) throws -> Project?
@@ -167,6 +168,18 @@ final class SwiftDataPracticeRepository: PracticeRepository {
         try context.fetch(FetchDescriptor<PracticeItem>())
     }
 
+    func deleteMetronomeTrainingData(practiceItemId: UUID) throws {
+        let itemId = practiceItemId
+        let plans = try context.fetch(
+            FetchDescriptor<TempoRampPlan>(predicate: #Predicate { $0.practiceItemId == itemId })
+        )
+        let sessions = try context.fetch(
+            FetchDescriptor<MetronomeTrainingSession>(predicate: #Predicate { $0.practiceItemId == itemId })
+        )
+        plans.forEach(context.delete)
+        sessions.forEach(context.delete)
+    }
+
     func projects(profileId: UUID) throws -> [Project] {
         let pid = profileId
         return try context.fetch(
@@ -193,6 +206,8 @@ final class SwiftDataPracticeRepository: PracticeRepository {
     }
 
     func removeAll() throws {
+        try context.delete(model: MetronomeTrainingSession.self)
+        try context.delete(model: TempoRampPlan.self)
         try context.delete(model: RecordingRef.self)
         try context.delete(model: PracticeSession.self)
         try context.delete(model: TaskItem.self)
@@ -313,6 +328,8 @@ final class InMemoryPracticeRepository: PracticeRepository {
         if let fetchError { throw fetchError }
         return storedPracticeItems
     }
+
+    func deleteMetronomeTrainingData(practiceItemId: UUID) throws {}
 
     func projects(profileId: UUID) throws -> [Project] {
         storedProjects.filter { $0.profileId == profileId && $0.deletedAt == nil }

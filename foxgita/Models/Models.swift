@@ -6,6 +6,8 @@
 import Foundation
 import SwiftData
 
+// V18 reuses the shipped V17 entity types. Keep these public aliases anchored
+// to their declaring schema so SwiftData can cast fetched identifiers reliably.
 typealias TaskItem = GitaSchemaV17.TaskItem
 typealias PracticeSession = GitaSchemaV17.PracticeSession
 typealias RecordingRef = GitaSchemaV17.RecordingRef
@@ -723,6 +725,7 @@ enum StepCoding {
 /// V14 → V15 adds PracticeItem.metronomeAccentRaw for per-beat accent/mute.
 /// V15 → V16 adds PracticeItem.metronomeSubdivisionRaw for rhythm subdivision.
 /// V16 → V17 adds PracticeItem metronome sound settings (mode, volume, strong-beat boost).
+/// V17 → V18 adds tempo-ramp plans and append-only metronome training sessions.
 ///
 /// Never edit a shipped version in place. Two branches once each declared a
 /// different "V13"; merging them into one shape left installed stores with a
@@ -739,6 +742,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             GitaSchemaV15.self,
             GitaSchemaV16.self,
             GitaSchemaV17.self,
+            GitaSchemaV18.self,
         ]
     }
 
@@ -759,6 +763,7 @@ enum GitaMigrationPlan: SchemaMigrationPlan {
             .lightweight(fromVersion: GitaSchemaV14.self, toVersion: GitaSchemaV15.self),
             .lightweight(fromVersion: GitaSchemaV15.self, toVersion: GitaSchemaV16.self),
             .lightweight(fromVersion: GitaSchemaV16.self, toVersion: GitaSchemaV17.self),
+            .lightweight(fromVersion: GitaSchemaV17.self, toVersion: GitaSchemaV18.self),
         ]
     }
 }

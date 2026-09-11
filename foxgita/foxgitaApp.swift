@@ -22,13 +22,14 @@ struct foxgitaApp: App {
     private let durationPreferenceSync: DurationPreferenceSync
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV17.self)
+        let schema = Schema(versionedSchema: GitaSchemaV18.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(
                 for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
             )
             self.container = container
+            try MetronomeTrainingPersistence.settleOrphanedRuns(in: container.mainContext)
             let memoryRepo = SwiftDataMemoryRepository(context: container.mainContext)
             self.memoryRepo = memoryRepo
             let liveMemory = LiveMemoryContext(repository: memoryRepo, context: container.mainContext)

@@ -107,6 +107,7 @@ struct PracticeDetailView: View {
     @Environment(PracticeStore.self) private var store
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Environment(MemoryConsentCoordinator.self) private var consent
+    @Environment(\.modelContext) private var modelContext
     @Query private var items: [PracticeItem]
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var allPracticeItems: [PracticeItem]
@@ -120,7 +121,7 @@ struct PracticeDetailView: View {
         case audio, note, video
     }
 
-    @State private var metronome = MetronomeEngine()
+    @State private var tempoController = MetronomeTempoController()
     @State private var practiceTimer = PracticeTimer()
     @State private var recorder = AudioRecorderService()
     @State private var video = VideoRecorderService()
@@ -155,7 +156,11 @@ struct PracticeDetailView: View {
     @State private var showCreateFromPracticeSheet = false
     @State private var metronomeSheetAnchor: MetronomeSheetAnchor?
     @State private var showMetronomeSoundSheet = false
+    @State private var activeTrainingSessionId: UUID?
+    @State private var interruptionObserverToken: UUID?
     @FocusState private var noteFocused: Bool
+
+    private var metronome: MetronomeEngine { tempoController.engine }
 
     init(itemId: UUID, allowPastDayEdits: Bool = false, openedFromRecord: Bool = false) {
         self.itemId = itemId
@@ -288,19 +293,33 @@ struct PracticeDetailView: View {
                 storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
                 storedMetronomeVolume = metronome.volume
                 storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
+                loadLatestRampPlan()
                 if let projectId = item.projectId,
                    projects.contains(where: { $0.id == projectId }) {
                     sessionProjectId = projectId
                 }
             }
-            AudioSessionCoordinator.shared.onInterruption = { [metronome, practiceTimer, recorder] in
-                metronome.stop()
+            if let interruptionObserverToken {
+                AudioSessionCoordinator.shared.removeInterruptionObserver(interruptionObserverToken)
+            }
+            interruptionObserverToken = AudioSessionCoordinator.shared.addInterruptionObserver {
+                [tempoController, practiceTimer, recorder] event in
+                guard event == .began else { return }
+                tempoController.handleInterruption()
+                updateActiveTrainingSnapshot()
+                tempoController.engine.stop()
                 practiceTimer.pause()
                 if recorder.isRecording { recorder.stop(label: item.title) }
             }
         }
         .onDisappear {
-            AudioSessionCoordinator.shared.onInterruption = nil
+            if let interruptionObserverToken {
+                AudioSessionCoordinator.shared.removeInterruptionObserver(interruptionObserverToken)
+                self.interruptionObserverToken = nil
+            }
+            if !isItemStillOnNavigationStack {
+                finishActiveTraining(reason: .userStopped)
+            }
             practiceTimer.pause()
             metronome.stop()
             if recorder.isRecording { recorder.stop(label: item?.title ?? "") }
@@ -336,6 +355,14 @@ struct PracticeDetailView: View {
         }
         .onChange(of: store.lastError) { _, value in
             if let value { show(value.localizedDescription) }
+        }
+        .onChange(of: tempoController.completedStageCount) { _, _ in
+            updateActiveTrainingSnapshot()
+        }
+        .onChange(of: tempoController.rampState) { _, state in
+            if state == .targetHold {
+                finishActiveTraining(reason: .targetCompleted)
+            }
         }
             .fullScreenCover(isPresented: Binding(
             get: { video.isPresenting },
@@ -427,6 +454,10 @@ struct PracticeDetailView: View {
                         metronome: metronome,
                         onEntryTap: { anchor in
                             guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+                            if tempoController.isRampActive, anchor != .speed {
+                                show(String(localized: "变速训练中，拍号、切分与重音已锁定"))
+                                return
+                            }
                             noteFocused = false
                             showMetronomeSoundSheet = false
                             metronomeSheetAnchor = anchor
@@ -438,6 +469,9 @@ struct PracticeDetailView: View {
                             showMetronomeSoundSheet = true
                         }
                     )
+                    if tempoController.isRampActive || tempoController.rampState == .interrupted {
+                        rampStatusBanner
+                    }
                     timerCard
                     if mode == .editable || !steps.isEmpty {
                         stepsCard
@@ -516,9 +550,12 @@ struct PracticeDetailView: View {
         .sheet(item: $metronomeSheetAnchor) { anchor in
             switch anchor {
             case .speed:
-                MetronomeSpeedSheet(metronome: metronome) {
-                    metronomeSheetAnchor = nil
-                }
+                MetronomeSpeedSheet(
+                    controller: tempoController,
+                    onDone: { metronomeSheetAnchor = nil },
+                    onStartRamp: { settings in startRamp(settings) },
+                    onEndRamp: { endRampFromSpeedSheet() }
+                )
             case .meter, .subdivision:
                 MetronomeSettingsSheet(
                     metronome: metronome,
@@ -571,6 +608,46 @@ struct PracticeDetailView: View {
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: 20))
         .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
+    }
+
+    private var rampStatusBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: tempoController.rampState == .targetHold ? "checkmark.circle.fill" : "chart.line.uptrend.xyaxis")
+                .foregroundStyle(GitaTheme.brand500)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(rampStatusTitle)
+                    .font(GitaFont.callout(.semibold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                if let settings = tempoController.rampSettings {
+                    Text("当前 \(metronome.bpm) BPM · 目标 \(settings.targetBPM) BPM")
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
+            }
+            Spacer()
+            if tempoController.rampState == .interrupted {
+                Button("继续") { togglePlay() }
+                    .font(GitaFont.callout(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(minHeight: 44)
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(minHeight: 58)
+        .background(Color.orange.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .accessibilityElement(children: .combine)
+    }
+
+    private var rampStatusTitle: String {
+        switch tempoController.rampState {
+        case .countIn: return String(localized: "预备拍")
+        case .running: return String(localized: "变速训练中")
+        case .paused: return String(localized: "变速训练已暂停")
+        case .targetHold: return String(localized: "目标速度保持")
+        case .interrupted: return String(localized: "训练已中断，等待继续")
+        default: return String(localized: "变速训练")
+        }
     }
 
     private var stepsCard: some View {
@@ -973,20 +1050,46 @@ struct PracticeDetailView: View {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
         noteFocused = false
         if practiceTimer.isRunning {
+            tempoController.pauseRamp()
+            updateActiveTrainingSnapshot()
             practiceTimer.pause()
             metronome.stop()
             return
         }
         do {
             try metronome.start()
+            if tempoController.rampState == .paused || tempoController.rampState == .interrupted {
+                tempoController.resumeRamp()
+            }
             practiceTimer.start()
         } catch {
             show(String(localized: "节拍器无法启动"))
         }
     }
 
+    private func startRamp(_ settings: TempoRampSettings) {
+        guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+        tempoController.startRamp(settings)
+        saveRampPlanAndBeginSession(settings)
+        if !metronome.isPlaying {
+            do {
+                try metronome.start()
+                practiceTimer.start()
+            } catch {
+                tempoController.endRamp(cancelled: true)
+                finishActiveTraining(reason: .interrupted)
+                show(String(localized: "节拍器无法启动"))
+                return
+            }
+        }
+        metronomeSheetAnchor = nil
+        show(String(localized: settings.countInBars > 0 ? "预备拍开始" : "变速训练将在下一小节开始"))
+    }
+
     private func requestExit() {
         noteFocused = false
+        finishActiveTraining(reason: .userStopped)
+        tempoController.endRamp()
         practiceTimer.pause()
         metronome.stop()
         if let item {
@@ -996,6 +1099,90 @@ struct PracticeDetailView: View {
             queueProjectDeletedToastIfNeeded(for: item)
         }
         leave()
+    }
+
+    private func loadLatestRampPlan() {
+        let descriptor = FetchDescriptor<TempoRampPlan>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
+        guard let plans = try? modelContext.fetch(descriptor),
+              let latest = plans.first(where: { $0.practiceItemId == itemId }) else { return }
+        tempoController.savedRampSettings = latest.settings
+    }
+
+    private func saveRampPlanAndBeginSession(_ settings: TempoRampSettings) {
+        let descriptor = FetchDescriptor<TempoRampPlan>()
+        if let plans = try? modelContext.fetch(descriptor),
+           let existing = plans.first(where: { $0.practiceItemId == itemId }) {
+            existing.startBPM = settings.startBPM
+            existing.targetBPM = settings.targetBPM
+            existing.barsPerStage = settings.barsPerStage
+            existing.stepBPM = settings.stepBPM
+            existing.countInBars = settings.countInBars
+            existing.meterRaw = metronome.timeSignatureText
+            existing.subdivisionRaw = metronome.subdivisionRaw
+            existing.accentPatternRaw = metronome.accentPatternRaw
+            existing.updatedAt = Date()
+        } else {
+            modelContext.insert(TempoRampPlan(
+                practiceItemId: itemId,
+                settings: settings,
+                meterRaw: metronome.timeSignatureText,
+                subdivisionRaw: metronome.subdivisionRaw,
+                accentPatternRaw: metronome.accentPatternRaw
+            ))
+        }
+        let session = MetronomeTrainingSession(
+            practiceItemId: itemId,
+            settings: settings,
+            timeSignature: metronome.timeSignatureText,
+            accentPatternRaw: metronome.accentPatternRaw,
+            subdivisionRaw: metronome.subdivisionRaw
+        )
+        modelContext.insert(session)
+        activeTrainingSessionId = session.id
+        tempoController.savedRampSettings = settings
+        try? modelContext.save()
+    }
+
+    private func updateActiveTrainingSnapshot() {
+        guard let session = activeTrainingSession() else { return }
+        session.finalBPM = metronome.bpm
+        session.stableMaxBPM = tempoController.stableMaxBPM
+        session.completedBars = tempoController.completedBars
+        session.completedStageCount = tempoController.completedStageCount
+        session.pauseCount = tempoController.pauseCount
+        session.interruptionCount = tempoController.interruptionCount
+        session.updatedAt = Date()
+        try? modelContext.save()
+    }
+
+    private func finishActiveTraining(reason: MetronomeTrainingCompletionReason) {
+        guard let activeTrainingSessionId else { return }
+        let descriptor = FetchDescriptor<MetronomeTrainingSession>()
+        guard let sessions = try? modelContext.fetch(descriptor),
+              let session = sessions.first(where: { $0.id == activeTrainingSessionId }) else { return }
+        session.state = .completed
+        session.completionReason = reason
+        session.finalBPM = metronome.bpm
+        session.stableMaxBPM = tempoController.stableMaxBPM
+        session.completedBars = tempoController.completedBars
+        session.completedStageCount = tempoController.completedStageCount
+        session.pauseCount = tempoController.pauseCount
+        session.interruptionCount = tempoController.interruptionCount
+        session.endedAt = Date()
+        session.updatedAt = Date()
+        try? modelContext.save()
+        self.activeTrainingSessionId = nil
+    }
+
+    private func activeTrainingSession() -> MetronomeTrainingSession? {
+        guard let activeTrainingSessionId else { return nil }
+        let descriptor = FetchDescriptor<MetronomeTrainingSession>()
+        return (try? modelContext.fetch(descriptor))?.first { $0.id == activeTrainingSessionId }
+    }
+
+    private func endRampFromSpeedSheet() {
+        finishActiveTraining(reason: .userStopped)
+        tempoController.handleManualChange(metronome.bpm, choice: .endTraining)
     }
 
     private func leave() {
@@ -1130,6 +1317,8 @@ struct PracticeDetailView: View {
         guard !isCompleting else { return }
         noteFocused = false
         isCompleting = true
+        finishActiveTraining(reason: .practiceFinished)
+        tempoController.endRamp()
         if recorder.isRecording { recorder.stop(label: item.title) }
         practiceTimer.pause()
         metronome.stop()

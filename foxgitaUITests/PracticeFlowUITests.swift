@@ -59,6 +59,42 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["完成"].exists || app.staticTexts["完成本次练习"].exists)
     }
 
+    func testMetronomeSpeedSheetMatchesCompactAndSegmentedFlows() {
+        addTeardownBlock { [weak self] in
+            self?.deleteCreatedTask(named: "节拍器速度测试")
+        }
+        XCTAssertTrue(app.buttons["添加练习"].waitForExistence(timeout: 5))
+        app.buttons["添加练习"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("节拍器速度测试")
+        app.buttons["创建练习"].tap()
+
+        let speed = app.buttons["速度 (BPM)，打开节拍器设置"]
+        XCTAssertTrue(speed.waitForExistence(timeout: 5))
+        speed.tap()
+        XCTAssertTrue(app.descendants(matching: .any)["metronome.speed-sheet"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["TAP"].exists)
+        let rampEntry = app.staticTexts["进入设置"]
+        XCTAssertTrue(rampEntry.exists)
+        XCTContext.runActivity(named: "Metronome Speed A Compact") { activity in
+            activity.add(XCTAttachment(screenshot: app.screenshot()))
+        }
+
+        rampEntry.tap()
+        if app.alerts["变速训练"].waitForExistence(timeout: 1) {
+            app.alerts["变速训练"].buttons["知道了"].tap()
+        }
+        XCTAssertTrue(app.buttons["调速"].waitForExistence(timeout: 3))
+        XCTAssertTrue(app.buttons["测速"].exists)
+        XCTAssertTrue(app.buttons["变速"].exists)
+        XCTAssertTrue(app.buttons["开始变速训练"].exists)
+        XCTContext.runActivity(named: "Metronome Speed B Segmented") { activity in
+            activity.add(XCTAttachment(screenshot: app.screenshot()))
+        }
+    }
+
     func testEmptyCompleteStaysOnPracticeTab() {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "空完成")

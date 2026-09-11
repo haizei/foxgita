@@ -29,6 +29,7 @@ final class MetronomeEngine {
     private(set) var soundMode: MetronomeSoundMode = .standard
     private(set) var volume = 80
     private(set) var strongBeatBoost = true
+    var onTimelineEvent: ((MetronomeTimelineEvent) -> Void)?
 
     var timeSignatureText: String {
         MetronomeMeter.format(beats: beatsPerBar, denominator: denominator)
@@ -62,15 +63,18 @@ final class MetronomeEngine {
     @ObservationIgnored private var runToken = 0
     @ObservationIgnored private var previewRemainingBeats: Int?
     @ObservationIgnored private var previewStopScheduled = false
+    @ObservationIgnored private var scheduledBarIndex = 0
 
     var hapticsEnabled = true
 
     var isEngineRunning: Bool { engine.isRunning }
     var hasPump: Bool { pump != nil }
 
-    init(session: AudioSessionCoordinator = .shared) {
+    init(session: AudioSessionCoordinator) {
         self.session = session
     }
+
+    convenience init() { self.init(session: .shared) }
 
     func setBpm(_ value: Int) {
         let clamped = min(200, max(40, value))
@@ -170,6 +174,7 @@ final class MetronomeEngine {
             player.stop()
             beatIndex = 0
             subClickIndex = 0
+            scheduledBarIndex = 0
             currentBeatInBar = 0
             runToken += 1
             player.play()
@@ -203,6 +208,7 @@ final class MetronomeEngine {
         isPlaying = false
         beatIndex = 0
         subClickIndex = 0
+        scheduledBarIndex = 0
         currentBeatInBar = 0
         runToken += 1
         previewRemainingBeats = nil
@@ -242,7 +248,13 @@ final class MetronomeEngine {
         while nextClickFrame <= horizon {
             let scheduledFrame = nextClickFrame
             let beatInBar = beatIndex % beatsPerBar
-            if subClickIndex == 0 { currentBeatInBar = beatInBar }
+            if subClickIndex == 0 {
+                scheduleTimelineEvent(
+                    MetronomeTimelineEvent(beat: beatInBar, bar: scheduledBarIndex),
+                    at: scheduledFrame,
+                    now: now
+                )
+            }
             let beatKind = accentPattern[beatInBar]
             if beatKind != .mute {
                 let buffer: AVAudioPCMBuffer
@@ -269,6 +281,7 @@ final class MetronomeEngine {
             }
             nextClickFrame += intervalToNextClick()
             advanceClickPosition()
+            if subClickIndex == 0, beatInBar == beatsPerBar - 1 { scheduledBarIndex += 1 }
             if subClickIndex == 0, let remaining = previewRemainingBeats {
                 previewRemainingBeats = remaining - 1
                 if remaining <= 1 {
@@ -279,6 +292,22 @@ final class MetronomeEngine {
             }
         }
         if !player.isPlaying { player.play() }
+    }
+
+    private func scheduleTimelineEvent(
+        _ event: MetronomeTimelineEvent,
+        at frame: AVAudioFramePosition,
+        now: AVAudioFramePosition
+    ) {
+        let token = runToken
+        let delay = Double(frame - now) / format.sampleRate
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.isPlaying, self.runToken == token else { return }
+                self.currentBeatInBar = event.beat
+                self.onTimelineEvent?(event)
+            }
+        }
     }
 
     private func schedulePreviewStop(

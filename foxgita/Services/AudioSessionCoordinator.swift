@@ -10,11 +10,15 @@ final class AudioSessionCoordinator {
         case record
     }
 
+    enum InterruptionEvent: Equatable, Sendable {
+        case began
+        case ended(shouldResume: Bool)
+    }
+
     private var needCounts: [Need: Int] = [:]
     private var observer: NSObjectProtocol?
     private let applyOverride: (@MainActor () throws -> Void)?
-
-    var onInterruption: (() -> Void)?
+    private var interruptionObservers: [UUID: (InterruptionEvent) -> Void] = [:]
 
     var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 }
 
@@ -35,6 +39,19 @@ final class AudioSessionCoordinator {
     }
 
     func count(for need: Need) -> Int { needCounts[need, default: 0] }
+
+    @discardableResult
+    func addInterruptionObserver(
+        _ observer: @escaping (InterruptionEvent) -> Void
+    ) -> UUID {
+        let token = UUID()
+        interruptionObservers[token] = observer
+        return token
+    }
+
+    func removeInterruptionObserver(_ token: UUID) {
+        interruptionObservers.removeValue(forKey: token)
+    }
 
     func acquire(_ need: Need) throws {
         needCounts[need, default: 0] += 1
@@ -89,8 +106,20 @@ final class AudioSessionCoordinator {
     private func handleInterruption(_ note: Notification) {
         guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
               let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
-        guard type == .began else { return }
-        needCounts.removeAll()
-        onInterruption?()
+        switch type {
+        case .began:
+            notifyInterruptionForTesting(.began)
+        case .ended:
+            let rawOptions = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
+            let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
+            notifyInterruptionForTesting(.ended(shouldResume: options.contains(.shouldResume)))
+        @unknown default:
+            break
+        }
+    }
+
+    func notifyInterruptionForTesting(_ event: InterruptionEvent) {
+        if event == .began { needCounts.removeAll() }
+        for observer in interruptionObservers.values { observer(event) }
     }
 }

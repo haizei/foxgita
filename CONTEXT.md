@@ -29,20 +29,51 @@ Beat Bars 下方的胶囊形圆点轨，标记当前拍位置。
 _Avoid_: 进度点、dot track
 
 **Tempo Ruler**:
-Speed Sheet 中的 BPM 滑杆（40–160），带刻度与拖拽 thumb。
+Speed Sheet 中按 Figma 显示并直接拖动 40–160 BPM 的刻度滑杆；节拍器整体仍支持 40–200 BPM。
 _Avoid_: 速度滑块、slider
 
 **Accent Pattern**:
-每拍的重音状态：强拍 → 弱拍 → 静音，三态循环。
+每拍的重音状态：强拍 → 次强拍 → 弱拍 → 静音，四态循环。
 _Avoid_: accent、重音模式（作为泛称时）
 
-## Decisions (2026-09-06, Metronome polish)
+**Tap Tempo Attempt**:
+从第一次有效 TAP 到采用、取消、重置或中断的一轮临时测速采样；它不是持久化练习会话。
+_Avoid_: TapTempoSession、TAP 会话
+
+**Tempo Ramp Settings**:
+Speed Sheet 的 B Segmented 扩展状态，编辑起始速度、目标速度、升速步长、触发小节和预备小节。
+_Avoid_: 变速页面、第二个 bottom sheet
+
+**Tempo Ramp Plan**:
+一次变速训练采用的速度参数与拍号、切分、重音快照；训练开始后不可变。
+_Avoid_: 变速配置、Ramp 模板
+
+**Tempo Ramp Run**:
+Tempo Ramp Plan 开始后的内存运行过程，包含阶段、小节进度、暂停与中断状态。
+_Avoid_: TempoRampRuntime、变速 Session
+
+**Metronome Training Session**:
+一次已经开始的节拍器专项训练结果，记录完成原因、最高稳定 BPM 和暂停/中断次数。
+_Avoid_: PracticeSession、TempoRampRuntime
+
+**Bar Boundary**:
+由节拍器音频时间线定义的下一小节首拍，是 TAP 采用和变速阶段切换的提交点。
+_Avoid_: UI 小节边界、Timer 边界
+
+**Target Hold**:
+完成目标速度的完整阶段后，节拍器继续以目标 BPM 播放的训练状态。
+_Avoid_: 训练已退出、普通播放
+
+## Decisions (updated 2026-09-11, Metronome tempo training)
 
 - **Sheet 架构**：Speed Sheet 独立；Meter + Subdivision 保持合并 Meter Sheet；Sound Sheet 已独立。
 - **Display Card**：移除 tempo name，速度列只显示图标 + BPM（tempo name 仅在 Speed Sheet）。
 - **验收标准**：像素级对齐 Figma `703:104`（含图标资产、spacing token）。
-- **TAP 测速**：P1，本轮不做；Speed Sheet 先做 Ruler + ±。
-- **Tempo Ruler 范围**：40–160（与 Figma 一致）；40–200 仍可通过 ± 到达。
+- **TAP 测速**：纳入 Speed Sheet；只保留一个 TAP 入口，结果需显式采用。
+- **Tempo Ramp Settings**：使用 B Segmented 扩展状态，不叠加第二个 sheet。
+- **Tempo Ruler 范围**：按 A Compact 显示并直接拖动 40–160；Engine、± 和 TAP 仍支持 40–200。
+- **训练边界**：TAP 采用和变速阶段切换只在音频时间线的小节首拍提交。
+- **训练持久化**：Schema V18 使用独立 TempoRampPlan 和 MetronomeTrainingSession；不复用 PracticeSession。
 - **弱拍色**：新增 `categoryOrangeSoft` token（#f5d2af），Beat Bar 专用。
 - **图标资产**：从 Figma 导出 PNG/SVG 入 `Assets.xcassets`（速度图标、Sound 模式图标、Beat Track SVG）。
 - **实现顺序**：1 tokens/资产 → 2 Display Card → 3 Speed Sheet → 4 Meter Sheet。

@@ -420,6 +420,7 @@ final class PracticeStore {
         let item = try requireLivePracticeItem(id: id)
         item.deletedAt = now
         item.updatedAt = now
+        try repository.deleteMetronomeTrainingData(practiceItemId: id)
         try clearVersionRefs(pointingTo: id, now: now)
         try persistPracticeItemChanges()
     }
