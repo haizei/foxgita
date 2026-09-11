@@ -38,6 +38,11 @@ struct AIInvocationRecordInput: Equatable, Sendable {
 
 protocol AIInvocationRecording: Sendable {
     func record(_ input: AIInvocationRecordInput) async
+    func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async
+}
+
+extension AIInvocationRecording {
+    func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async {}
 }
 
 struct EmptyAIInvocationLog: AIInvocationRecording {

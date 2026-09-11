@@ -28,6 +28,7 @@ struct OrchestrationResult: Sendable {
     let artifact: AnySkillArtifact
     let prompt: PromptAssembly
     let usage: RuntimeUsage
+    let formatRepairUsed: Bool
 }
 
 struct AgentOrchestrator: Sendable {
@@ -84,8 +85,7 @@ struct AgentOrchestrator: Sendable {
         let output = try await runtimeOutput(from: runtime.execute(plan: plan, prompt: prompt, credentials: credentials))
         let decoded = try resolved.agentExtension.decodeAndValidate(
             data: output.data,
-            recipe: resolved.recipe,
-            seenSet: seenSet
+            plan: plan
         )
         let artifact = try ArtifactValidator.validate(decoded, plan: plan)
         try presentationGate.validate(artifact: artifact, plan: plan)
@@ -94,15 +94,17 @@ struct AgentOrchestrator: Sendable {
             state: .presenting,
             artifact: artifact,
             prompt: prompt,
-            usage: output.usage
+            usage: output.usage,
+            formatRepairUsed: output.formatRepairUsed
         )
     }
 
     private func runtimeOutput(
         from stream: AsyncThrowingStream<RuntimeEvent, Error>
-    ) async throws -> (data: Data, usage: RuntimeUsage) {
+    ) async throws -> (data: Data, usage: RuntimeUsage, formatRepairUsed: Bool) {
         var artifactData: Data?
         var usage = RuntimeUsage.zero
+        var formatRepairUsed = false
 
         for try await event in stream {
             switch event {
@@ -111,6 +113,8 @@ struct AgentOrchestrator: Sendable {
                 artifactData = data
             case .completed(let completedUsage):
                 usage = completedUsage
+            case .formatRepairUsed:
+                formatRepairUsed = true
             case .failed(let error):
                 throw error
             case .cancelled:
@@ -121,7 +125,7 @@ struct AgentOrchestrator: Sendable {
         }
 
         guard let artifactData else { throw AIRuntimeError.invalidResponse }
-        return (artifactData, usage)
+        return (artifactData, usage, formatRepairUsed)
     }
 
     private func dynamicContext(from snapshot: ContextSnapshot) -> String {

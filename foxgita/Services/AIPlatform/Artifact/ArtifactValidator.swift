@@ -1,7 +1,7 @@
 import Foundation
 
 protocol ArtifactDecoding: Sendable {
-    func decodeAndValidate(data: Data, recipe: RecipeDefinition, seenSet: SeenSet) throws -> AnySkillArtifact
+    func decodeAndValidate(data: Data, plan: AgentExecutionPlan) throws -> AnySkillArtifact
 }
 
 enum ArtifactValidator {

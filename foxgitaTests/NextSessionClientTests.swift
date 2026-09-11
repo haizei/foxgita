@@ -5,8 +5,14 @@ import Testing
 final class InvocationLogSpy: AIInvocationRecording, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var inputs: [AIInvocationRecordInput] = []
+    private(set) var artifactLinks: [(invocationID: String, artifactID: String, snapshotID: String)] = []
     func record(_ input: AIInvocationRecordInput) async {
         lock.lock(); inputs.append(input); lock.unlock()
+    }
+    func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async {
+        lock.lock()
+        artifactLinks.append((invocationID, artifactID, contextSnapshotID))
+        lock.unlock()
     }
 }
 

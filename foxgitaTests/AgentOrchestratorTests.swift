@@ -208,7 +208,7 @@ private struct FixtureExtension: AgentExtension {
         "fixture-system"
     }
 
-    func decodeAndValidate(data: Data, recipe: RecipeDefinition, seenSet: SeenSet) throws -> AnySkillArtifact {
+    func decodeAndValidate(data: Data, plan: AgentExecutionPlan) throws -> AnySkillArtifact {
         let resourceRefs: [ResourceRef]
         if artifactReferenceFromPayload {
             let object = try JSONSerialization.jsonObject(with: data) as? [String: String]
@@ -222,8 +222,8 @@ private struct FixtureExtension: AgentExtension {
         return AnySkillArtifact(
             id: UUID(),
             invocationID: invocationID,
-            recipeID: recipe.id,
-            recipeVersion: recipe.version,
+            recipeID: plan.recipe.id,
+            recipeVersion: plan.recipe.version,
             contextSnapshotID: snapshotID,
             payloadData: data,
             resourceRefs: resourceRefs,

@@ -6,6 +6,7 @@ struct AIPracticeDraft: Equatable {
     var targetMin: Int
     var steps: [String]
     var chords: [String]
+    var sourceMemoryIDs: [String] = []
 
     struct Raw: Decodable, Equatable {
         var title: String?

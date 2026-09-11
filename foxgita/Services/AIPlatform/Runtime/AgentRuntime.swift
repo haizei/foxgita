@@ -43,6 +43,7 @@ enum RuntimeEvent: Equatable, Sendable {
     case started
     case modelDelta(String)
     case artifactProduced(Data)
+    case formatRepairUsed
     case completed(RuntimeUsage)
     case failed(AIRuntimeError)
     case cancelled

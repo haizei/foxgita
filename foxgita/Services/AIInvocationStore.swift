@@ -287,4 +287,12 @@ final class LiveAIInvocationLog: AIInvocationRecording {
     func record(_ input: AIInvocationRecordInput) async {
         store.record(input)
     }
+
+    func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async {
+        store.markArtifact(
+            invocationID: invocationID,
+            artifactID: artifactID,
+            contextSnapshotID: contextSnapshotID
+        )
+    }
 }

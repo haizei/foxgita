@@ -38,6 +38,9 @@ struct MessagesRuntime: AgentRuntime {
                     }
 
                     continuation.yield(.artifactProduced(Data(result.content.utf8)))
+                    if result.formatRetryUsed {
+                        continuation.yield(.formatRepairUsed)
+                    }
                     continuation.yield(.completed(result.usage))
                 } catch let error as AIRuntimeError where error == .cancelled {
                     continuation.yield(.cancelled)

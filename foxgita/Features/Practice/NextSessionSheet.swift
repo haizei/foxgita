@@ -30,6 +30,7 @@ struct NextSessionSheet: View {
     @State private var generationId = UUID().uuidString
     @State private var entryGate = PracticeEntryGate()
     @State private var submitToken = PracticeEntryToken()
+    @State private var approvalGate = PracticeDraftApprovalGate()
     @State private var isSubmitting = false
     @State private var citation = ""
     @State private var draftCategory: PracticeCategory = .chord
@@ -230,11 +231,7 @@ struct NextSessionSheet: View {
             guard gate == .proceed else { return }
             durationSync?.syncActive(minutes: minutes)
             memoryStore.reload()
-            if phase == .preview {
-                invocationStore.setDraftOutcome(
-                    id: generationId, outcome: .regenerated, taskId: nil
-                )
-            }
+            let predecessorInvocationID = phase == .preview ? generationId : nil
             generationId = UUID().uuidString
             submitToken = PracticeEntryToken()
             phase = .generating
@@ -242,8 +239,13 @@ struct NextSessionSheet: View {
             toast = nil
             do {
                 let log = LiveAIInvocationLog(store: invocationStore)
+                let client: any NextSessionGenerating = RecipeMigrationResolver().usesPlatform(
+                    for: SkillID.nextSession
+                )
+                    ? NextSessionRecipeRunner(memory: memoryContext, log: log)
+                    : NextSessionClient(memory: memoryContext, log: log)
                 let generator = NextSessionGenerator(
-                    client: NextSessionClient(memory: memoryContext, log: log),
+                    client: client,
                     log: log
                 )
                 let draft = try await generator.generate(
@@ -254,17 +256,35 @@ struct NextSessionSheet: View {
                     invocationId: generationId
                 )
                 try Task.checkCancellation()
+                if let predecessorInvocationID {
+                    invocationStore.markRegenerated(
+                        invocationID: predecessorInvocationID,
+                        successorInvocationID: generationId
+                    )
+                }
                 applyDraft(draft)
                 citation = NextSessionCitation.line(
-                    items: consentedItems,
+                    items: consentedItems.filter { draft.sourceMemoryIDs.contains($0.id) },
                     selectedMinutes: minutes
                 )
                 isGenerating = false
                 phase = .preview
             } catch is CancellationError {
+                if let predecessorInvocationID {
+                    invocationStore.markRegenerated(
+                        invocationID: predecessorInvocationID,
+                        successorInvocationID: generationId
+                    )
+                }
                 return
             } catch {
                 if Task.isCancelled { return }
+                if let predecessorInvocationID {
+                    invocationStore.markRegenerated(
+                        invocationID: predecessorInvocationID,
+                        successorInvocationID: generationId
+                    )
+                }
                 fail(with: error)
             }
         }
@@ -286,40 +306,54 @@ struct NextSessionSheet: View {
     }
 
     private func confirm() {
+        guard !isSubmitting else { return }
         let token = submitToken
-        if isSubmitting {
-            if let item = try? commitDraft(token: token) {
-                selection = item.id.uuidString
-            }
-            return
-        }
         isSubmitting = true
-        do {
-            let item = try commitDraft(token: token)
-            recordConfirmOutcome(taskId: item.id.uuidString)
-            selection = item.id.uuidString
-            onFinished()
-        } catch {
-            isSubmitting = false
-            toast = String(localized: "生成失败，请稍后重试")
-            hideToastLater()
+        let draft = currentDraft()
+        let approval = approvalGate.issue(
+            draft: draft,
+            userID: "local-user",
+            sessionID: generationId,
+            draftID: generationId
+        )
+        Task {
+            do {
+                try await approvalGate.validate(
+                    approval,
+                    draft: draft,
+                    userID: "local-user",
+                    sessionID: generationId,
+                    draftID: generationId
+                )
+                let item = try commitDraft(draft: draft, token: token)
+                recordConfirmOutcome(taskId: item.id.uuidString)
+                selection = item.id.uuidString
+                onFinished()
+            } catch {
+                isSubmitting = false
+                toast = String(localized: "生成失败，请稍后重试")
+                hideToastLater()
+            }
         }
     }
 
-    private func commitDraft(token: PracticeEntryToken) throws -> PracticeItem {
+    private func currentDraft() -> AIPracticeDraft {
         var steps = editSteps
             .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }
         if steps.isEmpty { steps = [String(localized: "新步骤")] }
         if steps.count > 12 { steps = Array(steps.prefix(12)) }
         let title = editTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        let draft = AIPracticeDraft(
+        return AIPracticeDraft(
             title: title.isEmpty ? String(localized: "未命名练习") : title,
             category: draftCategory,
             targetMin: min(60, max(1, editMinutes)),
             steps: steps,
             chords: draftChords
         )
+    }
+
+    private func commitDraft(draft: AIPracticeDraft, token: PracticeEntryToken) throws -> PracticeItem {
         return try entryGate.submit(
             store: store,
             input: PracticeEntry.next(draft: draft, generationId: generationId),
