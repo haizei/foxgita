@@ -125,12 +125,14 @@ struct AIInvocationStoreTests {
             draftOutcome: nil,
             staticPromptFingerprint: "/Users/person/private/media.mov",
             contextFingerprint: "sk-secret",
-            toolsetFingerprint: "file:///Users/person/private/media.mov"
+            toolsetFingerprint: "file:///Users/person/private/media.mov",
+            refusalType: "proxy/sk-secret"
         ))
 
         let row = try #require(store.recent().first)
         let blob = AIInvocationStore.debugBlob(of: row)
         #expect(row.model == "redacted")
+        #expect(row.refusalTypeRaw == "redacted")
         #expect(row.staticPromptFingerprint == "redacted")
         #expect(row.contextFingerprint == "redacted")
         #expect(row.toolsetFingerprint == "redacted")
@@ -138,6 +140,7 @@ struct AIInvocationStoreTests {
         #expect(!blob.contains("secret-token"))
         #expect(!blob.contains("/Users/"))
         #expect(!blob.contains("sk-secret"))
+        #expect(!blob.contains("proxy/sk-"))
         #expect(!blob.contains("file:///"))
     }
 

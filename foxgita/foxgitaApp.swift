@@ -22,8 +22,9 @@ struct foxgitaApp: App {
     private let durationPreferenceSync: DurationPreferenceSync
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV17.self)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isUnitTesting)
         do {
             let container = try ModelContainer(
                 for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]

@@ -234,7 +234,7 @@ final class AIInvocationStore {
               !value.localizedCaseInsensitiveContains("bearer "),
               !value.localizedCaseInsensitiveContains("authorization"),
               !value.localizedCaseInsensitiveContains("file:"),
-              !value.contains("sk-"),
+              !containsCredentialPrefix(value),
               !value.hasPrefix("/"),
               !value.contains("\\Users\\") else {
             return "redacted"
@@ -247,6 +247,18 @@ final class AIInvocationStore {
     private static func safeIdentifier(_ value: String) -> String? {
         guard let safe = safeMetadata(value), safe != "redacted" else { return nil }
         return safe
+    }
+
+    private static func containsCredentialPrefix(_ value: String) -> Bool {
+        let value = value.lowercased()
+        var searchStart = value.startIndex
+        while let range = value.range(of: "sk-", range: searchStart..<value.endIndex) {
+            if range.lowerBound == value.startIndex { return true }
+            let previous = value[value.index(before: range.lowerBound)]
+            if !previous.isLetter && !previous.isNumber { return true }
+            searchStart = range.upperBound
+        }
+        return false
     }
 
     private func prune(profileId: String) throws {
