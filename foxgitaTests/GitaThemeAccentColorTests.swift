@@ -9,8 +9,11 @@ import UIKit
 
 struct GitaThemeAccentColorTests {
     @Test func accentColorsResolveToFigmaHex() {
-        expectColor("AccentMedium", hex: 0xF4A261)
-        expectColor("AccentWeak", hex: 0xF9C89E)
+        expectColor("AccentStrong", hex: 0xFF6B1A)
+        expectColor("AccentMedium", hex: 0xFF9961)
+        expectColor("AccentWeak", hex: 0xFFCCA6)
+        expectColor("AccentMute", hex: 0xBDC2C9)
+        expectColor("AccentSlotEmpty", hex: 0xEDF2F7)
         expectColor("AccentTrackBase", hex: 0xEEF0F3)
         expectColor("AccentTrackDivider", hex: 0xD0D3D9)
         expectColor("AccentCardStrongBg", hex: 0xFF591A)

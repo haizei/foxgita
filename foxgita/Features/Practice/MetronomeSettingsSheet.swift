@@ -56,6 +56,7 @@ struct MetronomeSettingsSheet: View {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(String(localized: "完成"), action: onDone)
                         .fontWeight(.semibold)
+                        .accessibilityIdentifier("metronome.settings.done")
                 }
             }
         }
@@ -137,13 +138,15 @@ struct MetronomeSettingsSheet: View {
     }
 
     private var accentSection: some View {
-        VStack(alignment: .leading, spacing: GitaTheme.s8) {
+        VStack(alignment: .center, spacing: GitaTheme.s8) {
             Text(String(localized: "重音"))
                 .font(GitaFont.footnote(.medium))
                 .foregroundStyle(GitaTheme.textPrimary)
+                .frame(maxWidth: .infinity, alignment: .center)
 
             accentSequenceView
         }
+        .frame(maxWidth: .infinity)
     }
 
     @ViewBuilder

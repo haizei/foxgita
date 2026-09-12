@@ -105,13 +105,38 @@ struct MetronomeEngineTests {
         let metronome = MetronomeEngine()
         metronome.configureMeter(timeSignature: "2/4", accentRaw: "31")
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .mute)
+        #expect(metronome.accentPattern[1] == .medium)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .strong)
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .medium)
+        #expect(metronome.accentPattern[1] == .mute)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .weak)
+    }
+
+    @Test func beatTrackModeStartsAtAllBeatsAndCyclesWithoutPersistence() {
+        let metronome = MetronomeEngine()
+        #expect(metronome.beatTrackMode == .allBeats)
+        metronome.cycleBeatTrackMode()
+        #expect(metronome.beatTrackMode == .accents)
+        metronome.cycleBeatTrackMode()
+        #expect(metronome.beatTrackMode == .pendulum)
+    }
+
+    @Test func visualEventsFollowScheduledMainAndSubdivisionClicks() async throws {
+        let metronome = MetronomeEngine()
+        metronome.hapticsEnabled = false
+        metronome.setBpm(200)
+        metronome.setSubdivision(.twoEighths)
+        var events: [MetronomeVisualEvent] = []
+        metronome.onVisualEvent = { events.append($0) }
+
+        try metronome.start()
+        try await Task.sleep(for: .milliseconds(650))
+        metronome.stop()
+
+        #expect(events.contains { !$0.isSubdivision })
+        #expect(events.contains { $0.isSubdivision })
     }
 
     @Test func setSubdivisionWhilePlayingKeepsPlaying() throws {

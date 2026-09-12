@@ -95,6 +95,55 @@ final class PracticeFlowUITests: XCTestCase {
         }
     }
 
+    func testMetronomeDisplayCardMatchesFigmaFrame() {
+        addTeardownBlock { [weak self] in
+            self?.deleteCreatedTask(named: "节拍器视觉测试")
+        }
+        XCTAssertTrue(app.buttons["添加练习"].waitForExistence(timeout: 5))
+        app.buttons["添加练习"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 3))
+        field.tap()
+        field.typeText("节拍器视觉测试")
+        app.buttons["创建练习"].tap()
+
+        app.buttons["拍号，打开节拍器设置"].tap()
+        app.buttons["第 1 拍，强，点击切换"].tap()
+        app.buttons["第 1 拍，静音，点击切换"].tap()
+        app.buttons["第 2 拍，普通，点击切换"].tap()
+        app.buttons["第 3 拍，普通，点击切换"].tap()
+        app.buttons["第 3 拍，次强，点击切换"].tap()
+        app.buttons["第 3 拍，强，点击切换"].tap()
+        app.buttons["第 4 拍，普通，点击切换"].tap()
+        app.buttons["第 4 拍，次强，点击切换"].tap()
+        XCTAssertTrue(app.buttons["第 1 拍，普通，点击切换"].exists)
+        XCTAssertTrue(app.buttons["第 2 拍，次强，点击切换"].exists)
+        XCTAssertTrue(app.buttons["第 3 拍，静音，点击切换"].exists)
+        XCTAssertTrue(app.buttons["第 4 拍，强，点击切换"].exists)
+        app.buttons["metronome.settings.done"].tap()
+
+        let card = app.descendants(matching: .any)["metronome.display-card"]
+        XCTAssertTrue(card.waitForExistence(timeout: 5))
+
+        let allBeatsTrack = app.buttons["节拍反馈：所有节拍"]
+        XCTAssertTrue(allBeatsTrack.exists)
+        allBeatsTrack.tap()
+        XCTAssertTrue(app.buttons["节拍反馈：重音节拍"].exists)
+        app.buttons["节拍反馈：重音节拍"].tap()
+        XCTAssertTrue(app.buttons["节拍反馈：单摆模式"].exists)
+        app.buttons["节拍反馈：单摆模式"].tap()
+        XCTAssertTrue(app.buttons["节拍反馈：重音及次节拍"].exists)
+
+        XCTContext.runActivity(named: "Metronome Display Card — Figma 841:140") { activity in
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
+
+        XCTAssertEqual(card.frame.width, 370, accuracy: 1.5)
+        XCTAssertEqual(card.frame.height, 243, accuracy: 1.5)
+    }
+
     func testEmptyCompleteStaysOnPracticeTab() {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "空完成")

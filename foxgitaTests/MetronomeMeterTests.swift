@@ -19,15 +19,27 @@ struct MetronomeMeterTests {
     }
 
     @Test func beatKindCycleOrder() {
-        var beat = MetronomeBeatKind.strong
-        beat.cycle()
-        #expect(beat == .medium)
+        var beat = MetronomeBeatKind.mute
         beat.cycle()
         #expect(beat == .weak)
         beat.cycle()
-        #expect(beat == .mute)
+        #expect(beat == .medium)
         beat.cycle()
         #expect(beat == .strong)
+        beat.cycle()
+        #expect(beat == .mute)
+    }
+
+    @Test func beatTrackModeCyclesInProductOrder() {
+        var mode = BeatTrackMode.allBeats
+        mode.cycle()
+        #expect(mode == .accents)
+        mode.cycle()
+        #expect(mode == .pendulum)
+        mode.cycle()
+        #expect(mode == .accentsAndSubdivisions)
+        mode.cycle()
+        #expect(mode == .allBeats)
     }
 
     @Test func beatKindHeightRatios() {

@@ -29,7 +29,10 @@ final class MetronomeEngine {
     private(set) var soundMode: MetronomeSoundMode = .standard
     private(set) var volume = 80
     private(set) var strongBeatBoost = true
+    private(set) var beatTrackMode = BeatTrackMode.allBeats
+    private(set) var visualEvent: MetronomeVisualEvent?
     var onTimelineEvent: ((MetronomeTimelineEvent) -> Void)?
+    var onVisualEvent: ((MetronomeVisualEvent) -> Void)?
 
     var timeSignatureText: String {
         MetronomeMeter.format(beats: beatsPerBar, denominator: denominator)
@@ -68,6 +71,7 @@ final class MetronomeEngine {
     @ObservationIgnored private var pendingBoundaryBPM: Int?
     @ObservationIgnored private var pendingBoundarySubdivision: MetronomeSubdivision?
     @ObservationIgnored private var subdivisionBoundaryCountdown = 0
+    @ObservationIgnored private var visualEventSequence = 0
 
     var hapticsEnabled = true
 
@@ -130,6 +134,10 @@ final class MetronomeEngine {
     func cycleAccent(at index: Int) {
         guard accentPattern.indices.contains(index) else { return }
         accentPattern[index].cycle()
+    }
+
+    func cycleBeatTrackMode() {
+        beatTrackMode.cycle()
     }
 
     func configureSubdivision(raw: Int?) {
@@ -215,6 +223,7 @@ final class MetronomeEngine {
             subClickIndex = 0
             scheduledBarIndex = 0
             currentBeatInBar = 0
+            visualEvent = nil
             runToken += 1
             player.play()
             nextClickFrame = currentFrame() + frames(0.1)
@@ -249,6 +258,7 @@ final class MetronomeEngine {
         subClickIndex = 0
         scheduledBarIndex = 0
         currentBeatInBar = 0
+        visualEvent = nil
         runToken += 1
         previewRemainingBeats = nil
         previewStopScheduled = false
@@ -306,6 +316,13 @@ final class MetronomeEngine {
                 )
             }
             let beatKind = accentPattern[beatInBar]
+            scheduleVisualEvent(
+                beat: beatInBar,
+                kind: beatKind,
+                isSubdivision: subClickIndex != 0,
+                at: scheduledFrame,
+                now: now
+            )
             if beatKind != .mute {
                 let buffer: AVAudioPCMBuffer
                 switch beatKind {
@@ -357,6 +374,31 @@ final class MetronomeEngine {
                 if let appliedBPM = event.appliedBPM { self.bpm = appliedBPM }
                 self.currentBeatInBar = event.beat
                 self.onTimelineEvent?(event)
+            }
+        }
+    }
+
+    private func scheduleVisualEvent(
+        beat: Int,
+        kind: MetronomeBeatKind,
+        isSubdivision: Bool,
+        at frame: AVAudioFramePosition,
+        now: AVAudioFramePosition
+    ) {
+        let token = runToken
+        let delay = Double(frame - now) / format.sampleRate
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.isPlaying, self.runToken == token else { return }
+                self.visualEventSequence += 1
+                let event = MetronomeVisualEvent(
+                    sequence: self.visualEventSequence,
+                    beat: beat,
+                    kind: kind,
+                    isSubdivision: isSubdivision
+                )
+                self.visualEvent = event
+                self.onVisualEvent?(event)
             }
         }
     }

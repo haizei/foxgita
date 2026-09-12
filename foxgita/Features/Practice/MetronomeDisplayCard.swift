@@ -6,11 +6,39 @@
 import SwiftUI
 
 struct MetronomeDisplayCard: View {
+    enum BeatTrackPulseShape: Equatable {
+        case none
+        case full
+        case subdivision
+        case pendulum
+    }
+
+    enum Layout {
+        static let cardHeight: CGFloat = 243
+        static let horizontalPadding: CGFloat = 12
+        static let topPadding: CGFloat = 10
+        static let bottomPadding: CGFloat = 13
+        static let controlHeight: CGFloat = 68
+        static let controlToBarsSpacing: CGFloat = 6
+        static let barsHeight: CGFloat = 106
+        static let barsToTrackSpacing: CGFloat = 5
+        static let trackHeight: CGFloat = 35
+        static let fourBeatSpacing: CGFloat = 23.5
+        static let fourBeatSideInset: CGFloat = 11.75
+        static let barCornerRadius: CGFloat = 6
+    }
+
     let metronome: MetronomeEngine
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
     var onSoundTap: () -> Void = {}
 
-    @State private var isBeatFlashing = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var trackPulseShape = BeatTrackPulseShape.none
+    @State private var trackPulseKind = MetronomeBeatKind.weak
+    @State private var pendulumAtTrailing = false
+    @State private var visibleModeName: String?
+    @State private var pulseResetTask: Task<Void, Never>?
+    @State private var modeNameTask: Task<Void, Never>?
 
     private var meterText: String { metronome.timeSignatureText }
 
@@ -19,7 +47,7 @@ struct MetronomeDisplayCard: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 0) {
             HStack(spacing: 0) {
                 entryColumn(anchor: .speed, label: String(localized: "速度 (BPM)")) {
                     speedValue
@@ -39,19 +67,23 @@ struct MetronomeDisplayCard: View {
                         .renderingMode(.template)
                         .scaledToFit()
                         .foregroundStyle(GitaTheme.brand500)
-                        .frame(width: 28, height: 28)
+                        .frame(width: 32, height: 32)
                         .frame(height: 40)
                 }
 
                 soundColumn
             }
+            .frame(height: Layout.controlHeight)
 
+            Color.clear.frame(height: Layout.controlToBarsSpacing)
             beatBars
+            Color.clear.frame(height: Layout.barsToTrackSpacing)
             beatTrack
         }
-        .padding(.horizontal, GitaTheme.s16)
-        .padding(.vertical, 12)
-        .frame(height: 214)
+        .padding(.horizontal, Layout.horizontalPadding)
+        .padding(.top, Layout.topPadding)
+        .padding(.bottom, Layout.bottomPadding)
+        .frame(height: Layout.cardHeight)
         .background(GitaTheme.bgSurface)
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
         .overlay {
@@ -59,40 +91,42 @@ struct MetronomeDisplayCard: View {
                 .stroke(GitaTheme.borderSubtle, lineWidth: 1)
         }
         .shadow(color: GitaTheme.shadowCard, radius: 16, y: 4)
-        .onChange(of: metronome.currentBeatInBar) { _, _ in
-            guard metronome.isPlaying else { return }
-            isBeatFlashing = true
-            withAnimation(.easeOut(duration: 0.18)) {
-                isBeatFlashing = false
+        .onChange(of: metronome.visualEvent) { _, event in
+            guard let event else {
+                resetBeatTrackFeedback()
+                return
             }
+            handleVisualEvent(event)
+        }
+        .onChange(of: metronome.isPlaying) { _, isPlaying in
+            if !isPlaying { resetBeatTrackFeedback() }
+        }
+        .onDisappear {
+            pulseResetTask?.cancel()
+            modeNameTask?.cancel()
         }
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("metronome.display-card")
     }
 
     private var speedValue: some View {
-        HStack(spacing: 4) {
-            Image("MetronomeSpeedIcon")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 26, height: 26)
-            Text("\(metronome.bpm)")
-                .font(GitaFont.largeTitle(.bold))
-                .foregroundStyle(GitaTheme.brand500)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
+        Text("\(metronome.bpm)")
+            .font(GitaFont.largeTitle(.bold))
+            .foregroundStyle(GitaTheme.brand500)
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
         .frame(height: 40)
     }
 
     private var soundColumn: some View {
         Button(action: onSoundTap) {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 metricLabel(String(localized: "声音"))
                 Image("MetronomeSoundIcon")
                     .resizable()
                     .scaledToFit()
-                    .frame(width: 28, height: 28)
+                    .frame(width: 32, height: 32)
                     .frame(height: 40)
             }
             .frame(maxWidth: .infinity)
@@ -110,7 +144,7 @@ struct MetronomeDisplayCard: View {
         Button {
             onEntryTap(anchor)
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 metricLabel(label)
                 content()
             }
@@ -122,13 +156,25 @@ struct MetronomeDisplayCard: View {
     }
 
     private var beatBars: some View {
-        HStack(spacing: metronome.beatsPerBar > 6 ? 4 : GitaTheme.s8) {
-            ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
-                beatBar(index: index)
-                    .frame(maxWidth: metronome.beatsPerBar <= 4 ? 80 : .infinity)
+        Group {
+            if metronome.beatsPerBar == 4 {
+                HStack(spacing: Layout.fourBeatSpacing) {
+                    ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                        beatBar(index: index)
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .padding(.horizontal, Layout.fourBeatSideInset)
+            } else {
+                HStack(spacing: metronome.beatsPerBar > 6 ? 4 : GitaTheme.s8) {
+                    ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                        beatBar(index: index)
+                            .frame(maxWidth: metronome.beatsPerBar <= 4 ? 80 : .infinity)
+                    }
+                }
             }
         }
-        .frame(height: 80)
+        .frame(height: Layout.barsHeight)
         .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.12), value: activeBeat)
         .animation(.easeInOut(duration: 0.12), value: metronome.beatsPerBar)
@@ -140,52 +186,46 @@ struct MetronomeDisplayCard: View {
         let kind = metronome.accentPattern.indices.contains(index)
             ? metronome.accentPattern[index]
             : MetronomeBeatKind.weak
-        let filledCount = kind.filledBarsCount
+        let displayedCount = Self.displayedSegmentCount(for: kind)
         let segmentColor = Self.fillColor(for: kind, isActive: isActive)
-        let markerColor = isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle
 
-        return ZStack {
-            GitaTheme.accentTrackBase
+        return GeometryReader { proxy in
+            let segmentHeight = proxy.size.height / 3
+            let fillHeight = segmentHeight * CGFloat(displayedCount)
 
-            VStack(spacing: 0) {
-                // Top segment (3 of 3)
+            ZStack(alignment: .top) {
+                GitaTheme.accentSlotEmpty
+
                 Rectangle()
-                    .fill(filledCount >= 3 ? segmentColor : Color.clear)
+                    .fill(segmentColor)
+                    .frame(height: fillHeight)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
 
-                // Divider 1
-                Rectangle()
-                    .fill(GitaTheme.accentTrackDivider)
-                    .frame(height: 1)
+                if Self.showsDivider(at: 1, displayedSegmentCount: displayedCount) {
+                    Rectangle()
+                        .fill(GitaTheme.accentTrackDivider)
+                        .frame(height: 1)
+                        .offset(y: segmentHeight)
+                }
 
-                // Middle segment (2 of 3)
-                Rectangle()
-                    .fill(filledCount >= 2 ? segmentColor : Color.clear)
+                if Self.showsDivider(at: 2, displayedSegmentCount: displayedCount) {
+                    Rectangle()
+                        .fill(GitaTheme.accentTrackDivider)
+                        .frame(height: 1)
+                        .offset(y: segmentHeight * 2)
+                }
 
-                // Divider 2
-                Rectangle()
-                    .fill(GitaTheme.accentTrackDivider)
-                    .frame(height: 1)
-
-                // Bottom segment (1 of 3)
-                Rectangle()
-                    .fill(filledCount >= 1 ? segmentColor : Color.clear)
+                if metronome.flashOnAccent, isActive, kind == .strong {
+                    RoundedRectangle(cornerRadius: Layout.barCornerRadius)
+                        .fill(Color.white.opacity(0.35))
+                }
             }
-
-            if metronome.flashOnAccent, isActive, kind == .strong {
-                RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                    .fill(Color.white.opacity(0.35))
-            }
-        }
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(markerColor)
-                .frame(height: 2)
         }
         .overlay {
-            RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                .stroke(isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle, lineWidth: 1)
+            RoundedRectangle(cornerRadius: Layout.barCornerRadius)
+                .stroke(Self.borderColor(isActive: isActive), lineWidth: 1)
         }
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+        .clipShape(RoundedRectangle(cornerRadius: Layout.barCornerRadius))
         .animation(.easeOut(duration: 0.08), value: activeBeat)
         .accessibilityHidden(true)
     }
@@ -200,17 +240,153 @@ struct MetronomeDisplayCard: View {
         case .medium:
             return GitaTheme.accentMedium
         case .strong:
-            return GitaTheme.brand500
+            return GitaTheme.accentStrong
         case .mute:
-            return Color.clear
+            return GitaTheme.accentMute
+        }
+    }
+
+    static func borderColor(isActive _: Bool) -> Color {
+        GitaTheme.borderSubtle
+    }
+
+    static func displayedSegmentCount(for kind: MetronomeBeatKind?) -> Int {
+        guard let kind else { return MetronomeBeatKind.weak.filledBarsCount }
+        return kind == .mute ? 1 : kind.filledBarsCount
+    }
+
+    static func showsDivider(at boundary: Int, displayedSegmentCount: Int) -> Bool {
+        switch boundary {
+        case 1:
+            return displayedSegmentCount < 3
+        case 2:
+            return displayedSegmentCount < 2
+        default:
+            return false
+        }
+    }
+
+    static func pulseShape(
+        for mode: BeatTrackMode,
+        event: MetronomeVisualEvent
+    ) -> BeatTrackPulseShape {
+        switch mode {
+        case .allBeats:
+            return event.isSubdivision ? .none : .full
+        case .accents:
+            guard !event.isSubdivision, event.kind == .medium || event.kind == .strong else {
+                return .none
+            }
+            return .full
+        case .pendulum:
+            return event.isSubdivision ? .none : .pendulum
+        case .accentsAndSubdivisions:
+            guard event.kind != .mute else { return .none }
+            return event.isSubdivision ? .subdivision : .full
         }
     }
 
     private var beatTrack: some View {
-        RoundedRectangle(cornerRadius: GitaTheme.radius8)
-            .fill(isBeatFlashing ? GitaTheme.brand500 : GitaTheme.bgSubtle)
-            .frame(height: 24)
-            .accessibilityHidden(true)
+        Button {
+            metronome.cycleBeatTrackMode()
+            Haptics.selection()
+            showModeName()
+            trackPulseShape = .none
+            if metronome.beatTrackMode != .pendulum {
+                pendulumAtTrailing = false
+            }
+        } label: {
+            GeometryReader { proxy in
+                ZStack {
+                    RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                        .fill(GitaTheme.bgSubtle)
+
+                    if trackPulseShape == .full {
+                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                            .fill(Self.fillColor(for: trackPulseKind, isActive: false))
+                    } else if trackPulseShape == .subdivision {
+                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.58))
+                            .frame(width: 56)
+                    }
+
+                    if metronome.beatTrackMode == .pendulum {
+                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                            .fill(Self.fillColor(for: trackPulseKind, isActive: false))
+                            .frame(width: Layout.trackHeight)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .offset(x: pendulumAtTrailing ? proxy.size.width - Layout.trackHeight : 0)
+                    }
+
+                    if let visibleModeName {
+                        Text(visibleModeName)
+                            .font(GitaFont.micro(.medium))
+                            .foregroundStyle(
+                                trackPulseShape == .full
+                                    ? Color.white
+                                    : GitaTheme.textSecondary
+                            )
+                            .transition(.opacity)
+                            .accessibilityHidden(true)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+            }
+            .frame(height: Layout.trackHeight)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Layout.fourBeatSideInset)
+        .accessibilityIdentifier("metronome.beat-track")
+        .accessibilityLabel(Text("节拍反馈：\(metronome.beatTrackMode.displayName)"))
+        .accessibilityHint(Text("点击切换为\(metronome.beatTrackMode.next.displayName)"))
+    }
+
+    private func handleVisualEvent(_ event: MetronomeVisualEvent) {
+        let shape = Self.pulseShape(for: metronome.beatTrackMode, event: event)
+        guard shape != .none else { return }
+        trackPulseKind = event.kind
+
+        if shape == .pendulum {
+            let animation: Animation? = reduceMotion
+                ? nil
+                : .linear(duration: 60.0 / Double(metronome.bpm))
+            withAnimation(animation) {
+                pendulumAtTrailing.toggle()
+            }
+            return
+        }
+
+        pulseResetTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.06)) {
+            trackPulseShape = shape
+        }
+        pulseResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(180))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.1)) {
+                trackPulseShape = .none
+            }
+        }
+    }
+
+    private func showModeName() {
+        modeNameTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) {
+            visibleModeName = metronome.beatTrackMode.displayName
+        }
+        modeNameTask = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.12)) {
+                visibleModeName = nil
+            }
+        }
+    }
+
+    private func resetBeatTrackFeedback() {
+        pulseResetTask?.cancel()
+        trackPulseShape = .none
+        pendulumAtTrailing = false
     }
 
     private func metricLabel(_ text: String) -> some View {

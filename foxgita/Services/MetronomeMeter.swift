@@ -13,10 +13,10 @@ enum MetronomeBeatKind: Int, CaseIterable, Equatable {
 
     mutating func cycle() {
         switch self {
-        case .strong: self = .medium
-        case .medium: self = .weak
-        case .weak:   self = .mute
-        case .mute:   self = .strong
+        case .mute:   self = .weak
+        case .weak:   self = .medium
+        case .medium: self = .strong
+        case .strong: self = .mute
         }
     }
 
@@ -55,6 +55,41 @@ enum MetronomeBeatKind: Int, CaseIterable, Equatable {
         case .strong: return String(localized: "强")
         }
     }
+}
+
+enum BeatTrackMode: Int, CaseIterable, Equatable {
+    case allBeats
+    case accents
+    case pendulum
+    case accentsAndSubdivisions
+
+    mutating func cycle() {
+        let modes = Self.allCases
+        let nextIndex = (rawValue + 1) % modes.count
+        self = modes[nextIndex]
+    }
+
+    var displayName: String {
+        switch self {
+        case .allBeats: return String(localized: "所有节拍")
+        case .accents: return String(localized: "重音节拍")
+        case .pendulum: return String(localized: "单摆模式")
+        case .accentsAndSubdivisions: return String(localized: "重音及次节拍")
+        }
+    }
+
+    var next: Self {
+        var value = self
+        value.cycle()
+        return value
+    }
+}
+
+struct MetronomeVisualEvent: Equatable {
+    let sequence: Int
+    let beat: Int
+    let kind: MetronomeBeatKind
+    let isSubdivision: Bool
 }
 
 enum MetronomeMeter {
