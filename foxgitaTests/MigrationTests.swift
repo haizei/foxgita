@@ -765,9 +765,9 @@ struct MigrationTests {
         #expect(items[0].metronomeStrongBeatBoost == true)
     }
 
-    @Test func v17StoreMigratesToV18AndAcceptsRampHistory() throws {
+    @Test func v17StoreMigratesToV19AndAcceptsRampHistory() throws {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("gita-v17-v18-\(UUID().uuidString).store")
+            .appendingPathComponent("gita-v17-v19-\(UUID().uuidString).store")
         defer { try? FileManager.default.removeItem(at: url) }
 
         let itemId = UUID()
@@ -796,7 +796,7 @@ struct MigrationTests {
             try context.save()
         }
 
-        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             migrationPlan: GitaMigrationPlan.self,
@@ -828,5 +828,44 @@ struct MigrationTests {
         let sessions = try context.fetch(FetchDescriptor<MetronomeTrainingSession>())
         #expect(sessions.count == 1)
         #expect(sessions.first?.planId == plan.id)
+    }
+
+    @Test func legacyV18StoreMigratesToV19WithoutLosingRampHistory() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v18-v19-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let itemId = UUID()
+        let planId = UUID()
+        do {
+            let schema = Schema(versionedSchema: GitaSchemaV18.self)
+            let container = try ModelContainer(
+                for: schema, configurations: [ModelConfiguration(schema: schema, url: url)]
+            )
+            let context = ModelContext(container)
+            let settings = TempoRampSettings(startBPM: 80, targetBPM: 100)
+            context.insert(GitaSchemaV18.TempoRampPlan(
+                id: planId, practiceItemId: itemId, settings: settings,
+                meterRaw: "4/4", subdivisionRaw: MetronomeSubdivision.twoEighths.rawValue,
+                accentPatternRaw: "2111"
+            ))
+            context.insert(GitaSchemaV18.MetronomeTrainingSession(
+                practiceItemId: itemId, settings: settings,
+                timeSignature: "4/4", accentPatternRaw: "2111",
+                subdivisionRaw: MetronomeSubdivision.twoEighths.rawValue
+            ))
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
+        let container = try ModelContainer(
+            for: schema, migrationPlan: GitaMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, url: url)]
+        )
+        let context = ModelContext(container)
+        #expect(try context.fetch(FetchDescriptor<TempoRampPlan>()).count == 1)
+        let sessions = try context.fetch(FetchDescriptor<MetronomeTrainingSession>())
+        #expect(sessions.count == 1)
+        #expect(sessions.first?.practiceItemId == itemId)
     }
 }

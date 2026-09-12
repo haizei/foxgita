@@ -23,7 +23,7 @@ struct foxgitaApp: App {
     private let durationPreferenceSync: DurationPreferenceSync
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
         do {
             let container = try ModelContainer(

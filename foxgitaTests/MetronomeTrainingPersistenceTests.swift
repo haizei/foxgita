@@ -6,7 +6,7 @@ import Testing
 @MainActor
 struct MetronomeTrainingPersistenceTests {
     @Test func deletingPracticeItemTrainingDataRemovesPlanAndSessions() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -35,7 +35,7 @@ struct MetronomeTrainingPersistenceTests {
     }
 
     @Test func orphanedRunningSessionIsSettledAsInterrupted() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
