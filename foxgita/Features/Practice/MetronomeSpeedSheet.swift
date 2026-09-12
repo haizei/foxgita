@@ -11,7 +11,7 @@ struct MetronomeSpeedSheet: View {
     let controller: MetronomeTempoController
     var onDone: () -> Void
     var onStartRamp: (TempoRampSettings) -> Void
-    var onEndRamp: () -> Void
+    var onEndRamp: (Int?) -> Void
     var practiceItemId: UUID?
 
     @State private var expanded = false
@@ -26,7 +26,7 @@ struct MetronomeSpeedSheet: View {
         controller: MetronomeTempoController,
         onDone: @escaping () -> Void,
         onStartRamp: @escaping (TempoRampSettings) -> Void = { _ in },
-        onEndRamp: @escaping () -> Void = {},
+        onEndRamp: @escaping (Int?) -> Void = { _ in },
         practiceItemId: UUID? = nil
     ) {
         self.controller = controller
@@ -78,7 +78,7 @@ struct MetronomeSpeedSheet: View {
                 }
             }
             Button("结束变速训练", role: .destructive) {
-                onEndRamp()
+                onEndRamp(pendingManualTempo)
                 pendingManualTempo = nil
             }
             Button("取消", role: .cancel) { pendingManualTempo = nil }

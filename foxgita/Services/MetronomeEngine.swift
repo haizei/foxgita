@@ -66,6 +66,8 @@ final class MetronomeEngine {
     @ObservationIgnored private var scheduledBarIndex = 0
     @ObservationIgnored private var schedulerBPM = 80
     @ObservationIgnored private var pendingBoundaryBPM: Int?
+    @ObservationIgnored private var pendingBoundarySubdivision: MetronomeSubdivision?
+    @ObservationIgnored private var subdivisionBoundaryCountdown = 0
 
     var hapticsEnabled = true
 
@@ -137,6 +139,24 @@ final class MetronomeEngine {
     func setSubdivision(_ value: MetronomeSubdivision) {
         guard value != subdivision else { return }
         subdivision = value
+        cancelQueuedSubdivision()
+    }
+
+    /// Restores a subdivision before scheduling the downbeat that follows the
+    /// requested number of complete bars. This keeps count-in quarter notes
+    /// from dropping the first subdivision click in the first training bar.
+    func queueSubdivision(_ value: MetronomeSubdivision, afterBars bars: Int) {
+        pendingBoundarySubdivision = value
+        subdivisionBoundaryCountdown = max(0, bars)
+    }
+
+    func cancelQueuedSubdivision() {
+        pendingBoundarySubdivision = nil
+        subdivisionBoundaryCountdown = 0
+    }
+
+    func advanceSubdivisionBoundaryForTesting() {
+        applyPendingSubdivisionAtDownbeatIfNeeded()
     }
 
     func bumpSubdivision(_ delta: Int) {
@@ -268,10 +288,13 @@ final class MetronomeEngine {
             let scheduledFrame = nextClickFrame
             let beatInBar = beatIndex % beatsPerBar
             var appliedBPM: Int?
-            if subClickIndex == 0, beatInBar == 0, let pendingBoundaryBPM {
-                schedulerBPM = pendingBoundaryBPM
-                appliedBPM = pendingBoundaryBPM
-                self.pendingBoundaryBPM = nil
+            if subClickIndex == 0, beatInBar == 0 {
+                applyPendingSubdivisionAtDownbeatIfNeeded()
+                if let pendingBoundaryBPM {
+                    schedulerBPM = pendingBoundaryBPM
+                    appliedBPM = pendingBoundaryBPM
+                    self.pendingBoundaryBPM = nil
+                }
             }
             if subClickIndex == 0 {
                 scheduleTimelineEvent(
@@ -420,6 +443,16 @@ final class MetronomeEngine {
             delta = 1.0 - currentOffset + offsets[0]
         }
         return frames(delta * beatDuration)
+    }
+
+    private func applyPendingSubdivisionAtDownbeatIfNeeded() {
+        guard let pendingBoundarySubdivision else { return }
+        if subdivisionBoundaryCountdown > 0 {
+            subdivisionBoundaryCountdown -= 1
+            return
+        }
+        subdivision = pendingBoundarySubdivision
+        self.pendingBoundarySubdivision = nil
     }
 
     private func advanceClickPosition() {

@@ -157,6 +157,7 @@ struct PracticeDetailView: View {
     @State private var metronomeSheetAnchor: MetronomeSheetAnchor?
     @State private var showMetronomeSoundSheet = false
     @State private var activeTrainingSessionId: UUID?
+    @State private var activeTrainingStartedAt: Date?
     @State private var interruptionObserverToken: UUID?
     @FocusState private var noteFocused: Bool
 
@@ -372,8 +373,28 @@ struct PracticeDetailView: View {
         .onChange(of: tempoController.completedStageCount) { _, _ in
             updateActiveTrainingSnapshot()
         }
+        .onChange(of: tempoController.currentStageBPM) { oldBPM, newBPM in
+            guard tempoController.isRampActive, oldBPM != newBPM else { return }
+            let event = newBPM == tempoController.rampSettings?.targetBPM
+                ? "metronome_ramp_target_reached" : "metronome_ramp_step_changed"
+            MetronomeAnalytics.emit(
+                event, itemId: itemId.uuidString,
+                sessionId: activeTrainingSessionId?.uuidString ?? "",
+                ["from_bpm": String(oldBPM), "to_bpm": String(newBPM),
+                 "target_bpm": String(tempoController.rampSettings?.targetBPM ?? newBPM),
+                 "completed_bars": String(tempoController.completedBars)]
+            )
+        }
         .onChange(of: tempoController.rampState) { _, state in
             if state == .targetHold {
+                MetronomeAnalytics.emit(
+                    "metronome_ramp_completed", itemId: itemId.uuidString,
+                    sessionId: activeTrainingSessionId?.uuidString ?? "",
+                    ["target_bpm": String(metronome.bpm),
+                     "completed_bars": String(tempoController.completedBars),
+                     "duration": String(max(0, Int(Date().timeIntervalSince(activeTrainingStartedAt ?? Date())))),
+                     "pause_count": String(tempoController.pauseCount)]
+                )
                 finishActiveTraining(reason: .targetCompleted)
             }
         }
@@ -563,7 +584,7 @@ struct PracticeDetailView: View {
                     controller: tempoController,
                     onDone: { metronomeSheetAnchor = nil },
                     onStartRamp: { settings in startRamp(settings) },
-                    onEndRamp: { endRampFromSpeedSheet() },
+                    onEndRamp: { selectedBPM in endRampFromSpeedSheet(selectedBPM: selectedBPM) },
                     practiceItemId: itemId
                 )
             case .meter, .subdivision:
@@ -1106,6 +1127,7 @@ struct PracticeDetailView: View {
 
     private func startRamp(_ settings: TempoRampSettings) {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+        let startContext = metronome.isPlaying ? "while_playing" : "from_idle"
         do {
             try saveRampPlanAndBeginSession(settings)
         } catch {
@@ -1119,7 +1141,7 @@ struct PracticeDetailView: View {
             sessionId: activeTrainingSessionId?.uuidString ?? "",
             ["start_bpm": String(settings.startBPM), "target_bpm": String(settings.targetBPM),
              "interval_bars": String(settings.barsPerStage), "step_bpm": String(settings.stepBPM),
-             "count_in_bars": String(settings.countInBars)]
+             "count_in_bars": String(settings.countInBars), "start_context": startContext]
         )
         if !metronome.isPlaying {
             do {
@@ -1152,17 +1174,28 @@ struct PracticeDetailView: View {
     }
 
     private func loadLatestRampPlan() {
-        let descriptor = FetchDescriptor<TempoRampPlan>(sortBy: [SortDescriptor(\.updatedAt, order: .reverse)])
-        guard let plans = try? modelContext.fetch(descriptor),
-              let latest = plans.first(where: { $0.practiceItemId == itemId }) else { return }
-        tempoController.savedRampSettings = latest.settings
+        let id = itemId
+        let descriptor = FetchDescriptor<TempoRampPlan>(
+            predicate: #Predicate { $0.practiceItemId == id },
+            sortBy: [SortDescriptor(\.updatedAt, order: .reverse)]
+        )
+        do {
+            if let latest = try modelContext.fetch(descriptor).first {
+                tempoController.savedRampSettings = latest.settings
+            }
+        } catch {
+            show(StoreError.from(error).localizedDescription)
+        }
     }
 
     private func saveRampPlanAndBeginSession(_ settings: TempoRampSettings) throws {
-        let descriptor = FetchDescriptor<TempoRampPlan>()
+        let id = itemId
+        let descriptor = FetchDescriptor<TempoRampPlan>(
+            predicate: #Predicate { $0.practiceItemId == id }
+        )
         let plans = try modelContext.fetch(descriptor)
         let plan: TempoRampPlan
-        if let existing = plans.first(where: { $0.practiceItemId == itemId }) {
+        if let existing = plans.first {
             existing.startBPM = settings.startBPM
             existing.targetBPM = settings.targetBPM
             existing.barsPerStage = settings.barsPerStage
@@ -1195,19 +1228,20 @@ struct PracticeDetailView: View {
         modelContext.insert(session)
         try modelContext.save()
         activeTrainingSessionId = session.id
+        activeTrainingStartedAt = session.startedAt
         tempoController.savedRampSettings = settings
     }
 
     private func updateActiveTrainingSnapshot() {
-        guard let session = activeTrainingSession() else { return }
-        session.finalBPM = metronome.bpm
-        session.stableMaxBPM = tempoController.stableMaxBPM
-        session.completedBars = tempoController.completedBars
-        session.completedStageCount = tempoController.completedStageCount
-        session.pauseCount = tempoController.pauseCount
-        session.interruptionCount = tempoController.interruptionCount
-        session.updatedAt = Date()
         do {
+            guard let session = try activeTrainingSession() else { return }
+            session.finalBPM = metronome.bpm
+            session.stableMaxBPM = tempoController.stableMaxBPM
+            session.completedBars = tempoController.completedBars
+            session.completedStageCount = tempoController.completedStageCount
+            session.pauseCount = tempoController.pauseCount
+            session.interruptionCount = tempoController.interruptionCount
+            session.updatedAt = Date()
             try modelContext.save()
         } catch {
             modelContext.rollback()
@@ -1216,36 +1250,41 @@ struct PracticeDetailView: View {
     }
 
     private func finishActiveTraining(reason: MetronomeTrainingCompletionReason) {
-        guard let activeTrainingSessionId else { return }
-        let descriptor = FetchDescriptor<MetronomeTrainingSession>()
-        guard let sessions = try? modelContext.fetch(descriptor),
-              let session = sessions.first(where: { $0.id == activeTrainingSessionId }) else { return }
-        session.state = .completed
-        session.completionReason = reason
-        session.finalBPM = metronome.bpm
-        session.stableMaxBPM = tempoController.stableMaxBPM
-        session.completedBars = tempoController.completedBars
-        session.completedStageCount = tempoController.completedStageCount
-        session.pauseCount = tempoController.pauseCount
-        session.interruptionCount = tempoController.interruptionCount
-        session.endedAt = Date()
-        session.updatedAt = Date()
         do {
+            guard activeTrainingSessionId != nil else { return }
+            guard let session = try activeTrainingSession() else { throw StoreError.notFound }
+            session.state = .completed
+            session.completionReason = reason
+            session.finalBPM = metronome.bpm
+            session.stableMaxBPM = tempoController.stableMaxBPM
+            session.completedBars = tempoController.completedBars
+            session.completedStageCount = tempoController.completedStageCount
+            session.pauseCount = tempoController.pauseCount
+            session.interruptionCount = tempoController.interruptionCount
+            session.endedAt = Date()
+            session.updatedAt = Date()
             try modelContext.save()
             self.activeTrainingSessionId = nil
+            self.activeTrainingStartedAt = nil
         } catch {
             modelContext.rollback()
             show(StoreError.from(error).localizedDescription)
         }
     }
 
-    private func activeTrainingSession() -> MetronomeTrainingSession? {
+    private func activeTrainingSession() throws -> MetronomeTrainingSession? {
         guard let activeTrainingSessionId else { return nil }
-        let descriptor = FetchDescriptor<MetronomeTrainingSession>()
-        return (try? modelContext.fetch(descriptor))?.first { $0.id == activeTrainingSessionId }
+        let id = activeTrainingSessionId
+        let descriptor = FetchDescriptor<MetronomeTrainingSession>(
+            predicate: #Predicate { $0.id == id }
+        )
+        return try modelContext.fetch(descriptor).first
     }
 
-    private func endRampFromSpeedSheet() {
+    private func endRampFromSpeedSheet(selectedBPM: Int? = nil) {
+        if let selectedBPM {
+            tempoController.handleManualChange(selectedBPM, choice: .adjustCurrentStage)
+        }
         MetronomeAnalytics.emit(
             "metronome_ramp_stopped", itemId: itemId.uuidString,
             sessionId: activeTrainingSessionId?.uuidString ?? "",

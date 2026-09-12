@@ -159,7 +159,7 @@ final class MetronomeTempoController {
 
     func registerTap(at time: TimeInterval = ProcessInfo.processInfo.systemUptime) -> Int? {
         guard !isRampActive else { return nil }
-        pendingTempo = nil
+        cancelPendingTempo()
         tapReadyTask?.cancel()
         tapReadyToApply = false
         let estimate = tapAttempt.registerTap(at: time)
@@ -192,6 +192,7 @@ final class MetronomeTempoController {
 
     func setTempo(_ bpm: Int) {
         guard !isRampActive else { return }
+        cancelPendingTempo()
         engine.setBpm(bpm)
     }
 
@@ -202,6 +203,7 @@ final class MetronomeTempoController {
 
     func startRamp(_ settings: TempoRampSettings) {
         guard settings.validationError == nil else { return }
+        cancelPendingTempo()
         rampSettings = settings
         completedBarsInStage = 0
         completedBars = 0
@@ -224,6 +226,9 @@ final class MetronomeTempoController {
         if !isPlaying, settings.countInBars > 0 {
             subdivisionBeforeCountIn = engine.subdivision
             engine.setSubdivision(.quarter)
+            if let subdivisionBeforeCountIn {
+                engine.queueSubdivision(subdivisionBeforeCountIn, afterBars: settings.countInBars)
+            }
             rampState = .countIn
         } else {
             rampState = .running
@@ -252,7 +257,6 @@ final class MetronomeTempoController {
         case .countIn:
             completedCountInBars += 1
             if completedCountInBars >= settings.countInBars {
-                if let subdivisionBeforeCountIn { engine.setSubdivision(subdivisionBeforeCountIn) }
                 subdivisionBeforeCountIn = nil
                 rampState = .running
                 completedBarsInStage = 0
@@ -286,6 +290,7 @@ final class MetronomeTempoController {
         rampState = .paused
         completedBarsInStage = 0
         engine.cancelQueuedTempo()
+        engine.cancelQueuedSubdivision()
         pauseCount += 1
     }
 
@@ -298,12 +303,20 @@ final class MetronomeTempoController {
         hasSeenRampBoundary = false
         didRequireUserResume = false
         interruptionRecoveryAvailable = false
+        if rampState == .countIn, let settings = rampSettings, let subdivisionBeforeCountIn {
+            engine.setSubdivision(.quarter)
+            engine.queueSubdivision(
+                subdivisionBeforeCountIn,
+                afterBars: max(0, settings.countInBars - completedCountInBars)
+            )
+        }
     }
 
     func handleInterruption() {
         resetTap()
         pendingTempo = nil
         engine.cancelQueuedTempo()
+        engine.cancelQueuedSubdivision()
         guard isRampActive, rampState != .interrupted else { return }
         if rampState != .paused {
             stateBeforePauseOrInterruption = rampState
@@ -335,6 +348,7 @@ final class MetronomeTempoController {
     }
 
     func endRamp(cancelled: Bool = false) {
+        engine.cancelQueuedTempo()
         rampState = cancelled ? .cancelled : .idle
         rampSettings = nil
         completedBarsInStage = 0
@@ -344,12 +358,18 @@ final class MetronomeTempoController {
         stateBeforePauseOrInterruption = nil
         interruptionRecoveryAvailable = false
         if let subdivisionBeforeCountIn { engine.setSubdivision(subdivisionBeforeCountIn) }
+        engine.cancelQueuedSubdivision()
         subdivisionBeforeCountIn = nil
     }
 
     func setPlaybackForTesting(_ value: Bool) { playbackOverride = value }
 
     private var isPlaying: Bool { playbackOverride ?? engine.isPlaying }
+
+    private func cancelPendingTempo() {
+        pendingTempo = nil
+        engine.cancelQueuedTempo()
+    }
 
     private func queueUpcomingRampTempoIfNeeded(_ settings: TempoRampSettings) {
         guard rampState == .running,

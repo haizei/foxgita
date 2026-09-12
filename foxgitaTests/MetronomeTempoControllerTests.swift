@@ -60,6 +60,19 @@ struct MetronomeTempoControllerTests {
         #expect(controller.pendingTempo == 112)
         _ = controller.registerTap(at: 0)
         #expect(controller.pendingTempo == nil)
+        engine.applyQueuedTempoForTesting()
+        #expect(engine.bpm == 80)
+    }
+
+    @Test func manualTempoCancelsPendingTapAtBothControllerAndEngine() {
+        let engine = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
+        let controller = MetronomeTempoController(engine: engine)
+        controller.setPlaybackForTesting(true)
+        controller.applyMeasuredTempo(112)
+        controller.setTempo(90)
+        #expect(controller.pendingTempo == nil)
+        engine.applyQueuedTempoForTesting()
+        #expect(engine.bpm == 90)
     }
 
     @Test func rampAdvancesAfterCompleteIntervalsAndHoldsAtTarget() {
@@ -101,12 +114,28 @@ struct MetronomeTempoControllerTests {
         #expect(controller.registerTap(at: 0) == nil)
         #expect(controller.tapAttempt.tapCount == 0)
 
+        engine.advanceSubdivisionBoundaryForTesting()
         controller.handleAudibleBeat(beat: 0, bar: 0)
+        engine.advanceSubdivisionBoundaryForTesting()
         controller.handleAudibleBeat(beat: 0, bar: 1)
 
         #expect(controller.rampState == .running)
         #expect(engine.subdivision == .twoEighths)
         #expect(controller.completedBars == 0)
+    }
+
+    @Test func countInRestoresSubdivisionBeforeFirstTrainingDownbeatIsScheduled() {
+        let engine = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
+        engine.setSubdivision(.fourSixteenths)
+        let controller = MetronomeTempoController(engine: engine)
+        controller.startRamp(
+            TempoRampSettings(startBPM: 80, targetBPM: 90, barsPerStage: 2, stepBPM: 5, countInBars: 1)
+        )
+
+        engine.advanceSubdivisionBoundaryForTesting()
+        #expect(engine.subdivision == .quarter)
+        engine.advanceSubdivisionBoundaryForTesting()
+        #expect(engine.subdivision == .fourSixteenths)
     }
 
     @Test func pauseAndInterruptionDiscardOnlyPartialStageProgress() {
@@ -187,5 +216,21 @@ struct MetronomeTempoControllerTests {
         controller.startRamp(TempoRampSettings(startBPM: 80, targetBPM: 120))
         controller.handleManualChange(110, choice: .adjustCurrentStage)
         #expect(controller.stableMaxBPM == 80)
+    }
+
+    @Test func endingRampCancelsQueuedNextStageEvenWhenSelectedTempoIsUnchanged() {
+        let engine = MetronomeEngine(session: AudioSessionCoordinator(apply: {}))
+        let controller = MetronomeTempoController(engine: engine)
+        controller.startRamp(
+            TempoRampSettings(startBPM: 80, targetBPM: 90, barsPerStage: 2, stepBPM: 5, countInBars: 0)
+        )
+        controller.handleAudibleBeat(beat: 0, bar: 0)
+        controller.handleAudibleBeat(beat: 0, bar: 1)
+        controller.handleManualChange(80, choice: .adjustCurrentStage)
+        controller.endRamp()
+
+        engine.applyQueuedTempoForTesting()
+        #expect(engine.bpm == 80)
+        #expect(controller.rampState == .idle)
     }
 }
