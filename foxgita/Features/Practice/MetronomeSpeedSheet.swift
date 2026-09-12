@@ -12,24 +12,28 @@ struct MetronomeSpeedSheet: View {
     var onDone: () -> Void
     var onStartRamp: (TempoRampSettings) -> Void
     var onEndRamp: () -> Void
+    var practiceItemId: UUID?
 
     @State private var expanded = false
     @State private var selectedTab: SpeedSheetTab = .adjust
     @State private var rampSettings: TempoRampSettings
     @State private var pendingManualTempo: Int?
     @State private var showRampHelp = false
+    @State private var tapStartedAt: Date?
     @AppStorage("metronome.ramp-help-seen") private var hasSeenRampHelp = false
 
     init(
         controller: MetronomeTempoController,
         onDone: @escaping () -> Void,
         onStartRamp: @escaping (TempoRampSettings) -> Void = { _ in },
-        onEndRamp: @escaping () -> Void = {}
+        onEndRamp: @escaping () -> Void = {},
+        practiceItemId: UUID? = nil
     ) {
         self.controller = controller
         self.onDone = onDone
         self.onStartRamp = onStartRamp
         self.onEndRamp = onEndRamp
+        self.practiceItemId = practiceItemId
         _rampSettings = State(initialValue: controller.savedRampSettings ?? .suggested(currentBPM: controller.engine.bpm))
     }
 
@@ -52,6 +56,12 @@ struct MetronomeSpeedSheet: View {
         .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(controller.isRampActive)
         .accessibilityIdentifier("metronome.speed-sheet")
+        .onAppear {
+            MetronomeAnalytics.emit(
+                "metronome_speed_sheet_opened", itemId: practiceItemId?.uuidString ?? "",
+                ["current_bpm": String(controller.engine.bpm), "playing": String(controller.engine.isPlaying)]
+            )
+        }
         .onDisappear { controller.resetTap() }
         .confirmationDialog(
             "变速训练进行中",
@@ -104,10 +114,21 @@ struct MetronomeSpeedSheet: View {
                     .foregroundStyle(GitaTheme.brand500)
                     .accessibilityIdentifier("metronome.pendingTempo")
             }
+            if controller.tapReadyToApply, let bpm = controller.tapAttempt.estimatedBPM {
+                Button("采用 \(min(200, max(40, bpm))) BPM") { adoptMeasuredTempo(bpm) }
+                    .font(GitaFont.callout(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(minHeight: 32)
+                    .accessibilityIdentifier("metronome.tap.apply")
+            }
             MetronomeTempoRulerView(bpm: controller.engine.bpm) { requestTempo($0) }
                 .padding(.horizontal, 20)
             Divider()
             Button {
+                MetronomeAnalytics.emit(
+                    "metronome_ramp_settings_opened", itemId: practiceItemId?.uuidString ?? "",
+                    ["current_bpm": String(controller.engine.bpm), "last_plan": String(controller.savedRampSettings != nil)]
+                )
                 expanded = true
                 selectedTab = .ramp
                 if !hasSeenRampHelp { showRampHelp = true }
@@ -131,7 +152,7 @@ struct MetronomeSpeedSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 14))
             }
             .buttonStyle(.plain)
-            .accessibilityIdentifier("metronome.ramp-entry")
+            .accessibilityIdentifier("metronome.ramp.entry")
         }
     }
 
@@ -172,10 +193,10 @@ struct MetronomeSpeedSheet: View {
         HStack(spacing: 12) {
             MetronomeStepButton(kind: .decrease, diameter: 44, enabled: controller.engine.bpm > 40) { requestTempo(controller.engine.bpm - 1) }
             VStack(spacing: 1) {
-                Text("\(controller.engine.bpm)")
+                Text("\(displayedTempo(showTap: showTap))")
                     .font(.system(size: 46, weight: .medium)).monospacedDigit()
                     .foregroundStyle(GitaTheme.brand500)
-                Text("BPM")
+                Text(showTap && controller.tapAttempt.estimatedBPM != nil ? "测得 BPM" : "BPM")
                     .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
             }.frame(maxWidth: .infinity)
             MetronomeStepButton(kind: .increase, diameter: 44, enabled: controller.engine.bpm < 200) { requestTempo(controller.engine.bpm + 1) }
@@ -184,6 +205,7 @@ struct MetronomeSpeedSheet: View {
                     .font(.system(size: 16, weight: .bold)).foregroundStyle(GitaTheme.brandOn)
                     .frame(width: 74, height: 44).background(GitaTheme.brand500).clipShape(Capsule())
                     .disabled(controller.isRampActive).accessibilityHint("连续轻点以测量速度")
+                    .accessibilityIdentifier("metronome.tap")
             }
         }
     }
@@ -198,9 +220,11 @@ struct MetronomeSpeedSheet: View {
                 .font(.system(size: 20, weight: .bold)).foregroundStyle(GitaTheme.brandOn)
                 .frame(maxWidth: .infinity, minHeight: 56).background(GitaTheme.brand500).clipShape(Capsule())
                 .disabled(controller.isRampActive)
+                .accessibilityIdentifier("metronome.tap")
             if let bpm = controller.tapAttempt.estimatedBPM, controller.tapReadyToApply {
                 Button("采用 \(min(200, max(40, bpm))) BPM") { adoptMeasuredTempo(bpm) }
                     .font(GitaFont.body(.semibold)).foregroundStyle(GitaTheme.brand500).frame(minHeight: 44)
+                    .accessibilityIdentifier("metronome.tap.apply")
             }
             if let bpm = controller.tapAttempt.estimatedBPM, bpm > 200 {
                 Text("采用时将使用上限 200 BPM")
@@ -217,9 +241,9 @@ struct MetronomeSpeedSheet: View {
             }
             HStack(spacing: 12) {
                 Text("每").foregroundStyle(GitaTheme.textSecondary)
-                rampMenu("\(rampSettings.barsPerStage) 小节", values: [1, 2, 4, 8, 16, 32], selection: $rampSettings.barsPerStage)
+                rampMenu("\(rampSettings.barsPerStage) 小节", values: [1, 2, 4, 8, 16], selection: $rampSettings.barsPerStage)
                 Text("增加").foregroundStyle(GitaTheme.textSecondary)
-                rampMenu("+\(rampSettings.stepBPM) BPM", values: [1, 2, 5, 10, 15, 20], selection: $rampSettings.stepBPM)
+                rampMenu("+\(rampSettings.stepBPM) BPM", values: [1, 2, 5, 10], selection: $rampSettings.stepBPM)
                 Spacer(minLength: 0)
                 Text("调整").font(GitaFont.callout(.semibold)).foregroundStyle(GitaTheme.brand500)
             }
@@ -250,7 +274,7 @@ struct MetronomeSpeedSheet: View {
                 .frame(maxWidth: .infinity, minHeight: 52)
                 .background(rampSettings.validationError == nil ? GitaTheme.brand500 : GitaTheme.borderInactive)
                 .clipShape(Capsule()).disabled(rampSettings.validationError != nil || controller.isRampActive)
-                .accessibilityIdentifier("metronome.ramp-start")
+                .accessibilityIdentifier("metronome.ramp.start")
         }
     }
 
@@ -270,13 +294,35 @@ struct MetronomeSpeedSheet: View {
     }
 
     private func handleTap() {
+        let previousCount = controller.tapAttempt.tapCount
+        let wasStable = controller.tapAttempt.isStable
         _ = controller.registerTap()
+        if previousCount == 0, controller.tapAttempt.tapCount == 1 {
+            tapStartedAt = Date()
+            MetronomeAnalytics.emit(
+                "metronome_tap_started", itemId: practiceItemId?.uuidString ?? "",
+                ["current_bpm": String(controller.engine.bpm), "playing": String(controller.engine.isPlaying)]
+            )
+        }
+        if !wasStable, controller.tapAttempt.isStable, let bpm = controller.tapAttempt.estimatedBPM {
+            let duration = Int(Date().timeIntervalSince(tapStartedAt ?? Date()) * 1_000)
+            MetronomeAnalytics.emit(
+                "metronome_tap_stabilized", itemId: practiceItemId?.uuidString ?? "",
+                ["tap_count": String(controller.tapAttempt.tapCount), "stable_bpm": String(bpm), "duration_ms": String(duration)]
+            )
+        }
         Haptics.tap()
     }
 
     private func adoptMeasuredTempo(_ bpm: Int) {
         let adopted = min(200, max(40, bpm))
+        let from = controller.engine.bpm
         controller.applyMeasuredTempo(adopted)
+        MetronomeAnalytics.emit(
+            "metronome_tap_applied", itemId: practiceItemId?.uuidString ?? "",
+            ["from_bpm": String(from), "to_bpm": String(adopted), "apply_context": controller.engine.isPlaying ? "next_bar" : "immediate"]
+        )
+        controller.resetTap()
         rampSettings.startBPM = adopted
     }
 
@@ -289,11 +335,18 @@ struct MetronomeSpeedSheet: View {
     }
 
     private var estimatedMinutes: String {
-        let distance = max(0, rampSettings.targetBPM - rampSettings.startBPM)
-        let stages = Int(ceil(Double(distance) / Double(max(1, rampSettings.stepBPM)))) + 1
-        let bars = rampSettings.countInBars + stages * rampSettings.barsPerStage
-        let seconds = Double(bars * controller.engine.beatsPerBar) * 60 / Double(max(1, rampSettings.startBPM))
+        var stageBPM = rampSettings.startBPM
+        var seconds = 0.0
+        while stageBPM < rampSettings.targetBPM {
+            seconds += Double(rampSettings.barsPerStage * controller.engine.beatsPerBar) * 60 / Double(stageBPM)
+            stageBPM = min(rampSettings.targetBPM, stageBPM + rampSettings.stepBPM)
+        }
         return String(format: "%.1f", seconds / 60)
+    }
+
+    private func displayedTempo(showTap: Bool) -> Int {
+        if showTap, let estimated = controller.tapAttempt.estimatedBPM { return estimated }
+        return controller.engine.bpm
     }
 
     private var compactRampSettings: TempoRampSettings {

@@ -64,6 +64,8 @@ final class MetronomeEngine {
     @ObservationIgnored private var previewRemainingBeats: Int?
     @ObservationIgnored private var previewStopScheduled = false
     @ObservationIgnored private var scheduledBarIndex = 0
+    @ObservationIgnored private var schedulerBPM = 80
+    @ObservationIgnored private var pendingBoundaryBPM: Int?
 
     var hapticsEnabled = true
 
@@ -80,6 +82,23 @@ final class MetronomeEngine {
         let clamped = min(200, max(40, value))
         guard clamped != bpm else { return }
         bpm = clamped
+        schedulerBPM = clamped
+        pendingBoundaryBPM = nil
+    }
+
+    /// Applies spacing before scheduling the next bar, while publishing the
+    /// visible BPM only when that bar's downbeat becomes audible.
+    func queueBpmAtNextBar(_ value: Int) {
+        pendingBoundaryBPM = min(200, max(40, value))
+    }
+
+    func cancelQueuedTempo() { pendingBoundaryBPM = nil }
+
+    func applyQueuedTempoForTesting() {
+        guard let pendingBoundaryBPM else { return }
+        schedulerBPM = pendingBoundaryBPM
+        bpm = pendingBoundaryBPM
+        self.pendingBoundaryBPM = nil
     }
 
     func bump(_ delta: Int) { setBpm(bpm + delta) }
@@ -248,9 +267,17 @@ final class MetronomeEngine {
         while nextClickFrame <= horizon {
             let scheduledFrame = nextClickFrame
             let beatInBar = beatIndex % beatsPerBar
+            var appliedBPM: Int?
+            if subClickIndex == 0, beatInBar == 0, let pendingBoundaryBPM {
+                schedulerBPM = pendingBoundaryBPM
+                appliedBPM = pendingBoundaryBPM
+                self.pendingBoundaryBPM = nil
+            }
             if subClickIndex == 0 {
                 scheduleTimelineEvent(
-                    MetronomeTimelineEvent(beat: beatInBar, bar: scheduledBarIndex),
+                    MetronomeTimelineEvent(
+                        beat: beatInBar, bar: scheduledBarIndex, appliedBPM: appliedBPM
+                    ),
                     at: scheduledFrame,
                     now: now
                 )
@@ -304,6 +331,7 @@ final class MetronomeEngine {
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isPlaying, self.runToken == token else { return }
+                if let appliedBPM = event.appliedBPM { self.bpm = appliedBPM }
                 self.currentBeatInBar = event.beat
                 self.onTimelineEvent?(event)
             }
@@ -382,7 +410,7 @@ final class MetronomeEngine {
     }
 
     private func intervalToNextClick() -> AVAudioFramePosition {
-        let beatDuration = 60.0 / Double(bpm)
+        let beatDuration = 60.0 / Double(schedulerBPM)
         let offsets = subdivision.clickOffsets
         let currentOffset = offsets[subClickIndex]
         let delta: Double

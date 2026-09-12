@@ -8,6 +8,7 @@ import SwiftUI
 struct MetronomeSettingsSheet: View {
     let metronome: MetronomeEngine
     let anchor: MetronomeSheetAnchor
+    var isLocked = false
     var onDone: () -> Void
 
     private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
@@ -30,6 +31,11 @@ struct MetronomeSettingsSheet: View {
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: GitaTheme.s12) {
+                        if isLocked {
+                            Label("变速训练中，可查看但暂不能修改", systemImage: "lock.fill")
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
+                        }
                         meterControls
                             .id(MetronomeSheetAnchor.meter.scrollSectionID)
                         accentSection
@@ -64,14 +70,14 @@ struct MetronomeSettingsSheet: View {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
-                        enabled: metronome.beatsPerBar > MetronomeMeter.minBeats
+                        enabled: !isLocked && metronome.beatsPerBar > MetronomeMeter.minBeats
                     ) {
                         metronome.bumpBeatsPerBar(-1)
                     }
                     MetronomeStepButton(
                         kind: .increase,
                         diameter: stepButtonSize,
-                        enabled: metronome.beatsPerBar < MetronomeMeter.maxBeats
+                        enabled: !isLocked && metronome.beatsPerBar < MetronomeMeter.maxBeats
                     ) {
                         metronome.bumpBeatsPerBar(1)
                     }
@@ -97,14 +103,14 @@ struct MetronomeSettingsSheet: View {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
-                        enabled: canDecreaseSubdivision
+                        enabled: !isLocked && canDecreaseSubdivision
                     ) {
                         metronome.bumpSubdivision(-1)
                     }
                     MetronomeStepButton(
                         kind: .increase,
                         diameter: stepButtonSize,
-                        enabled: canIncreaseSubdivision
+                        enabled: !isLocked && canIncreaseSubdivision
                     ) {
                         metronome.bumpSubdivision(1)
                     }
@@ -190,6 +196,7 @@ struct MetronomeSettingsSheet: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .disabled(isLocked)
         .accessibilityLabel(accentAccessibilityLabel(for: index, kind: kind))
     }
 
@@ -242,6 +249,7 @@ struct MetronomeSettingsSheet: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(isLocked)
         .accessibilityLabel(Text(value.accessibilityLabel))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }

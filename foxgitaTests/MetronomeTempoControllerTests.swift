@@ -46,7 +46,8 @@ struct MetronomeTempoControllerTests {
         #expect(controller.pendingTempo == 112)
         controller.handleAudibleBeat(beat: 1, bar: 0)
         #expect(engine.bpm == 80)
-        controller.handleAudibleBeat(beat: 0, bar: 1)
+        engine.applyQueuedTempoForTesting()
+        controller.handleAudibleBeat(beat: 0, bar: 1, appliedBPM: 112)
         #expect(engine.bpm == 112)
         #expect(controller.pendingTempo == nil)
     }
@@ -72,9 +73,11 @@ struct MetronomeTempoControllerTests {
         controller.handleAudibleBeat(beat: 0, bar: 0)
         controller.handleAudibleBeat(beat: 0, bar: 1)
         #expect(engine.bpm == 80)
+        engine.applyQueuedTempoForTesting()
         controller.handleAudibleBeat(beat: 0, bar: 2)
         #expect(engine.bpm == 85)
         controller.handleAudibleBeat(beat: 0, bar: 3)
+        engine.applyQueuedTempoForTesting()
         controller.handleAudibleBeat(beat: 0, bar: 4)
         #expect(engine.bpm == 90)
         controller.handleAudibleBeat(beat: 0, bar: 5)
@@ -128,8 +131,61 @@ struct MetronomeTempoControllerTests {
         #expect(controller.didRequireUserResume)
     }
 
+    @Test func resumeAnchorsANewBarBeforeCountingProgress() {
+        let engine = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
+        let controller = MetronomeTempoController(engine: engine)
+        controller.startRamp(
+            TempoRampSettings(startBPM: 80, targetBPM: 90, barsPerStage: 4, stepBPM: 5, countInBars: 0)
+        )
+        controller.handleAudibleBeat(beat: 0, bar: 0)
+        controller.handleAudibleBeat(beat: 0, bar: 1)
+        #expect(controller.completedBars == 1)
+
+        controller.pauseRamp()
+        controller.resumeRamp()
+        controller.handleAudibleBeat(beat: 0, bar: 0)
+        #expect(controller.completedBars == 1)
+        controller.handleAudibleBeat(beat: 0, bar: 1)
+        #expect(controller.completedBars == 2)
+    }
+
+    @Test func pausingCountInResumesCountInInsteadOfSkippingIt() {
+        let engine = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
+        let controller = MetronomeTempoController(engine: engine)
+        controller.startRamp(
+            TempoRampSettings(startBPM: 80, targetBPM: 90, barsPerStage: 4, stepBPM: 5, countInBars: 2)
+        )
+        controller.pauseRamp()
+        controller.resumeRamp()
+        #expect(controller.rampState == .countIn)
+    }
+
     @Test func rampValidationRequiresAscendingPlan() {
         #expect(TempoRampSettings(startBPM: 100, targetBPM: 100).validationError != nil)
         #expect(TempoRampSettings(startBPM: 100, targetBPM: 120).validationError == nil)
+        #expect(TempoRampSettings(startBPM: 100, targetBPM: 120, barsPerStage: 32).validationError != nil)
+        #expect(TempoRampSettings(startBPM: 100, targetBPM: 120, stepBPM: 20).validationError != nil)
+    }
+
+    @Test func interruptedRampCannotResumeUntilAudioInterruptionEnds() {
+        let controller = MetronomeTempoController(
+            engine: MetronomeEngine(session: AudioSessionCoordinator(apply: {}))
+        )
+        controller.startRamp(TempoRampSettings(startBPM: 80, targetBPM: 100))
+        controller.handleInterruption()
+        controller.resumeRamp()
+        #expect(controller.rampState == .interrupted)
+        controller.handleInterruptionEnded()
+        controller.resumeRamp()
+        #expect(controller.rampState == .countIn)
+    }
+
+    @Test func manualStageAdjustmentDoesNotIncreaseStableMaximumUntilStageCompletes() {
+        let controller = MetronomeTempoController(
+            engine: MetronomeEngine(session: AudioSessionCoordinator(apply: {}))
+        )
+        controller.startRamp(TempoRampSettings(startBPM: 80, targetBPM: 120))
+        controller.handleManualChange(110, choice: .adjustCurrentStage)
+        #expect(controller.stableMaxBPM == 80)
     }
 }

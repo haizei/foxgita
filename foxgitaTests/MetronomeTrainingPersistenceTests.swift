@@ -13,15 +13,14 @@ struct MetronomeTrainingPersistenceTests {
         )
         let practiceItemId = UUID()
         let settings = TempoRampSettings(startBPM: 80, targetBPM: 100)
-        container.mainContext.insert(
-            TempoRampPlan(
-                practiceItemId: practiceItemId, settings: settings,
-                meterRaw: "4/4", subdivisionRaw: 1, accentPatternRaw: "3111"
-            )
+        let plan = TempoRampPlan(
+            practiceItemId: practiceItemId, settings: settings,
+            meterRaw: "4/4", subdivisionRaw: 1, accentPatternRaw: "3111"
         )
+        container.mainContext.insert(plan)
         container.mainContext.insert(
             MetronomeTrainingSession(
-                practiceItemId: practiceItemId, settings: settings,
+                practiceItemId: practiceItemId, planId: plan.id, settings: settings,
                 timeSignature: "4/4", accentPatternRaw: "3111", subdivisionRaw: 1
             )
         )
@@ -43,7 +42,7 @@ struct MetronomeTrainingPersistenceTests {
         )
         let settings = TempoRampSettings(startBPM: 80, targetBPM: 100)
         let session = MetronomeTrainingSession(
-            practiceItemId: UUID(), settings: settings,
+            practiceItemId: UUID(), planId: UUID(), settings: settings,
             timeSignature: "4/4", accentPatternRaw: "3111", subdivisionRaw: 1
         )
         container.mainContext.insert(session)

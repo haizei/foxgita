@@ -5,6 +5,7 @@
 
 import SwiftData
 import SwiftUI
+import os
 
 @main
 struct foxgitaApp: App {
@@ -29,7 +30,12 @@ struct foxgitaApp: App {
                 for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
             )
             self.container = container
-            try MetronomeTrainingPersistence.settleOrphanedRuns(in: container.mainContext)
+            do {
+                try MetronomeTrainingPersistence.settleOrphanedRuns(in: container.mainContext)
+            } catch {
+                Logger(subsystem: "com.haizei.foxgita", category: "metronome")
+                    .error("Failed to settle orphaned metronome sessions: \(String(describing: error), privacy: .public)")
+            }
             let memoryRepo = SwiftDataMemoryRepository(context: container.mainContext)
             self.memoryRepo = memoryRepo
             let liveMemory = LiveMemoryContext(repository: memoryRepo, context: container.mainContext)

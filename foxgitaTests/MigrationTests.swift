@@ -806,15 +806,17 @@ struct MigrationTests {
         #expect(try context.fetch(FetchDescriptor<PracticeItem>()).map(\.id) == [itemId])
 
         let settings = TempoRampSettings(startBPM: 80, targetBPM: 100)
-        context.insert(TempoRampPlan(
+        let plan = TempoRampPlan(
             practiceItemId: itemId,
             settings: settings,
             meterRaw: "4/4",
             subdivisionRaw: MetronomeSubdivision.twoEighths.rawValue,
             accentPatternRaw: "2111"
-        ))
+        )
+        context.insert(plan)
         context.insert(MetronomeTrainingSession(
             practiceItemId: itemId,
+            planId: plan.id,
             settings: settings,
             timeSignature: "4/4",
             accentPatternRaw: "2111",
@@ -823,6 +825,8 @@ struct MigrationTests {
         try context.save()
 
         #expect(try context.fetch(FetchDescriptor<TempoRampPlan>()).count == 1)
-        #expect(try context.fetch(FetchDescriptor<MetronomeTrainingSession>()).count == 1)
+        let sessions = try context.fetch(FetchDescriptor<MetronomeTrainingSession>())
+        #expect(sessions.count == 1)
+        #expect(sessions.first?.planId == plan.id)
     }
 }

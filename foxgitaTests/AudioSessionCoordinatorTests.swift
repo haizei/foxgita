@@ -61,4 +61,19 @@ struct AudioSessionCoordinatorTests {
         #expect(second == [.began, .ended(shouldResume: true)])
         #expect(coordinator.count(for: .playback) == 0)
     }
+
+    @Test func interruptionObserverMayRemoveItselfWhileBeingNotified() {
+        let coordinator = AudioSessionCoordinator(apply: {})
+        var token: UUID?
+        var callCount = 0
+        token = coordinator.addInterruptionObserver { _ in
+            callCount += 1
+            if let token { coordinator.removeInterruptionObserver(token) }
+        }
+
+        coordinator.notifyInterruptionForTesting(.began)
+        coordinator.notifyInterruptionForTesting(.ended(shouldResume: true))
+
+        #expect(callCount == 1)
+    }
 }

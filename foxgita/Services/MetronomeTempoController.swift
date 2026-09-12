@@ -78,7 +78,9 @@ struct TempoRampSettings: Equatable, Codable, Sendable {
             return String(localized: "速度需在 40–200 BPM 之间")
         }
         guard startBPM < targetBPM else { return String(localized: "目标速度需高于起始速度") }
-        guard barsPerStage > 0, stepBPM > 0, (0...2).contains(countInBars) else {
+        guard [1, 2, 4, 8, 16].contains(barsPerStage),
+              [1, 2, 5, 10].contains(stepBPM),
+              (0...2).contains(countInBars) else {
             return String(localized: "请检查变速设置")
         }
         return nil
@@ -101,6 +103,7 @@ enum TempoManualChangeChoice: Equatable {
 struct MetronomeTimelineEvent: Equatable, Sendable {
     let beat: Int
     let bar: Int
+    var appliedBPM: Int? = nil
 }
 
 @MainActor
@@ -119,21 +122,37 @@ final class MetronomeTempoController {
     private(set) var pauseCount = 0
     private(set) var interruptionCount = 0
     private(set) var completedCountInBars = 0
+    private(set) var currentStageBPM = 0
     private(set) var didRequireUserResume = false
+    private(set) var interruptionRecoveryAvailable = false
     var savedRampSettings: TempoRampSettings?
     private var playbackOverride: Bool?
     private var tapReadyTask: Task<Void, Never>?
     private var awaitingRampBoundary = false
     private var hasSeenRampBoundary = false
     private var subdivisionBeforeCountIn: MetronomeSubdivision?
+    private var stateBeforePauseOrInterruption: TempoRampState?
 
     var isRampActive: Bool {
         [.countIn, .running, .paused, .targetHold, .interrupted].contains(rampState)
     }
 
+    var remainingBarsInStage: Int {
+        max(0, (rampSettings?.barsPerStage ?? 0) - completedBarsInStage)
+    }
+
+    var nextStageBPM: Int {
+        guard let rampSettings else { return engine.bpm }
+        return min(rampSettings.targetBPM, currentStageBPM + rampSettings.stepBPM)
+    }
+
     init(engine: MetronomeEngine) {
         self.engine = engine
-        engine.onTimelineEvent = { [weak self] event in self?.handleAudibleBeat(beat: event.beat, bar: event.bar) }
+        engine.onTimelineEvent = { [weak self] event in
+            self?.handleAudibleBeat(
+                beat: event.beat, bar: event.bar, appliedBPM: event.appliedBPM
+            )
+        }
     }
 
     convenience init() { self.init(engine: MetronomeEngine()) }
@@ -164,6 +183,7 @@ final class MetronomeTempoController {
         let value = min(200, max(40, bpm))
         if isPlaying {
             pendingTempo = value
+            engine.queueBpmAtNextBar(value)
         } else {
             engine.setBpm(value)
             pendingTempo = nil
@@ -187,14 +207,19 @@ final class MetronomeTempoController {
         completedBars = 0
         completedStageCount = 0
         stableMaxBPM = settings.startBPM
+        currentStageBPM = settings.startBPM
         pauseCount = 0
         interruptionCount = 0
         completedCountInBars = 0
         hasSeenRampBoundary = false
         didRequireUserResume = false
+        interruptionRecoveryAvailable = false
+        stateBeforePauseOrInterruption = nil
         awaitingRampBoundary = isPlaying
         if !isPlaying {
             engine.setBpm(settings.startBPM)
+        } else {
+            engine.queueBpmAtNextBar(settings.startBPM)
         }
         if !isPlaying, settings.countInBars > 0 {
             subdivisionBeforeCountIn = engine.subdivision
@@ -205,10 +230,9 @@ final class MetronomeTempoController {
         }
     }
 
-    func handleAudibleBeat(beat: Int, bar: Int) {
+    func handleAudibleBeat(beat: Int, bar: Int, appliedBPM: Int? = nil) {
         guard beat == 0 else { return }
-        if let pendingTempo, !isRampActive {
-            engine.setBpm(pendingTempo)
+        if let appliedBPM, pendingTempo == appliedBPM, !isRampActive {
             self.pendingTempo = nil
         }
         guard let settings = rampSettings else { return }
@@ -216,10 +240,12 @@ final class MetronomeTempoController {
             engine.setBpm(settings.startBPM)
             awaitingRampBoundary = false
             hasSeenRampBoundary = true
+            queueUpcomingRampTempoIfNeeded(settings)
             return
         }
         if !hasSeenRampBoundary {
             hasSeenRampBoundary = true
+            queueUpcomingRampTempoIfNeeded(settings)
             return
         }
         switch rampState {
@@ -230,18 +256,24 @@ final class MetronomeTempoController {
                 subdivisionBeforeCountIn = nil
                 rampState = .running
                 completedBarsInStage = 0
+                queueUpcomingRampTempoIfNeeded(settings)
             }
         case .running:
+            let completedStageBPM = currentStageBPM
             completedBarsInStage += 1
             completedBars += 1
-            guard completedBarsInStage >= settings.barsPerStage else { return }
+            guard completedBarsInStage >= settings.barsPerStage else {
+                queueUpcomingRampTempoIfNeeded(settings)
+                return
+            }
             completedBarsInStage = 0
             completedStageCount += 1
-            stableMaxBPM = max(stableMaxBPM, engine.bpm)
-            if engine.bpm < settings.targetBPM {
-                engine.setBpm(min(settings.targetBPM, engine.bpm + settings.stepBPM))
-            } else {
+            stableMaxBPM = max(stableMaxBPM, completedStageBPM)
+            if completedStageBPM >= settings.targetBPM {
                 rampState = .targetHold
+            } else {
+                currentStageBPM = appliedBPM ?? engine.bpm
+                queueUpcomingRampTempoIfNeeded(settings)
             }
         default:
             break
@@ -250,26 +282,42 @@ final class MetronomeTempoController {
 
     func pauseRamp() {
         guard rampState == .running || rampState == .countIn else { return }
+        stateBeforePauseOrInterruption = rampState
         rampState = .paused
         completedBarsInStage = 0
+        engine.cancelQueuedTempo()
         pauseCount += 1
     }
 
     func resumeRamp() {
         guard rampState == .paused || rampState == .interrupted else { return }
-        rampState = .running
+        guard rampState != .interrupted || interruptionRecoveryAvailable else { return }
+        rampState = stateBeforePauseOrInterruption ?? .running
+        stateBeforePauseOrInterruption = nil
         completedBarsInStage = 0
+        hasSeenRampBoundary = false
         didRequireUserResume = false
+        interruptionRecoveryAvailable = false
     }
 
     func handleInterruption() {
         resetTap()
         pendingTempo = nil
-        guard isRampActive else { return }
+        engine.cancelQueuedTempo()
+        guard isRampActive, rampState != .interrupted else { return }
+        if rampState != .paused {
+            stateBeforePauseOrInterruption = rampState
+        }
         rampState = .interrupted
         completedBarsInStage = 0
         interruptionCount += 1
         didRequireUserResume = true
+        interruptionRecoveryAvailable = false
+    }
+
+    func handleInterruptionEnded() {
+        guard rampState == .interrupted else { return }
+        interruptionRecoveryAvailable = true
     }
 
     func handleManualChange(_ value: Int, choice: TempoManualChangeChoice) {
@@ -277,7 +325,7 @@ final class MetronomeTempoController {
         case .adjustCurrentStage:
             let adjusted = min(rampSettings?.targetBPM ?? 200, max(40, value))
             engine.setBpm(adjusted)
-            stableMaxBPM = max(stableMaxBPM, adjusted)
+            currentStageBPM = adjusted
             completedBarsInStage = 0
         case .endTraining:
             endRamp()
@@ -293,6 +341,8 @@ final class MetronomeTempoController {
         completedCountInBars = 0
         awaitingRampBoundary = false
         hasSeenRampBoundary = false
+        stateBeforePauseOrInterruption = nil
+        interruptionRecoveryAvailable = false
         if let subdivisionBeforeCountIn { engine.setSubdivision(subdivisionBeforeCountIn) }
         subdivisionBeforeCountIn = nil
     }
@@ -300,4 +350,11 @@ final class MetronomeTempoController {
     func setPlaybackForTesting(_ value: Bool) { playbackOverride = value }
 
     private var isPlaying: Bool { playbackOverride ?? engine.isPlaying }
+
+    private func queueUpcomingRampTempoIfNeeded(_ settings: TempoRampSettings) {
+        guard rampState == .running,
+              completedBarsInStage == settings.barsPerStage - 1,
+              currentStageBPM < settings.targetBPM else { return }
+        engine.queueBpmAtNextBar(min(settings.targetBPM, currentStageBPM + settings.stepBPM))
+    }
 }

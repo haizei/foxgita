@@ -120,6 +120,7 @@ final class AudioSessionCoordinator {
 
     func notifyInterruptionForTesting(_ event: InterruptionEvent) {
         if event == .began { needCounts.removeAll() }
-        for observer in interruptionObservers.values { observer(event) }
+        let callbacks = Array(interruptionObservers.values)
+        for observer in callbacks { observer(event) }
     }
 }

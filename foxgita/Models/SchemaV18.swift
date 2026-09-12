@@ -81,6 +81,7 @@ enum GitaSchemaV18: VersionedSchema {
     final class MetronomeTrainingSession {
         @Attribute(.unique) var id: UUID
         var practiceItemId: UUID
+        var planId: UUID
         var startedAt: Date
         var endedAt: Date?
         var stateRaw: String
@@ -100,7 +101,7 @@ enum GitaSchemaV18: VersionedSchema {
         var updatedAt: Date
 
         init(
-            id: UUID = UUID(), practiceItemId: UUID, startedAt: Date = Date(),
+            id: UUID = UUID(), practiceItemId: UUID, planId: UUID, startedAt: Date = Date(),
             state: MetronomeTrainingState = .running,
             completionReason: MetronomeTrainingCompletionReason? = nil,
             settings: TempoRampSettings,
@@ -110,6 +111,7 @@ enum GitaSchemaV18: VersionedSchema {
         ) {
             self.id = id
             self.practiceItemId = practiceItemId
+            self.planId = planId
             self.startedAt = startedAt
             self.stateRaw = state.rawValue
             self.completionReasonRaw = completionReason?.rawValue
