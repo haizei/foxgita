@@ -49,6 +49,7 @@ enum GitaTheme {
     static let accentMedium = Color(.accentMedium)
     static let accentWeak = Color(.accentWeak)
     static let accentTrackBase = Color(.accentTrackBase)
+    static let accentTrackDivider = Color(.accentTrackDivider)
     static let accentCardStrongBg = Color(.accentCardStrongBg)
     static let accentCardMediumBg = Color(.accentCardMediumBg)
     static let accentCardMediumText = Color(.accentCardMediumText)

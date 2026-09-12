@@ -37,6 +37,18 @@ struct MetronomeMeterTests {
         #expect(MetronomeBeatKind.strong.heightRatio == 1.0)
     }
 
+    @Test func beatKindFilledBarsCountAndAssets() {
+        #expect(MetronomeBeatKind.mute.filledBarsCount == 0)
+        #expect(MetronomeBeatKind.weak.filledBarsCount == 1)
+        #expect(MetronomeBeatKind.medium.filledBarsCount == 2)
+        #expect(MetronomeBeatKind.strong.filledBarsCount == 3)
+
+        #expect(MetronomeBeatKind.mute.assetName == "MetronomeAccentMute")
+        #expect(MetronomeBeatKind.weak.assetName == "MetronomeAccentWeak")
+        #expect(MetronomeBeatKind.medium.assetName == "MetronomeAccentMedium")
+        #expect(MetronomeBeatKind.strong.assetName == "MetronomeAccentStrong")
+    }
+
     @Test func accentRoundTripFourState() {
         let pattern: [MetronomeBeatKind] = [.strong, .medium, .weak, .mute]
         let encoded = MetronomeMeter.encodeAccent(pattern)

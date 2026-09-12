@@ -122,12 +122,14 @@ struct MetronomeDisplayCard: View {
     }
 
     private var beatBars: some View {
-        HStack(spacing: GitaTheme.s8) {
+        HStack(spacing: metronome.beatsPerBar > 6 ? 4 : GitaTheme.s8) {
             ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                 beatBar(index: index)
+                    .frame(maxWidth: metronome.beatsPerBar <= 4 ? 80 : .infinity)
             }
         }
         .frame(height: 80)
+        .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.12), value: activeBeat)
         .animation(.easeInOut(duration: 0.12), value: metronome.beatsPerBar)
         .animation(.spring(response: 0.25, dampingFraction: 0.7), value: metronome.accentPattern)
@@ -135,49 +137,57 @@ struct MetronomeDisplayCard: View {
 
     private func beatBar(index: Int) -> some View {
         let isActive = activeBeat == index
-        let fillRatio = barHeightRatio(for: index)
-        let fillColor = barFillColor(for: index, isActive: isActive)
-        let markerColor = isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle
-
-        return RoundedRectangle(cornerRadius: GitaTheme.radius8)
-            .fill(GitaTheme.accentTrackBase)
-            .overlay(alignment: .top) {
-                Rectangle()
-                    .fill(markerColor)
-                    .frame(height: 2)
-            }
-            .overlay(alignment: .bottom) {
-                Rectangle()
-                    .fill(fillColor)
-                    .frame(height: 80 * fillRatio)
-            }
-            .overlay {
-                if metronome.flashOnAccent, isActive, fillRatio >= 0.72 {
-                    RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                        .fill(Color.white.opacity(0.35))
-                }
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                    .stroke(GitaTheme.borderSubtle, lineWidth: 1)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
-            .animation(.easeOut(duration: 0.08), value: activeBeat)
-            .accessibilityHidden(true)
-    }
-
-    private func barHeightRatio(for index: Int) -> CGFloat {
-        guard metronome.accentPattern.indices.contains(index) else {
-            return 1.0 / 3.0
-        }
-        return metronome.accentPattern[index].heightRatio
-    }
-
-    private func barFillColor(for index: Int, isActive: Bool) -> Color {
         let kind = metronome.accentPattern.indices.contains(index)
             ? metronome.accentPattern[index]
-            : nil
-        return Self.fillColor(for: kind, isActive: isActive)
+            : MetronomeBeatKind.weak
+        let filledCount = kind.filledBarsCount
+        let segmentColor = Self.fillColor(for: kind, isActive: isActive)
+        let markerColor = isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle
+
+        return ZStack {
+            GitaTheme.accentTrackBase
+
+            VStack(spacing: 0) {
+                // Top segment (3 of 3)
+                Rectangle()
+                    .fill(filledCount >= 3 ? segmentColor : Color.clear)
+
+                // Divider 1
+                Rectangle()
+                    .fill(GitaTheme.accentTrackDivider)
+                    .frame(height: 1)
+
+                // Middle segment (2 of 3)
+                Rectangle()
+                    .fill(filledCount >= 2 ? segmentColor : Color.clear)
+
+                // Divider 2
+                Rectangle()
+                    .fill(GitaTheme.accentTrackDivider)
+                    .frame(height: 1)
+
+                // Bottom segment (1 of 3)
+                Rectangle()
+                    .fill(filledCount >= 1 ? segmentColor : Color.clear)
+            }
+
+            if metronome.flashOnAccent, isActive, kind == .strong {
+                RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                    .fill(Color.white.opacity(0.35))
+            }
+        }
+        .overlay(alignment: .top) {
+            Rectangle()
+                .fill(markerColor)
+                .frame(height: 2)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                .stroke(isActive ? GitaTheme.brand500 : GitaTheme.borderSubtle, lineWidth: 1)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+        .animation(.easeOut(duration: 0.08), value: activeBeat)
+        .accessibilityHidden(true)
     }
 
     static func fillColor(for kind: MetronomeBeatKind?, isActive: Bool) -> Color {

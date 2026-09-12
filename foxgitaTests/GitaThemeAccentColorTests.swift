@@ -12,6 +12,7 @@ struct GitaThemeAccentColorTests {
         expectColor("AccentMedium", hex: 0xF4A261)
         expectColor("AccentWeak", hex: 0xF9C89E)
         expectColor("AccentTrackBase", hex: 0xEEF0F3)
+        expectColor("AccentTrackDivider", hex: 0xD0D3D9)
         expectColor("AccentCardStrongBg", hex: 0xFF591A)
         expectColor("AccentCardMediumBg", hex: 0xFFCCA8)
         expectColor("AccentCardMediumText", hex: 0x732E0D)
@@ -33,5 +34,12 @@ struct GitaThemeAccentColorTests {
         #expect(r == (hex >> 16) & 0xFF)
         #expect(g == (hex >> 8) & 0xFF)
         #expect(b == hex & 0xFF)
+    }
+
+    @Test func accentImageAssetsLoad() {
+        for kind in MetronomeBeatKind.allCases {
+            let image = UIImage(named: kind.assetName)
+            #expect(image != nil, "Missing accent image for \(kind.assetName)")
+        }
     }
 }

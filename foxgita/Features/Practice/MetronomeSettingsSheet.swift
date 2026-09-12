@@ -10,8 +10,6 @@ struct MetronomeSettingsSheet: View {
     let anchor: MetronomeSheetAnchor
     var onDone: () -> Void
 
-    @State private var showAccentSheet = false
-
     private let gridColumns = Array(repeating: GridItem(.flexible(), spacing: 0), count: 4)
     private let stepButtonSize: CGFloat = 36
 
@@ -57,11 +55,6 @@ struct MetronomeSettingsSheet: View {
         }
         .presentationDetents([.fraction(0.6)])
         .presentationDragIndicator(.visible)
-        .sheet(isPresented: $showAccentSheet) {
-            MetronomeAccentSheet(metronome: metronome) {
-                showAccentSheet = false
-            }
-        }
     }
 
     private var meterControls: some View {
@@ -138,29 +131,71 @@ struct MetronomeSettingsSheet: View {
     }
 
     private var accentSection: some View {
-        Button {
-            showAccentSheet = true
-        } label: {
-            HStack {
-                Text(String(localized: "重音"))
-                    .font(GitaFont.footnote(.medium))
-                    .foregroundStyle(GitaTheme.textPrimary)
-                Spacer()
-                Text("\(metronome.beatsPerBar) 拍")
-                    .font(GitaFont.footnote())
-                    .foregroundStyle(GitaTheme.textSecondary)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(GitaTheme.textTertiary)
+        VStack(alignment: .leading, spacing: GitaTheme.s8) {
+            Text(String(localized: "重音"))
+                .font(GitaFont.footnote(.medium))
+                .foregroundStyle(GitaTheme.textPrimary)
+
+            accentSequenceView
+        }
+    }
+
+    @ViewBuilder
+    private var accentSequenceView: some View {
+        if metronome.beatsPerBar <= 4 {
+            HStack(spacing: 8) {
+                ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                    accentBeatButton(for: index)
+                        .frame(maxWidth: .infinity)
+                }
             }
-            .padding(.horizontal, GitaTheme.s16)
-            .frame(height: 48)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity)
+            .frame(height: 60)
             .background(GitaTheme.bgSubtle)
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
-            .contentShape(Rectangle())
+        } else {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                        accentBeatButton(for: index)
+                            .frame(width: 80)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 60)
+            .background(GitaTheme.bgSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
+        }
+    }
+
+    private func accentBeatButton(for index: Int) -> some View {
+        let kind = metronome.accentPattern.indices.contains(index)
+            ? metronome.accentPattern[index]
+            : MetronomeBeatKind.weak
+
+        return Button {
+            metronome.cycleAccent(at: index)
+            Haptics.selection()
+        } label: {
+            Image(kind.assetName)
+                .resizable()
+                .scaledToFit()
+                .frame(height: 42)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(String(localized: "重音，打开每拍重音设置")))
+        .accessibilityLabel(accentAccessibilityLabel(for: index, kind: kind))
+    }
+
+    private func accentAccessibilityLabel(for index: Int, kind: MetronomeBeatKind) -> Text {
+        let beat = index + 1
+        return Text("第 \(beat) 拍，\(kind.displayName)，点击切换")
     }
 
     private var subdivisionSection: some View {

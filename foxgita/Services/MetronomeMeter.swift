@@ -29,6 +29,24 @@ enum MetronomeBeatKind: Int, CaseIterable, Equatable {
         }
     }
 
+    var filledBarsCount: Int {
+        switch self {
+        case .mute: return 0
+        case .weak: return 1
+        case .medium: return 2
+        case .strong: return 3
+        }
+    }
+
+    var assetName: String {
+        switch self {
+        case .strong: return "MetronomeAccentStrong"
+        case .medium: return "MetronomeAccentMedium"
+        case .weak:   return "MetronomeAccentWeak"
+        case .mute:   return "MetronomeAccentMute"
+        }
+    }
+
     var displayName: String {
         switch self {
         case .mute: return String(localized: "静音")
