@@ -23,6 +23,7 @@ struct MessagesRuntime: AgentRuntime {
                             model: credentials.model,
                             systemPrompt: prompt.staticSystem,
                             userText: userText(for: prompt),
+                            imageJPEGData: plan.mediaResources.map(\.data),
                             orderedTools: prompt.orderedTools,
                             includeResponseFormat: true,
                             allowsFormatRetry: plan.recipe.allowsFormatRepair,

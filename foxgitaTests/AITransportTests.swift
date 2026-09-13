@@ -137,6 +137,7 @@ struct AITransportTests {
             model: "gpt-4o",
             systemPrompt: "system only",
             userText: "user",
+            imageJPEGData: [],
             orderedTools: [
                 VersionedToolSchema(id: "first", version: "1", json: #"{"type":"object","properties":{"a":{"type":"string"}}}"#),
                 VersionedToolSchema(id: "second", version: "2", json: #"{"type":"object","properties":{"b":{"type":"number"}}}"#),
@@ -190,6 +191,7 @@ struct AITransportTests {
             model: "gpt-4o",
             systemPrompt: "system",
             userText: "user",
+            imageJPEGData: [],
             orderedTools: [
                 VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
                 VersionedToolSchema(id: "task.read", version: "2.0", json: #"{"type":"object"}"#),
@@ -230,6 +232,7 @@ struct AITransportTests {
                 model: "gpt-4o",
                 systemPrompt: "system",
                 userText: "user",
+                imageJPEGData: [],
                 orderedTools: [
                     VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
                     VersionedToolSchema(id: "task.read", version: "1.0", json: #"{"type":"object"}"#),
@@ -252,6 +255,7 @@ struct AITransportTests {
                 model: "gpt-4o",
                 systemPrompt: "system",
                 userText: "user",
+                imageJPEGData: [],
                 orderedTools: [],
                 includeResponseFormat: true,
                 allowsFormatRetry: true,

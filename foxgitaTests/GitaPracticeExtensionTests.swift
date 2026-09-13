@@ -87,4 +87,52 @@ struct GitaPracticeExtensionTests {
         #expect(log.artifactLinks.count == 1)
         #expect(log.artifactLinks.first?.invocationID == invocationID)
     }
+
+    @Test func imageRunnerUsesSharedValidatorAndKeepsBytesOutOfPrompt() async throws {
+        let rawContent = #"{"title":"图片练习","category":"song","targetMin":15,"steps":["慢练"]}"#
+        let response = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": ["content": rawContent]]],
+        ])
+        let marker = Data("private-image-marker".utf8)
+        TransportMockURLProtocol.handler = { _ in (200, response) }
+        defer { TransportMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [TransportMockURLProtocol.self]
+        let log = InvocationLogSpy()
+        let invocationID = UUID()
+        let runner = ImagePlanRecipeRunner(session: URLSession(configuration: config), log: log)
+
+        let draft = try await runner.runImagePlan(
+            imageJPEGData: [marker],
+            fallbackCategory: .left,
+            credentials: RuntimeCredentials(baseURL: "https://api.openai.com/v1", apiKey: "key", model: "model"),
+            invocationID: invocationID
+        )
+
+        #expect(draft.title == "图片练习")
+        #expect(log.inputs.first?.skillId == SkillID.planFromImage)
+        #expect(log.inputs.first?.memoryIds == [])
+        #expect(log.artifactLinks.count == 1)
+    }
+
+    @Test func imageRunnerFailureRecordsFailedOutcome() async {
+        TransportMockURLProtocol.handler = { _ in (500, Data()) }
+        defer { TransportMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [TransportMockURLProtocol.self]
+        let log = InvocationLogSpy()
+        let runner = ImagePlanRecipeRunner(session: URLSession(configuration: config), log: log)
+
+        await #expect(throws: VisionPracticeError.httpStatus(500)) {
+            try await runner.runImagePlan(
+                imageJPEGData: [Data([1])],
+                fallbackCategory: .left,
+                credentials: RuntimeCredentials(baseURL: "https://api.openai.com/v1", apiKey: "key", model: "model"),
+                invocationID: UUID()
+            )
+        }
+        #expect(log.inputs.first?.draftOutcome == .failed)
+        #expect(log.inputs.first?.executionState == .failed)
+        #expect(log.artifactLinks.isEmpty)
+    }
 }

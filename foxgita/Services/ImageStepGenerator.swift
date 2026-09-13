@@ -64,16 +64,16 @@ enum PracticeImageCodec {
 
 @MainActor
 final class ImageStepGenerator {
-    private let client: any VisionGenerating
+    private let runner: any ImagePlanRunning
     private let credentials: LLMCredentialsStore
     private let log: any AIInvocationRecording
 
     init(
-        client: any VisionGenerating,
+        runner: any ImagePlanRunning,
         credentials: LLMCredentialsStore = LLMCredentialsStore(),
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.client = client
+        self.runner = runner
         self.credentials = credentials
         self.log = log
     }
@@ -109,13 +109,11 @@ final class ImageStepGenerator {
         }
 
         do {
-            return try await client.generateDraft(
-                baseURL: baseURL,
-                model: model,
-                apiKey: apiKey,
+            return try await runner.runImagePlan(
                 imageJPEGData: jpegs,
                 fallbackCategory: fallbackCategory,
-                invocationId: invocationId
+                credentials: RuntimeCredentials(baseURL: baseURL, apiKey: apiKey, model: model),
+                invocationID: UUID(uuidString: invocationId) ?? UUID()
             )
         } catch is CancellationError {
             throw CancellationError()

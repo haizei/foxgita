@@ -4,6 +4,26 @@ import UIKit
 @testable import foxgita
 
 struct ImageStepGeneratorTests {
+    @Test func previewLifecycleRequiresApprovalAndIsSingleCommit() {
+        var lifecycle = PhotoPracticeDraftLifecycle()
+        lifecycle.begin()
+        #expect(!lifecycle.allowsCommit)
+        lifecycle.present()
+        #expect(lifecycle.allowsCommit)
+        let firstCommit = lifecycle.commit()
+        let replayCommit = lifecycle.commit()
+        #expect(firstCommit)
+        #expect(!replayCommit)
+
+        var abandoned = PhotoPracticeDraftLifecycle()
+        abandoned.begin()
+        abandoned.present()
+        abandoned.abandon()
+        #expect(!abandoned.allowsCommit)
+        let abandonedCommit = abandoned.commit()
+        #expect(!abandonedCommit)
+    }
+
     @Test func codecShrinksLargeImage() {
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 2000, height: 1000))
         let ui = renderer.image { ctx in
@@ -17,16 +37,16 @@ struct ImageStepGeneratorTests {
     }
 
     @Test func generatorRejectsEmptyAndTooMany() async {
-        struct StubClient: VisionGenerating {
-            func generateDraft(
-                baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], fallbackCategory: PracticeCategory, invocationId: String
+        struct StubRunner: ImagePlanRunning {
+            func runImagePlan(
+                imageJPEGData: [Data], fallbackCategory: PracticeCategory,
+                credentials: RuntimeCredentials, invocationID: UUID
             ) async throws -> AIPracticeDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
             }
         }
-        let gen = ImageStepGenerator(client: StubClient(), credentials: LLMCredentialsStore(service: "t.\(UUID().uuidString)"))
+        let gen = ImageStepGenerator(runner: StubRunner(), credentials: LLMCredentialsStore(service: "t.\(UUID().uuidString)"))
         await #expect(throws: ImageStepGeneratorError.noImages) {
             try await gen.generate(imageData: [], baseURL: "https://x", model: "m", fallbackCategory: .left, invocationId: "inv-test")
         }
@@ -39,17 +59,17 @@ struct ImageStepGeneratorTests {
     }
 
     @Test func generatorRejectsNotConfigured() async {
-        struct StubClient: VisionGenerating {
-            func generateDraft(
-                baseURL: String, model: String, apiKey: String,
-                imageJPEGData: [Data], fallbackCategory: PracticeCategory, invocationId: String
+        struct StubRunner: ImagePlanRunning {
+            func runImagePlan(
+                imageJPEGData: [Data], fallbackCategory: PracticeCategory,
+                credentials: RuntimeCredentials, invocationID: UUID
             ) async throws -> AIPracticeDraft {
                 Issue.record("should not be called")
                 throw VisionPracticeError.transport
             }
         }
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
-        let gen = ImageStepGenerator(client: StubClient(), credentials: credentials)
+        let gen = ImageStepGenerator(runner: StubRunner(), credentials: credentials)
         let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
         let ui = renderer.image { ctx in
             UIColor.red.setFill()

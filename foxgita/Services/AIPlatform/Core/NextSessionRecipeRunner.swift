@@ -10,7 +10,7 @@ private struct NextSessionContextReader: ContextResourceReading {
     }
 }
 
-private struct StandardInputGate: InputGating {
+struct StandardInputGate: InputGating {
     func validate(
         request: InteractionRequest,
         recipe: RecipeDefinition,
@@ -23,7 +23,7 @@ private struct StandardInputGate: InputGating {
     }
 }
 
-private struct StandardPresentationGate: PresentationGating {
+struct StandardPresentationGate: PresentationGating {
     func validate(artifact: AnySkillArtifact, plan: AgentExecutionPlan) throws {}
 }
 

@@ -254,7 +254,7 @@ struct AITransport: Sendable {
                 model: request.model,
                 systemPrompt: request.systemPrompt,
                 userText: request.userText,
-                imageJPEGData: [],
+                imageJPEGData: request.imageJPEGData,
                 orderedTools: request.orderedTools,
                 includeResponseFormat: request.includeResponseFormat,
                 allowsFormatRetry: request.allowsFormatRetry,

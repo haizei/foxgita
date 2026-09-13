@@ -52,6 +52,14 @@ struct AgentOrchestrator: Sendable {
             sessionID: sessionID,
             authorizedResources: Set(request.selectedResources)
         )
+        let mediaRefs = request.mediaResources.map(\.ref)
+        guard request.mediaResources.isEmpty || resolved.recipe.fetchPolicy.allowedKinds.contains("image"),
+              Set(mediaRefs).count == mediaRefs.count,
+              Set(mediaRefs).isSubset(of: Set(request.selectedResources)),
+              request.mediaResources.allSatisfy({ $0.ref.kind == "image" }),
+              request.mediaResources.allSatisfy({ !$0.data.isEmpty && $0.mimeType == "image/jpeg" }) else {
+            throw GateRefusal.constraintViolated("media resources are outside request scope or invalid")
+        }
         let (snapshot, seenSet) = try await context.fetch(
             refs: request.selectedResources,
             policy: resolved.recipe.fetchPolicy,
@@ -64,13 +72,17 @@ struct AgentOrchestrator: Sendable {
               snapshotResources.isSubset(of: authorizedResources) else {
             throw GateRefusal.constraintViolated("context snapshot and seen set are outside request scope")
         }
+        guard Set(mediaRefs).isSubset(of: seenSet.resources) else {
+            throw GateRefusal.constraintViolated("media resources were not fetched for this invocation")
+        }
 
         let plan = AgentExecutionPlan(
             invocationID: request.invocationID,
             sessionID: sessionID,
             recipe: resolved.recipe,
             contextSnapshot: snapshot,
-            seenSet: seenSet
+            seenSet: seenSet,
+            mediaResources: request.mediaResources
         )
         let prompt = PromptAssembler.assemble(
             tools: [],

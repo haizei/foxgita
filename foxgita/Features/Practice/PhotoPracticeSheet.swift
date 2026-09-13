@@ -2,10 +2,34 @@ import Combine
 import PhotosUI
 import SwiftUI
 
+struct PhotoPracticeDraftLifecycle: Equatable {
+    enum State: Equatable { case source, generating, pending, committed, abandoned }
+    private(set) var state: State = .source
+
+    mutating func begin() { state = .generating }
+    mutating func present() { if state == .generating { state = .pending } }
+    var allowsCommit: Bool { state == .pending }
+    mutating func commit() -> Bool {
+        guard allowsCommit else { return false }
+        state = .committed
+        return true
+    }
+    mutating func abandon() {
+        guard state == .generating || state == .pending else { return }
+        state = .abandoned
+    }
+}
+
 struct PhotoPracticeSheet: View {
     private enum Phase {
         case source
         case generating
+        case preview
+    }
+
+    private struct EditStep: Identifiable {
+        let id = UUID()
+        var text: String
     }
 
     var fallbackCategory: PracticeCategory
@@ -15,15 +39,14 @@ struct PhotoPracticeSheet: View {
     var onFinished: () -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.memoryContext) private var memoryContext
     @Environment(PracticeStore.self) private var store
     @Environment(AIInvocationStore.self) private var invocationStore
-    @Environment(MemoryConsentCoordinator.self) private var consent
     @State private var phase: Phase = .source
     @State private var pickerItems: [PhotosPickerItem] = []
     @State private var isCameraPresented = false
     @State private var isGenerating = false
     @State private var generateTask: Task<Void, Never>?
+    @State private var confirmTask: Task<Void, Never>?
     @State private var generationStartedAt = Date()
     @State private var elapsed: TimeInterval = 0
     @State private var completed = false
@@ -31,6 +54,19 @@ struct PhotoPracticeSheet: View {
     @State private var toast: String?
     @State private var entryGate = PracticeEntryGate()
     @State private var submitToken = PracticeEntryToken()
+    @State private var approvalGate = PracticeDraftApprovalGate()
+    @State private var selectedBlobs: [Data] = []
+    @State private var draftCategory: PracticeCategory = .left
+    @State private var draftChords: [String] = []
+    @State private var appliedTitle = ""
+    @State private var appliedMinutes = 0
+    @State private var appliedSteps: [String] = []
+    @State private var editTitle = ""
+    @State private var editMinutes = 10
+    @State private var editSteps: [EditStep] = []
+    @State private var isSubmitting = false
+    @State private var didFinishOutcome = false
+    @State private var lifecycle = PhotoPracticeDraftLifecycle()
 
     private let progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
 
@@ -42,12 +78,13 @@ struct PhotoPracticeSheet: View {
                 .padding(.top, 10)
 
             HStack {
-                Text(phase == .source ? "从图片生成练习" : "正在生成练习")
+                Text(phase == .source ? "从图片生成练习" : phase == .generating ? "正在生成练习" : "预览练习")
                     .font(.system(size: 20, weight: .bold))
                 Spacer()
                 Button("关闭", action: close)
                     .font(.system(size: 14))
                     .foregroundStyle(GitaTheme.textSecondary)
+                    .disabled(isSubmitting)
             }
             .padding(.horizontal, 16)
             .padding(.top, 14)
@@ -59,6 +96,8 @@ struct PhotoPracticeSheet: View {
                     sourceContent
                 case .generating:
                     generatingContent
+                case .preview:
+                    previewContent
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -87,12 +126,15 @@ struct PhotoPracticeSheet: View {
         }
         .onDisappear {
             generateTask?.cancel()
-            if consent.isPresented {
-                consent.chooseDisabled()
+            confirmTask?.cancel()
+            if (phase == .generating || phase == .preview), !didFinishOutcome {
+                invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
+                lifecycle.abandon()
             }
         }
         .presentationDetents([.large])
         .presentationDragIndicator(.hidden)
+        .interactiveDismissDisabled(isGenerating || isSubmitting)
     }
 
     private var sourceContent: some View {
@@ -137,7 +179,7 @@ struct PhotoPracticeSheet: View {
                 }
             }
 
-            Text("识别完成后会直接生成练习页，你仍可修改内容")
+            Text("识别完成后先预览和修改，确认后才加入练习")
                 .font(.system(size: 12))
                 .foregroundStyle(GitaTheme.textTertiary)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -208,12 +250,59 @@ struct PhotoPracticeSheet: View {
 
             Spacer()
 
-            Text("完成后将自动进入生成的练习页")
+            Text("完成后进入可编辑预览，不会自动创建练习")
                 .font(.system(size: 12))
                 .foregroundStyle(GitaTheme.textTertiary)
                 .padding(.bottom, 28)
         }
         .padding(.horizontal, 16)
+    }
+
+    private var previewContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("请检查图片识别结果，确认后才会加入今日练习")
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            TextField("标题", text: $editTitle)
+                .font(.system(size: 16, weight: .semibold))
+            HStack {
+                Button { editMinutes = max(1, editMinutes - 5) } label: { Text("－") }
+                Text("\(editMinutes) 分钟")
+                Button { editMinutes = min(60, editMinutes + 5) } label: { Text("＋") }
+            }
+            .font(.system(size: 13, weight: .semibold))
+            ForEach($editSteps) { $step in
+                HStack {
+                    TextField("步骤", text: $step.text)
+                    Button("删") { editSteps.removeAll { $0.id == step.id } }
+                        .font(.system(size: 13))
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
+            }
+            if editSteps.count < 12 {
+                Button("加一步") { editSteps.append(EditStep(text: "")) }
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            Spacer()
+            Button("重新生成", action: regenerate)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(GitaTheme.brand500)
+                .disabled(isSubmitting)
+            Button(action: confirm) {
+                Text("确认并加入今日练习")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+                    .background(GitaTheme.brand500)
+                    .clipShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .disabled(isSubmitting)
+            .padding(.bottom, 28)
+        }
+        .padding(.horizontal, 16)
+        .disabled(isSubmitting)
     }
 
     private var activeProgressIndex: Int {
@@ -270,9 +359,6 @@ struct PhotoPracticeSheet: View {
     private func beginGeneration(items: [PhotosPickerItem]) {
         guard !isGenerating else { return }
         generateTask = Task {
-            let gate = await consent.ensureDecided()
-            guard !Task.isCancelled else { return }
-            guard gate == .proceed else { return }
             prepareGeneration()
             do {
                 var blobs: [Data] = []
@@ -295,9 +381,6 @@ struct PhotoPracticeSheet: View {
     private func beginGeneration(blobs: [Data]) {
         guard !isGenerating else { return }
         generateTask = Task {
-            let gate = await consent.ensureDecided()
-            guard !Task.isCancelled else { return }
-            guard gate == .proceed else { return }
             prepareGeneration()
             do {
                 try await generate(blobs: blobs)
@@ -319,12 +402,14 @@ struct PhotoPracticeSheet: View {
         elapsed = 0
         generationStartedAt = Date()
         toast = nil
+        lifecycle.begin()
     }
 
     private func generate(blobs: [Data]) async throws {
+        selectedBlobs = blobs
         let log = LiveAIInvocationLog(store: invocationStore)
         let generator = ImageStepGenerator(
-            client: VisionPracticeClient(memory: memoryContext, log: log),
+            runner: ImagePlanRecipeRunner(log: log),
             log: log
         )
         let draft = try await generator.generate(
@@ -335,20 +420,95 @@ struct PhotoPracticeSheet: View {
             invocationId: generationId
         )
         try Task.checkCancellation()
-        let item = try entryGate.submit(
-            store: store,
-            input: PracticeEntry.photo(draft: draft, generationId: generationId),
-            token: submitToken,
-            now: Date(),
-            calendar: .current
-        )
-        invocationStore.setDraftOutcome(
-            id: generationId, outcome: .accepted, taskId: item.id.uuidString
-        )
+        applyDraft(draft)
         completed = true
         isGenerating = false
-        selection = item.id.uuidString
-        onFinished()
+        phase = .preview
+        lifecycle.present()
+    }
+
+    private func applyDraft(_ draft: AIPracticeDraft) {
+        draftCategory = draft.category
+        draftChords = draft.chords
+        appliedTitle = draft.title
+        appliedMinutes = draft.targetMin
+        appliedSteps = draft.steps
+        editTitle = draft.title
+        editMinutes = draft.targetMin
+        editSteps = draft.steps.map { EditStep(text: $0) }
+    }
+
+    private func currentDraft() -> AIPracticeDraft {
+        var steps = editSteps.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        if steps.isEmpty { steps = [String(localized: "新步骤")] }
+        return AIPracticeDraft(
+            title: editTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? String(localized: "未命名练习") : editTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            category: draftCategory,
+            targetMin: min(60, max(1, editMinutes)),
+            steps: Array(steps.prefix(12)),
+            chords: draftChords
+        )
+    }
+
+    private func confirm() {
+        guard !isSubmitting else { return }
+        isSubmitting = true
+        let draft = currentDraft()
+        let token = approvalGate.issue(draft: draft, userID: "local-user", sessionID: generationId, draftID: generationId)
+        let entryToken = submitToken
+        confirmTask = Task {
+            do {
+                try await approvalGate.validate(token, draft: draft, userID: "local-user", sessionID: generationId, draftID: generationId)
+                try Task.checkCancellation()
+                guard lifecycle.allowsCommit else { throw CancellationError() }
+                let item = try entryGate.submit(
+                    store: store,
+                    input: PracticeEntry.photo(draft: draft, generationId: generationId),
+                    token: entryToken,
+                    now: Date(),
+                    calendar: .current
+                )
+                guard lifecycle.commit() else { throw CancellationError() }
+                didFinishOutcome = true
+                invocationStore.setDraftOutcome(
+                    id: generationId,
+                    outcome: AIDraftOutcomeRules.confirm(
+                        originalTitle: appliedTitle,
+                        originalMinutes: appliedMinutes,
+                        originalSteps: appliedSteps,
+                        editTitle: draft.title,
+                        editMinutes: draft.targetMin,
+                        editSteps: draft.steps
+                    ),
+                    taskId: item.id.uuidString
+                )
+                selection = item.id.uuidString
+                onFinished()
+            } catch is CancellationError {
+                return
+            } catch {
+                isSubmitting = false
+                toast = String(localized: "保存失败，请重试")
+                hideToastLater()
+            }
+        }
+    }
+
+    private func regenerate() {
+        guard !selectedBlobs.isEmpty, !isSubmitting else { return }
+        let predecessor = generationId
+        prepareGeneration()
+        generateTask = Task {
+            do {
+                try await generate(blobs: selectedBlobs)
+                invocationStore.markRegenerated(invocationID: predecessor, successorInvocationID: generationId)
+            } catch is CancellationError {
+                invocationStore.markRegenerated(invocationID: predecessor, successorInvocationID: generationId)
+            } catch {
+                invocationStore.markRegenerated(invocationID: predecessor, successorInvocationID: generationId)
+                fail(with: error)
+            }
+        }
     }
 
     private func fail(with error: Error) {
@@ -373,9 +533,15 @@ struct PhotoPracticeSheet: View {
             completed = false
             elapsed = 0
             phase = .source
-        } else {
-            dismiss()
+            invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
+            lifecycle.abandon()
+            return
         }
+        if phase == .preview, !didFinishOutcome {
+            invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
+            lifecycle.abandon()
+        }
+        dismiss()
     }
 
     private func hideToastLater() {

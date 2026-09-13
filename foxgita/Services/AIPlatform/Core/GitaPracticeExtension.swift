@@ -69,8 +69,8 @@ struct GitaPracticeExtension: AgentExtension {
             version: skill.version,
             title: skill.title,
             fetchPolicy: FetchPolicy(
-                allowedKinds: ["memory"],
-                maxItems: 1,
+                allowedKinds: skill.id == SkillID.planFromImage ? ["image"] : ["memory"],
+                maxItems: skill.id == SkillID.planFromImage ? 3 : 1,
                 maxCharactersPerItem: 6_000,
                 maxTotalCharacters: 6_000
             ),

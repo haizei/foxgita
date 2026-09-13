@@ -96,6 +96,29 @@ struct MessagesRuntimeTests {
         #expect(request?.orderedTools.map(\.id) == ["first", "second"])
     }
 
+    @Test func forwardsInvocationMediaSeparatelyFromPromptText() async throws {
+        let transport = CapturingRuntimeTransport()
+        let runtime = MessagesRuntime(transport: transport)
+        let bytes = Data([0xFF, 0xD8, 0xFF])
+        let ref = ResourceRef(kind: "image", id: "image-1")
+        let plan = AgentExecutionPlan(
+            invocationID: UUID(),
+            sessionID: UUID(),
+            recipe: RuntimeTestFixtures.plan.recipe,
+            contextSnapshot: RuntimeTestFixtures.plan.contextSnapshot,
+            seenSet: RuntimeTestFixtures.plan.seenSet,
+            mediaResources: [InvocationMediaResource(ref: ref, mimeType: "image/jpeg", data: bytes)]
+        )
+
+        _ = try await RuntimeTestFixtures.collect(
+            runtime.execute(plan: plan, prompt: RuntimeTestFixtures.prompt, credentials: RuntimeTestFixtures.credentials)
+        )
+
+        let request = await transport.receivedRequest()
+        #expect(request?.imageJPEGData == [bytes])
+        #expect(request?.userText.contains(bytes.base64EncodedString()) == false)
+    }
+
     @Test func preservesTypedRuntimeErrorInFailureEvent() async throws {
         let events = try await RuntimeTestFixtures.collect(
             MessagesRuntime(transport: TypedRuntimeErrorTransportStub(error: .httpStatus(429))).execute(

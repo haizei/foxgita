@@ -63,6 +63,7 @@ struct MessagesTransportRequest: Sendable {
     let model: String
     let systemPrompt: String
     let userText: String
+    let imageJPEGData: [Data]
     let orderedTools: [VersionedToolSchema]
     let includeResponseFormat: Bool
     let allowsFormatRetry: Bool

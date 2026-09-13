@@ -22,6 +22,15 @@ struct AgentOrchestratorTests {
         #expect(fixture.runtime.executionCount == 0)
     }
 
+    @Test func nonImageRecipeCannotAttachMediaBytes() async {
+        let fixture = OrchestratorFixture.mediaCapabilityBypass()
+
+        await #expect(throws: GateRefusal.self) {
+            try await fixture.orchestrator.run(request: fixture.request, credentials: .fixture)
+        }
+        #expect(fixture.runtime.executionCount == 0)
+    }
+
     @Test func contextSnapshotAndSeenSetMustMatchRequestedScopeBeforeRuntime() async {
         let inconsistent = OrchestratorFixture.inconsistentSeenSet()
         await #expect(throws: GateRefusal.self) {
@@ -271,6 +280,14 @@ private struct OrchestratorFixture {
         make(payload: #"{"value":"unused"}"#, inputGate: RefusingInputGate())
     }
 
+    static func mediaCapabilityBypass() -> Self {
+        let ref = ResourceRef(kind: "task", id: "t1")
+        return make(
+            payload: #"{"value":"unused"}"#,
+            mediaResources: [InvocationMediaResource(ref: ref, mimeType: "image/jpeg", data: Data([1]))]
+        )
+    }
+
     static func inconsistentSeenSet() -> Self {
         make(payload: #"{"value":"unused"}"#, seenSetResources: [])
     }
@@ -392,7 +409,8 @@ private struct OrchestratorFixture {
         artifactResourceRefs: [ResourceRef] = [],
         artifactReferenceFromPayload: Bool = false,
         emittedSnapshotID: UUID? = nil,
-        presentationGate: any PresentationGating = AllowingPresentationGate()
+        presentationGate: any PresentationGating = AllowingPresentationGate(),
+        mediaResources: [InvocationMediaResource] = []
     ) -> Self {
         let invocationID = UUID()
         let sessionID = UUID()
@@ -401,7 +419,8 @@ private struct OrchestratorFixture {
             sessionID: sessionID,
             recipeHint: "fixture.recipe",
             inputText: "go",
-            selectedResources: [requestRef]
+            selectedResources: [requestRef],
+            mediaResources: mediaResources
         )
         let recipe = recipe(runtimeRequirements: runtimeRequirements)
         let snapshot = providedSnapshot ?? ContextSnapshot(

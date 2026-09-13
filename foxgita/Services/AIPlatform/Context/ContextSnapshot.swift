@@ -35,4 +35,21 @@ struct AgentExecutionPlan: Sendable {
     let recipe: RecipeDefinition
     let contextSnapshot: ContextSnapshot
     let seenSet: SeenSet
+    let mediaResources: [InvocationMediaResource]
+
+    init(
+        invocationID: UUID,
+        sessionID: UUID,
+        recipe: RecipeDefinition,
+        contextSnapshot: ContextSnapshot,
+        seenSet: SeenSet,
+        mediaResources: [InvocationMediaResource] = []
+    ) {
+        self.invocationID = invocationID
+        self.sessionID = sessionID
+        self.recipe = recipe
+        self.contextSnapshot = contextSnapshot
+        self.seenSet = seenSet
+        self.mediaResources = mediaResources
+    }
 }
