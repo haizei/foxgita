@@ -756,11 +756,11 @@ struct MigrationTests {
         #expect(items[0].metronomeVolume == nil)
         #expect(items[0].metronomeStrongBeatBoost == nil)
 
-        items[0].metronomeSoundModeRaw = MetronomeSoundMode.drums.rawValue
+        items[0].metronomeSoundModeRaw = "drums"
         items[0].metronomeVolume = 80
         items[0].metronomeStrongBeatBoost = true
         try context.save()
-        #expect(items[0].metronomeSoundModeRaw == "drums")
+        #expect(MetronomeSoundMode.decode(items[0].metronomeSoundModeRaw) == .highNoise)
         #expect(items[0].metronomeVolume == 80)
         #expect(items[0].metronomeStrongBeatBoost == true)
     }
@@ -828,6 +828,50 @@ struct MigrationTests {
         let sessions = try context.fetch(FetchDescriptor<MetronomeTrainingSession>())
         #expect(sessions.count == 1)
         #expect(sessions.first?.planId == plan.id)
+    }
+
+    @Test func v17PersistedSoundValuesKeepTheirBeatCueMeaningAfterMigration() throws {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gita-v17-sound-modes-\(UUID().uuidString).store")
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let profileId = UUID()
+        let legacyValues = ["standard", "acousticGuitar", "drums", "unknown-mode"]
+        do {
+            let schema = Schema(versionedSchema: GitaSchemaV17.self)
+            let container = try ModelContainer(
+                for: schema, configurations: [ModelConfiguration(schema: schema, url: url)]
+            )
+            let context = ModelContext(container)
+            for (index, raw) in legacyValues.enumerated() {
+                context.insert(GitaSchemaV17.PracticeItem(
+                    profileId: profileId,
+                    practiceDayKey: "2026-09-\(10 + index)",
+                    title: raw,
+                    categoryRaw: PracticeCategory.song.rawValue,
+                    durationSeconds: 30,
+                    metronomeSoundModeRaw: raw
+                ))
+            }
+            try context.save()
+        }
+
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
+        let container = try ModelContainer(
+            for: schema,
+            migrationPlan: GitaMigrationPlan.self,
+            configurations: [ModelConfiguration(schema: schema, url: url)]
+        )
+        let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
+        let decoded = Dictionary(uniqueKeysWithValues: items.map {
+            ($0.title, MetronomeSoundMode.decode($0.metronomeSoundModeRaw))
+        })
+
+        #expect(items.count == legacyValues.count)
+        #expect(decoded["standard"] == .standard)
+        #expect(decoded["acousticGuitar"] == .penetrating)
+        #expect(decoded["drums"] == .highNoise)
+        #expect(decoded["unknown-mode"] == .standard)
     }
 
     @Test func legacyV18StoreMigratesToV19WithoutLosingRampHistory() throws {

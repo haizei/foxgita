@@ -91,14 +91,14 @@ struct MetronomeSoundSheet: View {
     }
 
     private func audibilityMarkColor(mode: MetronomeSoundMode, selected: Bool) -> Color {
-        if mode == .acousticGuitar, selected {
+        if mode == .penetrating, selected {
             return GitaTheme.brandOn
         }
         return GitaTheme.brand500
     }
 
     private func audibilityMarkWidth(mode: MetronomeSoundMode, selected: Bool) -> CGFloat {
-        if mode == .acousticGuitar, selected { return 18 }
+        if mode == .penetrating, selected { return 18 }
         return 13
     }
 

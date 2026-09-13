@@ -43,7 +43,7 @@ final class MetronomeEngine {
     }
 
     var subdivisionRaw: Int { subdivision.rawValue }
-    var flashOnAccent: Bool { soundMode == .drums && isPlaying }
+    var flashOnAccent: Bool { soundMode == .highNoise && isPlaying }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
@@ -184,7 +184,6 @@ final class MetronomeEngine {
     func setSoundMode(_ value: MetronomeSoundMode) {
         guard value != soundMode else { return }
         soundMode = value
-        if value == .drums { hapticsEnabled = true }
         rebuildClickBuffers()
     }
 
@@ -431,12 +430,12 @@ final class MetronomeEngine {
                 accentFrequency: 1_000, accentAmplitude: 0.9,
                 beatFrequency: 800, beatAmplitude: 0.5, decay: 90
             )
-        case .acousticGuitar:
+        case .penetrating:
             ClickRecipe(
                 accentFrequency: 1_400, accentAmplitude: 1.0,
                 beatFrequency: 1_200, beatAmplitude: 0.6, decay: 120
             )
-        case .drums:
+        case .highNoise:
             ClickRecipe(
                 accentFrequency: 200, accentAmplitude: 1.0,
                 beatFrequency: 180, beatAmplitude: 0.7, decay: 90
