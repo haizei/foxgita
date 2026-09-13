@@ -232,7 +232,7 @@ struct MetronomeDisplayCard: View {
 
     static func fillColor(for kind: MetronomeBeatKind?, isActive: Bool) -> Color {
         if isActive {
-            return GitaTheme.brand500
+            return GitaTheme.accentActive
         }
         switch kind {
         case nil, .weak:

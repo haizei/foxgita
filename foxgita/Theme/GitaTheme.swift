@@ -50,6 +50,7 @@ enum GitaTheme {
     static let accentWeak = Color(.accentWeak)
     static let accentStrong = Color(.accentStrong)
     static let accentMute = Color(.accentMute)
+    static let accentActive = Color(.accentActive)
     static let accentSlotEmpty = Color(.accentSlotEmpty)
     static let accentTrackBase = Color(.accentTrackBase)
     static let accentTrackDivider = Color(.accentTrackDivider)

@@ -13,6 +13,7 @@ struct GitaThemeAccentColorTests {
         expectColor("AccentMedium", hex: 0xFF9961)
         expectColor("AccentWeak", hex: 0xFFCCA6)
         expectColor("AccentMute", hex: 0xBDC2C9)
+        expectColor("AccentActive", hex: 0x732E0D)
         expectColor("AccentSlotEmpty", hex: 0xEDF2F7)
         expectColor("AccentTrackBase", hex: 0xEEF0F3)
         expectColor("AccentTrackDivider", hex: 0xD0D3D9)

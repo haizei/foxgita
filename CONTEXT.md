@@ -21,7 +21,7 @@ _Avoid_: 拍号设置页
 _Avoid_: 声音设置页、MetronomeSoundSheet（实现文件名可保留，但产品语言用 Sound Sheet）
 
 **Beat Bars**:
-Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。强、次强、普通以递增橙色强度显示，静音以一格中性灰标记显示；拍点反馈只作用于柱内，边框始终保持中性。
+Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。强、次强、普通以递增橙色强度显示，静音以一格中性灰标记显示；落拍时柱内填充替换为高对比深暖棕色，边框始终保持中性。
 _Avoid_: 四拍柱、beat bar（口语）
 
 **Beat Track**:

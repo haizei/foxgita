@@ -15,9 +15,9 @@ struct MetronomeDisplayCardTests {
         #expect(MetronomeDisplayCard.fillColor(for: .mute, isActive: false) == GitaTheme.accentMute)
     }
 
-    @Test func fillColorIsAlwaysBrandWhenActiveRegardlessOfState() {
+    @Test func fillColorUsesContrastTokenWhenActiveRegardlessOfState() {
         for kind in MetronomeBeatKind.allCases {
-            #expect(MetronomeDisplayCard.fillColor(for: kind, isActive: true) == GitaTheme.brand500)
+            #expect(MetronomeDisplayCard.fillColor(for: kind, isActive: true) == GitaTheme.accentActive)
         }
     }
 
