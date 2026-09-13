@@ -79,6 +79,13 @@ enum PracticeDetailState {
         mode == .editable && isDirty
     }
 
+    static func shouldAllowContentEditing(mode: PracticeDetailMode) -> Bool {
+        switch mode {
+        case .editable, .historical:
+            return true
+        }
+    }
+
     static func shouldAllowTimer(mode: PracticeDetailMode) -> Bool {
         mode == .editable
     }
@@ -89,6 +96,14 @@ enum PracticeDetailState {
 
     static func shouldAllowComplete(mode: PracticeDetailMode) -> Bool {
         mode == .editable
+    }
+
+    static func projectChangeRequiresConfirmation(
+        originalProjectId: UUID?,
+        draftProjectId: UUID?,
+        isVersionMarker: Bool
+    ) -> Bool {
+        originalProjectId != draftProjectId && isVersionMarker
     }
 
     static func loadedItem(
@@ -138,6 +153,16 @@ struct PracticeDetailView: View {
     @State private var storedMetronomeVolume: Int? = nil
     @State private var storedMetronomeStrongBeatBoost: Bool? = nil
     @State private var storedResumeState: ResumeState? = nil
+    @State private var draftTitle = ""
+    @State private var draftSubtitle = ""
+    @State private var draftCategory: PracticeCategory = .chord
+    @State private var draftTargetMin = 1
+    @State private var draftProjectId: UUID?
+    @State private var showDiscardHistoricalChanges = false
+    @State private var leaveAfterDiscard = false
+    @State private var showProjectChangeWarning = false
+    @State private var createProjectAfterHistoricalSave = false
+    @State private var awaitingCreatedProjectAssignment = false
     @State private var toolMode: ToolMode = .note
     @State private var expandedReviewId: String?
     @State private var toast: String?
@@ -173,6 +198,12 @@ struct PracticeDetailView: View {
 
     private var item: PracticeItem? { items.first }
 
+    private var isHistoricalPractice: Bool {
+        guard let item else { return false }
+        return !allowPastDayEdits
+            && PracticeDetailState.mode(practiceDayKey: item.practiceDayKey) == .historical
+    }
+
     private var mode: PracticeDetailMode {
         guard let item else { return .historical }
         return PracticeDetailState.mode(
@@ -204,6 +235,16 @@ struct PracticeDetailView: View {
             metronomeStrongBeatBoost: metronome.strongBeatBoost,
             storedMetronomeStrongBeatBoost: storedMetronomeStrongBeatBoost
         )
+    }
+
+    private var isHistoricalEditDirty: Bool {
+        guard let item else { return false }
+        return isDirty
+            || draftTitle.trimmingCharacters(in: .whitespacesAndNewlines) != item.title
+            || draftSubtitle.trimmingCharacters(in: .whitespacesAndNewlines) != item.subtitle
+            || draftCategory.rawValue != item.categoryRaw
+            || draftTargetMin != PracticeHomeState.initialTargetMin(item.targetMin)
+            || draftProjectId != item.projectId
     }
 
     private var visibleClips: [RecordingRef] {
@@ -257,11 +298,17 @@ struct PracticeDetailView: View {
             }
         }
         .navigationBarHidden(true)
+        .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             guard let item else { return }
             if !didLoadItem {
                 didLoadItem = true
+                draftTitle = item.title
+                draftSubtitle = item.subtitle
+                draftCategory = PracticeCategory(rawValue: item.categoryRaw) ?? .chord
+                draftTargetMin = PracticeHomeState.initialTargetMin(item.targetMin)
+                draftProjectId = item.projectId
                 noteText = item.note
                 storedNote = item.note
                 storedDurationSeconds = PracticeDetailState.initialElapsedSeconds(
@@ -359,6 +406,10 @@ struct PracticeDetailView: View {
             // Do not clear when projectId becomes nil — that would break the toast.
             if let newProjectId {
                 sessionProjectId = newProjectId
+                if awaitingCreatedProjectAssignment {
+                    draftProjectId = newProjectId
+                    awaitingCreatedProjectAssignment = false
+                }
             }
         }
         .onChange(of: recorder.lastError) { _, value in
@@ -398,6 +449,24 @@ struct PracticeDetailView: View {
                 finishActiveTraining(reason: .targetCompleted)
             }
         }
+        .alert("放弃修改？", isPresented: $showDiscardHistoricalChanges) {
+            Button("继续编辑", role: .cancel) {}
+            Button("放弃", role: .destructive) {
+                restoreHistoricalDraft()
+                if leaveAfterDiscard { leave() }
+                leaveAfterDiscard = false
+            }
+        } message: {
+            Text("尚未保存的历史练习修改将会丢失。")
+        }
+        .alert("更换项目会清除版本标记", isPresented: $showProjectChangeWarning) {
+            Button("取消", role: .cancel) {
+                createProjectAfterHistoricalSave = false
+            }
+            Button("继续保存") { saveHistoricalChanges() }
+        } message: {
+            Text("这条练习是原项目的阶段版或最终版。更换或移出项目后，该标记会被清除。")
+        }
             .fullScreenCover(isPresented: Binding(
             get: { video.isPresenting },
             set: { if !$0 { video.dismiss() } }
@@ -415,7 +484,14 @@ struct PracticeDetailView: View {
             )
             .ignoresSafeArea()
         }
-        .sheet(isPresented: $showCreateFromPracticeSheet) {
+        .sheet(isPresented: $showCreateFromPracticeSheet, onDismiss: {
+            if awaitingCreatedProjectAssignment,
+               let assignedProjectId = item?.projectId,
+               assignedProjectId != draftProjectId {
+                draftProjectId = assignedProjectId
+            }
+            awaitingCreatedProjectAssignment = false
+        }) {
             ProjectCreateFromPracticeView(itemId: itemId, fromPracticeTab: true)
         }
     }
@@ -428,15 +504,31 @@ struct PracticeDetailView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(GitaTheme.textSecondary)
                     .frame(minWidth: 40, alignment: .leading)
-                Text(item.title)
-                    .font(.system(size: 20, weight: .bold))
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity)
-                Button("完成") { complete(item) }
+                if isHistoricalPractice {
+                    TextField("标题", text: $draftTitle)
+                        .font(.system(size: 20, weight: .bold))
+                        .multilineTextAlignment(.center)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Text(item.title)
+                        .font(.system(size: 20, weight: .bold))
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity)
+                }
+                if isHistoricalPractice {
+                    Button("保存") { requestSaveHistoricalChanges() }
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(GitaTheme.brand500)
                     .frame(minWidth: 40, alignment: .trailing)
-                    .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
+                    .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                } else {
+                    Button("完成") { complete(item) }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(minWidth: 40, alignment: .trailing)
+                        .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
+                }
             }
             .frame(minHeight: 56)
             .padding(.horizontal, 16)
@@ -463,13 +555,17 @@ struct PracticeDetailView: View {
                 )
             }
 
-            associationMenu(item)
+            practiceProjectAssociation(item)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if isHistoricalPractice {
+                        historicalMetadataEditor
+                    }
                     if !item.subtitle.isEmpty,
+                       !isHistoricalPractice,
                        !AIPracticePresentation.isAIGenerated(subtitle: item.subtitle) {
                         Text(item.subtitle)
                             .font(.system(size: 12))
@@ -487,13 +583,13 @@ struct PracticeDetailView: View {
                     MetronomeDisplayCard(
                         metronome: metronome,
                         onEntryTap: { anchor in
-                            guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+                            guard PracticeDetailState.shouldAllowContentEditing(mode: mode) else { return }
                             noteFocused = false
                             showMetronomeSoundSheet = false
                             metronomeSheetAnchor = anchor
                         },
                         onSoundTap: {
-                            guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+                            guard PracticeDetailState.shouldAllowContentEditing(mode: mode) else { return }
                             noteFocused = false
                             metronomeSheetAnchor = nil
                             showMetronomeSoundSheet = true
@@ -503,7 +599,7 @@ struct PracticeDetailView: View {
                         rampStatusBanner
                     }
                     timerCard
-                    if mode == .editable || !steps.isEmpty {
+                    if PracticeDetailState.shouldAllowContentEditing(mode: mode) || !steps.isEmpty {
                         stepsCard
                     }
                     toolsRow(item)
@@ -518,7 +614,7 @@ struct PracticeDetailView: View {
                                 .font(.system(size: 14))
                                 .lineLimit(3...6)
                                 .focused($noteFocused)
-                                .disabled(mode == .historical)
+                            .disabled(!PracticeDetailState.shouldAllowContentEditing(mode: mode))
                             Text("记录一点感受，下次继续从这里开始")
                                 .font(.system(size: 12))
                                 .foregroundStyle(GitaTheme.textSecondary)
@@ -608,6 +704,24 @@ struct PracticeDetailView: View {
         return trimmed.isEmpty ? "4/4" : trimmed
     }
 
+    private var historicalMetadataEditor: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("练习资料")
+                .font(.system(size: 18, weight: .bold))
+            TextField("说明", text: $draftSubtitle, axis: .vertical)
+                .lineLimit(1...3)
+            Picker("分类", selection: $draftCategory) {
+                ForEach(PracticeCategory.allCases) { category in
+                    Text(category.label).tag(category)
+                }
+            }
+            Stepper("目标 \(draftTargetMin) 分钟", value: $draftTargetMin, in: 1...60)
+        }
+        .padding(16)
+        .background(GitaTheme.bgSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 20))
+    }
+
     private var timerCard: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -624,7 +738,7 @@ struct PracticeDetailView: View {
             .frame(minHeight: 38)
             .background(GitaTheme.bgSubtle)
             .clipShape(Capsule())
-            .disabled(mode == .historical || tempoController.isRampActive)
+            .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode) || tempoController.isRampActive)
 
             Button(practiceTimer.isRunning ? "暂停" : "开始") { togglePlay() }
                 .font(.system(size: 14, weight: .semibold))
@@ -633,7 +747,7 @@ struct PracticeDetailView: View {
                 .padding(.vertical, 11)
                 .background(GitaTheme.brand500)
                 .clipShape(Capsule())
-                .disabled(mode == .historical)
+                .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode))
         }
         .padding(16)
         .frame(minHeight: 100)
@@ -705,7 +819,7 @@ struct PracticeDetailView: View {
             HStack {
                 Text("练习步骤").font(.system(size: 18, weight: .bold))
                 Spacer()
-                if mode == .editable {
+                if PracticeDetailState.shouldAllowContentEditing(mode: mode) {
                     Button("新增步骤") { steps.append(String(localized: "新步骤")) }
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(GitaTheme.brand500)
@@ -722,14 +836,14 @@ struct PracticeDetailView: View {
                         .clipShape(Circle())
                     TextField("步骤", text: binding(index))
                         .font(.system(size: 14))
-                        .disabled(mode == .historical)
+                        .disabled(!PracticeDetailState.shouldAllowContentEditing(mode: mode))
                     if index < steps.count,
                        let minutes = AIPracticePresentation.stepParts(steps[index]).minutes {
                         Text("\(minutes) 分钟")
                             .font(.system(size: 12))
                             .foregroundStyle(GitaTheme.textSecondary)
                     }
-                    if mode == .editable && steps.count > 1 {
+                    if PracticeDetailState.shouldAllowContentEditing(mode: mode) && steps.count > 1 {
                         Button("删除") { steps.remove(at: index) }
                             .font(.system(size: 12))
                             .foregroundStyle(GitaTheme.textTertiary)
@@ -1160,6 +1274,11 @@ struct PracticeDetailView: View {
 
     private func requestExit() {
         noteFocused = false
+        if isHistoricalPractice && isHistoricalEditDirty {
+            leaveAfterDiscard = true
+            showDiscardHistoricalChanges = true
+            return
+        }
         finishActiveTraining(reason: .userStopped)
         tempoController.endRamp()
         practiceTimer.pause()
@@ -1171,6 +1290,101 @@ struct PracticeDetailView: View {
             queueProjectDeletedToastIfNeeded(for: item)
         }
         leave()
+    }
+
+    private func requestSaveHistoricalChanges() {
+        guard let item else { return }
+        if PracticeDetailState.projectChangeRequiresConfirmation(
+            originalProjectId: item.projectId,
+            draftProjectId: draftProjectId,
+            isVersionMarker: isVersionMarker(item)
+        ) {
+            showProjectChangeWarning = true
+        } else {
+            saveHistoricalChanges()
+        }
+    }
+
+    private func requestCreateProjectFromHistorical(_ item: PracticeItem) {
+        createProjectAfterHistoricalSave = true
+        if isVersionMarker(item) {
+            showProjectChangeWarning = true
+        } else {
+            saveHistoricalChanges()
+        }
+    }
+
+    private func isVersionMarker(_ item: PracticeItem) -> Bool {
+        projects.contains {
+            $0.stageVersionItemId == item.id || $0.finalVersionItemId == item.id
+        }
+    }
+
+    private func saveHistoricalChanges() {
+        guard let item else { return }
+        do {
+            let projectId = createProjectAfterHistoricalSave ? item.projectId : draftProjectId
+            let update = HistoricalPracticeUpdate(
+                title: draftTitle,
+                subtitle: draftSubtitle,
+                targetMin: draftTargetMin,
+                category: draftCategory,
+                note: noteText,
+                steps: steps,
+                bpm: metronome.bpm,
+                timeSignature: metronome.timeSignatureText,
+                metronomeAccentRaw: metronome.accentPatternRaw,
+                metronomeSubdivisionRaw: metronome.subdivisionRaw,
+                metronomeSoundModeRaw: metronome.soundMode.rawValue,
+                metronomeVolume: metronome.volume,
+                metronomeStrongBeatBoost: metronome.strongBeatBoost,
+                projectId: projectId
+            )
+            try store.updateHistoricalPracticeItem(id: item.id, update: update, now: Date())
+            storedNote = noteText
+            storedSteps = steps
+            storedBpm = metronome.bpm
+            storedTimeSignature = metronome.timeSignatureText
+            storedAccentPatternRaw = metronome.accentPatternRaw
+            storedSubdivisionRaw = metronome.subdivisionRaw
+            storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+            storedMetronomeVolume = metronome.volume
+            storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
+            draftProjectId = projectId
+            show(String(localized: "修改已保存"))
+            if createProjectAfterHistoricalSave {
+                createProjectAfterHistoricalSave = false
+                startCreateAndJoin()
+            }
+        } catch {
+            createProjectAfterHistoricalSave = false
+            show(store.lastError?.localizedDescription ?? error.localizedDescription)
+        }
+    }
+
+    private func restoreHistoricalDraft() {
+        guard let item else { return }
+        draftTitle = item.title
+        draftSubtitle = item.subtitle
+        draftCategory = PracticeCategory(rawValue: item.categoryRaw) ?? .chord
+        draftTargetMin = PracticeHomeState.initialTargetMin(item.targetMin)
+        draftProjectId = item.projectId
+        noteText = storedNote
+        steps = storedSteps
+        if let storedBpm { metronome.setBpm(storedBpm) }
+        if let storedTimeSignature {
+            metronome.configureMeter(
+                timeSignature: storedTimeSignature,
+                accentRaw: storedAccentPatternRaw
+            )
+            metronome.configureSubdivision(raw: storedSubdivisionRaw)
+            metronome.configureSound(
+                modeRaw: storedMetronomeSoundModeRaw,
+                volume: storedMetronomeVolume,
+                strongBeatBoost: storedMetronomeStrongBeatBoost
+            )
+        }
+        createProjectAfterHistoricalSave = false
     }
 
     private func loadLatestRampPlan() {
@@ -1460,6 +1674,45 @@ struct PracticeDetailView: View {
     }
 
     @ViewBuilder
+    private func practiceProjectAssociation(_ item: PracticeItem) -> some View {
+        if isHistoricalPractice {
+            historicalProjectMenu(item)
+        } else {
+            associationMenu(item)
+        }
+    }
+
+    private func projectName(for id: UUID?) -> String? {
+        guard let id else { return nil }
+        return projects.first(where: { $0.id == id })?.name
+    }
+
+    private func historicalProjectMenu(_ item: PracticeItem) -> some View {
+        let candidates = activeProjects(for: item)
+        return HStack {
+            Menu {
+                Button("无项目") { draftProjectId = nil }
+                ForEach(candidates, id: \.id) { project in
+                    Button(project.name) { draftProjectId = project.id }
+                }
+                Divider()
+                Button("建立长期项目") {
+                    requestCreateProjectFromHistorical(item)
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Text(projectName(for: draftProjectId) ?? String(localized: "无项目"))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .font(.system(size: 13))
+                .foregroundStyle(GitaTheme.textSecondary)
+            }
+            Spacer(minLength: 0)
+        }
+    }
+
+    @ViewBuilder
     private func associationMenu(_ item: PracticeItem) -> some View {
         let currentId = item.projectId
         let candidates = activeProjects(for: item)
@@ -1504,6 +1757,9 @@ struct PracticeDetailView: View {
     private func startCreateAndJoin() {
         RecordAnalytics.projectCreateEntryViewed(source: "practice_detail")
         RecordAnalytics.projectCreateStarted(source: "practice_detail")
+        if isHistoricalPractice {
+            awaitingCreatedProjectAssignment = true
+        }
         if openedFromRecord {
             router.recordPath.append(.projectCreateFromPractice(itemId: itemId))
         } else {

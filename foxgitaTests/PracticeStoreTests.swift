@@ -1688,12 +1688,61 @@ struct PracticeStoreTests {
             title: "  慢扫  ",
             subtitle: "开放弦与爬格子",
             minutes: 12,
+            category: .rhythm,
             now: date(2026, 8, 26, 11, calendar: cal)
         )
         let fetched = try #require(try repo.practiceItem(id: created.id, profileId: profileId))
         #expect(fetched.title == "慢扫")
         #expect(fetched.subtitle == "开放弦与爬格子")
         #expect(fetched.targetMin == 12)
+        #expect(fetched.categoryRaw == PracticeCategory.rhythm.rawValue)
+    }
+
+    @Test func historicalUpdateWritesOnePayloadWithoutChangingOutcome() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let cal = shanghai()
+        let item = try store.createPracticeItem(
+            input: makeInput(title: "旧练习"),
+            now: date(2026, 8, 25, calendar: cal),
+            calendar: cal
+        )
+        try store.savePracticeItem(
+            id: item.id,
+            durationSeconds: 321,
+            note: "旧笔记",
+            now: date(2026, 8, 25, 11, calendar: cal)
+        )
+        let project = try store.createProject(name: "A", goal: "", now: date(2026, 8, 25, 12, calendar: cal))
+        try store.setPracticeItemProject(id: item.id, projectId: project.id, now: date(2026, 8, 25, 13, calendar: cal))
+        try store.setProjectStageVersion(
+            projectId: project.id,
+            itemId: item.id,
+            now: date(2026, 8, 25, 14, calendar: cal)
+        )
+
+        try store.updateHistoricalPracticeItem(
+            id: item.id,
+            update: HistoricalPracticeUpdate(
+                title: "新练习", subtitle: "新说明", targetMin: 18,
+                category: .song, note: "新笔记", steps: ["慢练", "原速"],
+                bpm: 96, timeSignature: "3/4", metronomeAccentRaw: "3,1,1",
+                metronomeSubdivisionRaw: 2, metronomeSoundModeRaw: "wood",
+                metronomeVolume: 72, metronomeStrongBeatBoost: true, projectId: nil
+            ),
+            now: date(2026, 8, 26, 9, calendar: cal)
+        )
+
+        let live = try #require(try repo.practiceItem(id: item.id, profileId: item.profileId))
+        #expect(live.practiceDayKey == "2026-08-25")
+        #expect(live.durationSeconds == 321)
+        #expect(live.recordings.isEmpty)
+        #expect(live.title == "新练习")
+        #expect(live.note == "新笔记")
+        #expect(live.steps == ["慢练", "原速"])
+        #expect(live.projectId == nil)
+        let savedProject = try #require(try repo.project(id: project.id, profileId: item.profileId))
+        #expect(savedProject.stageVersionItemId == nil)
     }
 
     @Test func cancelWithoutSubmitCreatesNoPracticeItem() throws {

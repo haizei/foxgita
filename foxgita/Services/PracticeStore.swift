@@ -41,6 +41,23 @@ struct PracticeItemInput {
     var targetMin: Int = 0
 }
 
+struct HistoricalPracticeUpdate {
+    let title: String
+    let subtitle: String
+    let targetMin: Int
+    let category: PracticeCategory
+    let note: String
+    let steps: [String]
+    let bpm: Int
+    let timeSignature: String
+    let metronomeAccentRaw: String
+    let metronomeSubdivisionRaw: Int
+    let metronomeSoundModeRaw: String
+    let metronomeVolume: Int
+    let metronomeStrongBeatBoost: Bool
+    let projectId: UUID?
+}
+
 /// Command layer. Views read through `@Query` for free reactivity and write
 /// only through here, so every invariant and every error path lives in one
 /// place. Failures surface as `lastError` for the toast to pick up.
@@ -405,6 +422,7 @@ final class PracticeStore {
         title: String,
         subtitle: String,
         minutes: Int,
+        category: PracticeCategory? = nil,
         now: Date
     ) throws {
         let item = try requireLivePracticeItem(id: id)
@@ -412,8 +430,56 @@ final class PracticeStore {
         item.title = trimmed.isEmpty ? item.title : trimmed
         item.subtitle = subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
         item.targetMin = PracticeHomeState.initialTargetMin(minutes)
+        if let category {
+            item.categoryRaw = category.rawValue
+        }
         item.updatedAt = now
         try persistPracticeItemChanges()
+    }
+
+    func updateHistoricalPracticeItem(
+        id: UUID,
+        update: HistoricalPracticeUpdate,
+        now: Date
+    ) throws {
+        do {
+            let item = try requireLivePracticeItem(id: id)
+            let trimmedTitle = update.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmedTitle.isEmpty else { throw StoreError.invalidInput }
+            let resolvedProjectId: UUID?
+            if let projectId = update.projectId {
+                resolvedProjectId = try repository.project(
+                    id: projectId,
+                    profileId: item.profileId
+                )?.id
+            } else {
+                resolvedProjectId = nil
+            }
+
+            item.title = trimmedTitle
+            item.subtitle = update.subtitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            item.targetMin = PracticeHomeState.initialTargetMin(update.targetMin)
+            item.categoryRaw = update.category.rawValue
+            item.note = update.note
+            item.steps = PracticeDetailState.initialSteps(update.steps)
+            item.bpm = min(200, max(40, update.bpm))
+            item.timeSignature = update.timeSignature
+            item.metronomeAccentRaw = update.metronomeAccentRaw
+            item.metronomeSubdivisionRaw = update.metronomeSubdivisionRaw
+            item.metronomeSoundModeRaw = update.metronomeSoundModeRaw
+            item.metronomeVolume = min(100, max(0, update.metronomeVolume))
+            item.metronomeStrongBeatBoost = update.metronomeStrongBeatBoost
+            if item.projectId != resolvedProjectId {
+                item.projectId = resolvedProjectId
+                try clearVersionRefs(pointingTo: id, now: now)
+            }
+            item.updatedAt = now
+            try persistPracticeItemChanges()
+        } catch {
+            repository.rollback()
+            lastError = StoreError.from(error)
+            throw lastError ?? .saveFailed
+        }
     }
 
     func softDeletePracticeItem(id: UUID, now: Date) throws {

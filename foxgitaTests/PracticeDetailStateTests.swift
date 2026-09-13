@@ -53,7 +53,7 @@ struct PracticeDetailStateTests {
         #expect(PracticeDetailState.shouldAllowComplete(mode: mode))
     }
 
-    @Test func historicalDayIsReadOnly() {
+    @Test func historicalDayAllowsContentEditingButLocksOutcomes() {
         let today = date(year: 2026, month: 8, day: 26, hour: 10)
         let mode = PracticeDetailState.mode(
             practiceDayKey: "2026-08-25",
@@ -61,6 +61,7 @@ struct PracticeDetailStateTests {
             calendar: shanghaiCalendar
         )
         #expect(mode == .historical)
+        #expect(PracticeDetailState.shouldAllowContentEditing(mode: mode))
         #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
         #expect(!PracticeDetailState.shouldAllowCapture(mode: mode))
         #expect(!PracticeDetailState.shouldAllowComplete(mode: mode))
@@ -83,7 +84,7 @@ struct PracticeDetailStateTests {
         #expect(PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: true))
     }
 
-    @Test func practiceHomePastDayStaysReadOnly() {
+    @Test func practiceHomePastDayKeepsHistoricalOutcomeLocks() {
         let today = date(year: 2026, month: 8, day: 28, hour: 10)
         let mode = PracticeDetailState.mode(
             practiceDayKey: "2026-08-25",
@@ -106,6 +107,43 @@ struct PracticeDetailStateTests {
         #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
         #expect(!PracticeDetailState.shouldAllowCapture(mode: mode))
         #expect(!PracticeDetailState.shouldAllowComplete(mode: mode))
+    }
+
+    @Test func historicalAllowsContentButKeepsOutcomesLocked() {
+        let mode = PracticeDetailMode.historical
+        #expect(PracticeDetailState.shouldAllowContentEditing(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowTimer(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowCapture(mode: mode))
+        #expect(!PracticeDetailState.shouldAllowComplete(mode: mode))
+        #expect(
+            !PracticeDetailState.shouldAutoSaveOnDisappear(mode: mode, isDirty: true)
+        )
+    }
+
+    @Test func projectChangeOnlyWarnsWhenVersionMarkerWillBeCleared() {
+        let oldProjectId = UUID()
+        let newProjectId = UUID()
+        #expect(
+            PracticeDetailState.projectChangeRequiresConfirmation(
+                originalProjectId: oldProjectId,
+                draftProjectId: newProjectId,
+                isVersionMarker: true
+            )
+        )
+        #expect(
+            !PracticeDetailState.projectChangeRequiresConfirmation(
+                originalProjectId: oldProjectId,
+                draftProjectId: oldProjectId,
+                isVersionMarker: true
+            )
+        )
+        #expect(
+            !PracticeDetailState.projectChangeRequiresConfirmation(
+                originalProjectId: oldProjectId,
+                draftProjectId: nil,
+                isVersionMarker: false
+            )
+        )
     }
 
     @Test func editableSavesWhenDirtyAndSkipsClean() {
