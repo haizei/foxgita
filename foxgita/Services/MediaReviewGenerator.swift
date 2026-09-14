@@ -28,18 +28,18 @@ protocol MediaReviewGenerating: Sendable {
 
 @MainActor
 final class MediaReviewGenerator: MediaReviewGenerating {
-    private let client: any MediaReviewing
+    private let runner: any MediaReviewing
     private let credentials: LLMCredentialsStore
     private let images: any MediaImagePreparing
     private let log: any AIInvocationRecording
 
     init(
-        client: any MediaReviewing,
+        runner: any MediaReviewing,
         credentials: LLMCredentialsStore = LLMCredentialsStore(),
         images: any MediaImagePreparing = FileMediaImagePreparer(),
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.client = client
+        self.runner = runner
         self.credentials = credentials
         self.images = images
         self.log = log
@@ -66,16 +66,19 @@ final class MediaReviewGenerator: MediaReviewGenerating {
             let name = context.fileName
             jpegs = try await Task.detached { try preparer.jpegImages(fileName: name) }.value
         } catch let error as MediaReviewGeneratorError {
+            await recordPreparationFailure(invocationId: invocationId, model: model, error: error)
             throw error
         } catch {
+            await recordPreparationFailure(invocationId: invocationId, model: model, error: .prepareFailed)
             throw MediaReviewGeneratorError.prepareFailed
         }
         guard !jpegs.isEmpty else {
+            await recordPreparationFailure(invocationId: invocationId, model: model, error: .prepareFailed)
             throw MediaReviewGeneratorError.prepareFailed
         }
 
         do {
-            return try await client.generateReview(
+            return try await runner.generateReview(
                 baseURL: baseURL,
                 model: model,
                 apiKey: apiKey,
@@ -95,6 +98,19 @@ final class MediaReviewGenerator: MediaReviewGenerating {
             }
             throw MediaReviewGeneratorError.failed(.transport)
         }
+    }
+
+    private func recordPreparationFailure(
+        invocationId: String, model: String, error: MediaReviewGeneratorError
+    ) async {
+        await log.record(AIInvocationRecordInput(
+            id: invocationId, skillId: SkillID.reviewMedia,
+            skillVersion: SkillDefinition.reviewMedia.version, model: model,
+            startedAt: Date(), durationMs: 0, status: .failure,
+            errorType: error == .fileMissing ? .transport : .invalidJSON,
+            memoryIds: [], formatRetryUsed: false, draftOutcome: nil,
+            runtime: RuntimeKind.messages.rawValue, executionState: .failed
+        ))
     }
 
     private func recordNotConfigured(invocationId: String, model: String) async {

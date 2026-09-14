@@ -65,13 +65,14 @@ struct foxgitaApp: App {
                 initialValue: ReviewJobRunner(
                     store: store,
                     generator: MediaReviewGenerator(
-                        client: MediaReviewClient(memory: liveMemory, log: invocationLog),
+                        runner: MediaReviewRecipeRunner(memory: liveMemory, log: invocationLog),
                         log: invocationLog
                     ),
                     videoGenerator: VideoDiagnosisGenerator(
                         client: VideoDiagnosisClient(memory: liveMemory, log: invocationLog),
                         log: invocationLog
-                    )
+                    ),
+                    invocationStore: invocationStore
                 )
             )
         } catch {

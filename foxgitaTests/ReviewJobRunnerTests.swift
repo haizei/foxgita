@@ -99,17 +99,55 @@ struct ReviewJobRunnerTests {
         #expect(try repo.recording(id: "v1")?.videoFindings.count == 1)
         #expect(videoSpy.order == ["v1"])
     }
+
+    @Test func cancellationDoesNotAppearAsNetworkFailure() async throws {
+        let (runner, store, repo, spy, _) = try harness()
+        store.applyReview(
+            recordingId: "a",
+            draft: MediaReviewDraft(highlight: "旧亮点", focus: "旧重点", nextAction: "旧行动")
+        )
+        spy.cancelledRecordingIDs.insert("a")
+
+        runner.enqueue(["a"], baseURL: "https://x", model: "m")
+        try await waitUntil { !runner.isRunning("a") }
+
+        #expect(try repo.recording(id: "a")?.reviewStatus == .ready)
+        #expect(try repo.recording(id: "a")?.reviewHighlight == "旧亮点")
+        #expect(try repo.recording(id: "a")?.reviewFocus == "旧重点")
+        #expect(try repo.recording(id: "a")?.reviewNextAction == "旧行动")
+        #expect(runner.lastFailureKind == nil)
+    }
+
+    @Test func failedRerunKeepsLastSuccessfulReview() async throws {
+        let (runner, store, repo, spy, _) = try harness()
+        store.applyReview(
+            recordingId: "a",
+            draft: MediaReviewDraft(highlight: "旧亮点", focus: "旧重点", nextAction: "旧行动")
+        )
+        spy.drafts["a"] = .failure(.prepareFailed)
+
+        runner.enqueue(["a"], baseURL: "https://x", model: "m")
+        try await waitUntil { !runner.isRunning("a") }
+
+        #expect(try repo.recording(id: "a")?.reviewStatus == .ready)
+        #expect(try repo.recording(id: "a")?.reviewHighlight == "旧亮点")
+        #expect(try repo.recording(id: "a")?.reviewFocus == "旧重点")
+        #expect(try repo.recording(id: "a")?.reviewNextAction == "旧行动")
+        #expect(runner.lastFailureKind == .prepare)
+    }
 }
 
 @MainActor
 final class RecordingSpy: MediaReviewGenerating {
     var drafts: [String: Result<MediaReviewDraft, MediaReviewGeneratorError>] = [:]
+    var cancelledRecordingIDs: Set<String> = []
     private(set) var order: [String] = []
 
     func review(
         _ context: MediaReviewContext, baseURL: String, model: String, invocationId: String
     ) async throws -> MediaReviewDraft {
         order.append(context.recordingId)
+        if cancelledRecordingIDs.contains(context.recordingId) { throw CancellationError() }
         switch drafts[context.recordingId] {
         case .success(let draft): return draft
         case .failure(let error): throw error

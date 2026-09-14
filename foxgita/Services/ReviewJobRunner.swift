@@ -13,6 +13,8 @@ final class ReviewJobRunner {
     private let store: PracticeStore
     private let generator: any MediaReviewGenerating
     private let videoGenerator: any VideoDiagnosisGenerating
+    private let invocationStore: AIInvocationStore?
+    private var latestInvocationByRecording: [String: String] = [:]
 
     private struct Job {
         var ids: [String]
@@ -29,11 +31,13 @@ final class ReviewJobRunner {
     init(
         store: PracticeStore,
         generator: any MediaReviewGenerating,
-        videoGenerator: any VideoDiagnosisGenerating
+        videoGenerator: any VideoDiagnosisGenerating,
+        invocationStore: AIInvocationStore? = nil
     ) {
         self.store = store
         self.generator = generator
         self.videoGenerator = videoGenerator
+        self.invocationStore = invocationStore
     }
 
     func isRunning(_ id: String) -> Bool {
@@ -86,8 +90,12 @@ final class ReviewJobRunner {
                 continue
             }
 
+            let invocationId = UUID().uuidString
+            let skillID = MediaReviewMedia.isVideo(fileName: context.fileName)
+                ? SkillID.diagnoseVideo : SkillID.reviewMedia
+            let predecessor = latestInvocationByRecording[id]
+                ?? invocationStore?.latestInvocationID(businessObjectID: id, skillID: skillID)
             do {
-                let invocationId = UUID().uuidString
                 if MediaReviewMedia.isVideo(fileName: context.fileName) {
                     let draft = try await videoGenerator.diagnose(
                         context, baseURL: currentBaseURL, model: currentModel,
@@ -101,6 +109,9 @@ final class ReviewJobRunner {
                     )
                     store.applyReview(recordingId: id, draft: draft)
                 }
+            } catch is CancellationError {
+                lastFailureKind = nil
+                store.markReviewsCancelled(recordingIds: [id])
             } catch let error as MediaReviewGeneratorError {
                 lastFailureKind = failureKind(for: error)
                 if case .failed(.unauthorized) = error {
@@ -113,6 +124,14 @@ final class ReviewJobRunner {
                 lastFailureKind = .network
                 store.markReviewsFailed(recordingIds: [id])
             }
+            invocationStore?.markBusinessObject(invocationID: invocationId, businessObjectID: id)
+            if let predecessor {
+                invocationStore?.markRegenerated(
+                    invocationID: predecessor,
+                    successorInvocationID: invocationId
+                )
+            }
+            latestInvocationByRecording[id] = invocationId
             activeRecordingId = nil
         }
     }

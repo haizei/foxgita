@@ -137,7 +137,7 @@ struct AICandidateSyncTests {
         try practiceRepo.save()
     }
 
-    @Test func applyReviewWritesCandidateOnlyWhenEnabled() throws {
+    @Test func applyReviewNeverWritesCandidateMemory() throws {
         let (offStore, offRepo, offPractice, _) = try makeWired(consent: .disabled)
         try addReadyClip(store: offStore, practiceRepo: offPractice, recordingId: "clip-off")
         offStore.applyReview(
@@ -153,14 +153,8 @@ struct AICandidateSyncTests {
             recordingId: "clip-on",
             draft: MediaReviewDraft(highlight: "稳", focus: "压弦", nextAction: "慢练")
         )
-        let rows = try onRepo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
-        #expect(rows.count == 1)
-        #expect(rows[0].summaryText == "压弦")
-        #expect(rows[0].sourceType == "ai")
-        #expect(rows[0].sourceId == "clip-on")
-        #expect(rows[0].valueJSON.contains("practice.review.media@1.1.0"))
-        #expect(rows[0].confidence == 0.4)
-        #expect(rows[0].importance == 0.4)
+        #expect(try onPractice.recording(id: "clip-on")?.reviewStatus == .ready)
+        #expect(try onRepo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
     }
 
     @Test func applyVideoDiagnosisOverwritesSameKey() throws {

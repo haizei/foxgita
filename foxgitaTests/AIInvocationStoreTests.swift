@@ -161,6 +161,45 @@ struct AIInvocationStoreTests {
         #expect(rows["inv-successor"]?.predecessorInvocationId == "inv-original")
     }
 
+    @Test func latestInvocationFindsNewestPersistedBusinessObjectRun() throws {
+        let (store, _) = try makeStore()
+        store.record(input(id: "inv-old", startedAt: Date(timeIntervalSince1970: 100)))
+        store.record(input(id: "inv-new", startedAt: Date(timeIntervalSince1970: 200)))
+        store.markBusinessObject(invocationID: "inv-old", businessObjectID: "recording-1")
+        store.markBusinessObject(invocationID: "inv-new", businessObjectID: "recording-1")
+
+        #expect(store.latestInvocationID(
+            businessObjectID: "recording-1",
+            skillID: SkillID.nextSession
+        ) == "inv-new")
+        #expect(store.latestInvocationID(
+            businessObjectID: "recording-2",
+            skillID: SkillID.nextSession
+        ) == nil)
+    }
+
+    @Test func latestInvocationIsIsolatedToActiveProfile() throws {
+        let (store, context) = try makeStore()
+        store.record(input(id: "inv-profile-1", startedAt: Date(timeIntervalSince1970: 300)))
+        store.markBusinessObject(invocationID: "inv-profile-1", businessObjectID: "shared-recording")
+
+        let profile1 = try #require(context.fetch(
+            FetchDescriptor<LocalProfile>(predicate: #Predicate { $0.id == "p1" })
+        ).first)
+        profile1.isActive = false
+        let profile2 = LocalProfile(id: "p2")
+        profile2.isActive = true
+        context.insert(profile2)
+        try context.save()
+        store.record(input(id: "inv-profile-2", startedAt: Date(timeIntervalSince1970: 200)))
+        store.markBusinessObject(invocationID: "inv-profile-2", businessObjectID: "shared-recording")
+
+        #expect(store.latestInvocationID(
+            businessObjectID: "shared-recording",
+            skillID: SkillID.nextSession
+        ) == "inv-profile-2")
+    }
+
     @Test func regenerateRejectsSelfLink() throws {
         let (store, _) = try makeStore()
         store.record(input(id: "inv-same"))

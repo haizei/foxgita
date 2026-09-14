@@ -150,6 +150,24 @@ final class AIInvocationStore {
         }
     }
 
+    func latestInvocationID(businessObjectID: String, skillID: String) -> String? {
+        do {
+            guard let profileID = try activeProfileId(), !profileID.isEmpty else { return nil }
+            var descriptor = FetchDescriptor<AIInvocationLog>(
+                predicate: #Predicate {
+                    $0.profileId == profileID
+                        && $0.businessObjectId == businessObjectID
+                        && $0.skillId == skillID
+                },
+                sortBy: [SortDescriptor(\.startedAt, order: .reverse)]
+            )
+            descriptor.fetchLimit = 1
+            return try context.fetch(descriptor).first?.id
+        } catch {
+            return nil
+        }
+    }
+
     func recent(limit: Int = 200) -> [AIInvocationLog] {
         do {
             guard let profileId = try activeProfileId(), !profileId.isEmpty else { return [] }

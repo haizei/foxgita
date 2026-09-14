@@ -69,8 +69,8 @@ struct GitaPracticeExtension: AgentExtension {
             version: skill.version,
             title: skill.title,
             fetchPolicy: FetchPolicy(
-                allowedKinds: skill.id == SkillID.planFromImage ? ["image"] : ["memory"],
-                maxItems: skill.id == SkillID.planFromImage ? 3 : 1,
+                allowedKinds: Self.allowedKinds(for: skill.id),
+                maxItems: Self.maxItems(for: skill.id),
                 maxCharactersPerItem: 6_000,
                 maxTotalCharacters: 6_000
             ),
@@ -80,5 +80,21 @@ struct GitaPracticeExtension: AgentExtension {
             timeoutSeconds: skill.timeout ?? 60,
             allowsFormatRepair: skill.allowsFormatRetry
         )
+    }
+
+    private static func allowedKinds(for skillID: String) -> Set<String> {
+        switch skillID {
+        case SkillID.planFromImage: return ["image"]
+        case SkillID.reviewMedia, SkillID.diagnoseVideo: return ["recording", "image", "memory"]
+        default: return ["memory"]
+        }
+    }
+
+    private static func maxItems(for skillID: String) -> Int {
+        switch skillID {
+        case SkillID.planFromImage: return 3
+        case SkillID.reviewMedia, SkillID.diagnoseVideo: return 9
+        default: return 1
+        }
     }
 }

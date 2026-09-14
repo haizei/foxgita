@@ -27,7 +27,7 @@ struct MediaReviewGeneratorTests {
         }
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         let gen = MediaReviewGenerator(
-            client: StubClient(), credentials: credentials, images: StubImages()
+            runner: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.notConfigured) {
             try await gen.review(context(), baseURL: "", model: "", invocationId: "inv-test")
@@ -51,7 +51,7 @@ struct MediaReviewGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = MediaReviewGenerator(
-            client: StubClient(), credentials: credentials, images: Boom()
+            runner: StubClient(), credentials: credentials, images: Boom()
         )
         await #expect(throws: MediaReviewGeneratorError.prepareFailed) {
             try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -73,7 +73,7 @@ struct MediaReviewGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = MediaReviewGenerator(
-            client: StubClient(), credentials: credentials, images: StubImages()
+            runner: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.failed(.unauthorized)) {
             try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -98,7 +98,7 @@ struct MediaReviewGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = MediaReviewGenerator(
-            client: StubClient(), credentials: credentials, images: Missing()
+            runner: StubClient(), credentials: credentials, images: Missing()
         )
         await #expect(throws: MediaReviewGeneratorError.fileMissing) {
             try await gen.review(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -127,7 +127,7 @@ struct MediaReviewGeneratorTests {
         try credentials.saveAPIKey("sk")
         let client = CaptureClient()
         let gen = MediaReviewGenerator(
-            client: client, credentials: credentials, images: StubImages()
+            runner: client, credentials: credentials, images: StubImages()
         )
         let draft = try await gen.review(
             context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test"
@@ -164,7 +164,7 @@ struct MediaReviewGeneratorTests {
         try credentials.saveAPIKey("sk")
         let client = CaptureClient()
         let gen = MediaReviewGenerator(
-            client: client, credentials: credentials, images: StubImages()
+            runner: client, credentials: credentials, images: StubImages()
         )
         let ctx = MediaReviewContext(
             recordingId: "r1", fileName: "clip.MOV", durationSec: 5,

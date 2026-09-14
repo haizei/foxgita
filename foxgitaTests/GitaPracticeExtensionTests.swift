@@ -135,4 +135,31 @@ struct GitaPracticeExtensionTests {
         #expect(log.inputs.first?.executionState == .failed)
         #expect(log.artifactLinks.isEmpty)
     }
+
+    @Test func mediaReviewRunnerRecordsArtifactAndScopedProvenance() async throws {
+        let content = #"{"highlight":"稳","focus":"换弦","nextAction":"慢练"}"#
+        let response = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": ["content": content]]],
+            "usage": ["prompt_tokens": 12, "completion_tokens": 6],
+        ])
+        TransportMockURLProtocol.handler = { _ in (200, response) }
+        defer { TransportMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [TransportMockURLProtocol.self]
+        let log = InvocationLogSpy()
+        let invocationID = UUID().uuidString
+        let runner = MediaReviewRecipeRunner(session: URLSession(configuration: config), log: log)
+
+        let draft = try await runner.generateReview(
+            baseURL: "https://api.openai.com/v1", model: "model", apiKey: "key",
+            imageJPEGData: [Data([1])], contextText: "recording=r1\nduration=12",
+            invocationId: invocationID
+        )
+
+        #expect(draft.focus == "换弦")
+        #expect(log.inputs.first?.id == invocationID)
+        #expect(log.inputs.first?.executionState == .presenting)
+        #expect(log.inputs.first?.usage?.inputTokens == 12)
+        #expect(log.artifactLinks.count == 1)
+    }
 }

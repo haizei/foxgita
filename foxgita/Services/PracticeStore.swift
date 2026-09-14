@@ -867,10 +867,6 @@ final class PracticeStore {
             for id in recordingIds {
                 guard let rec = try repository.recording(id: id) else { continue }
                 rec.reviewStatus = .pending
-                rec.reviewHighlight = ""
-                rec.reviewFocus = ""
-                rec.reviewNextAction = ""
-                rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
             }
@@ -879,7 +875,6 @@ final class PracticeStore {
     }
 
     func applyReview(recordingId: String, draft: MediaReviewDraft) {
-        var pending: (profileId: String, recordingId: String, focus: String)?
         perform {
             if let rec = try repository.recording(id: recordingId) {
                 rec.reviewStatus = .ready
@@ -889,19 +884,8 @@ final class PracticeStore {
                 rec.videoFindings = []
                 rec.updatedAt = Date()
                 rec.syncState = .local
-                if let profileId = profileId(for: rec) {
-                    pending = (profileId, recordingId, draft.focus)
-                }
             }
             try repository.save()
-        }
-        if lastError == nil, let pending {
-            applyCandidateFocus(
-                profileId: pending.profileId,
-                focus: pending.focus,
-                recordingId: pending.recordingId,
-                skill: .reviewMedia
-            )
         }
     }
 
@@ -936,11 +920,27 @@ final class PracticeStore {
         perform {
             for id in recordingIds {
                 guard let rec = try repository.recording(id: id) else { continue }
-                rec.reviewStatus = .failed
-                rec.reviewHighlight = ""
-                rec.reviewFocus = ""
-                rec.reviewNextAction = ""
-                rec.videoFindings = []
+                let hasExistingResult = !rec.reviewHighlight.isEmpty
+                    || !rec.reviewFocus.isEmpty
+                    || !rec.reviewNextAction.isEmpty
+                    || !rec.videoFindings.isEmpty
+                rec.reviewStatus = hasExistingResult ? .ready : .failed
+                rec.updatedAt = Date()
+                rec.syncState = .local
+            }
+            try repository.save()
+        }
+    }
+
+    func markReviewsCancelled(recordingIds: [String]) {
+        perform {
+            for id in recordingIds {
+                guard let rec = try repository.recording(id: id) else { continue }
+                let hasExistingResult = !rec.reviewHighlight.isEmpty
+                    || !rec.reviewFocus.isEmpty
+                    || !rec.reviewNextAction.isEmpty
+                    || !rec.videoFindings.isEmpty
+                rec.reviewStatus = hasExistingResult ? .ready : .none
                 rec.updatedAt = Date()
                 rec.syncState = .local
             }
