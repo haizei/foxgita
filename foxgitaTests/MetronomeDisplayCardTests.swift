@@ -38,6 +38,8 @@ struct MetronomeDisplayCardTests {
         #expect(MetronomeDisplayCard.Layout.trackHeight == 35)
         #expect(MetronomeDisplayCard.Layout.fourBeatSpacing == 23.5)
         #expect(MetronomeDisplayCard.Layout.fourBeatSideInset == 11.75)
+        #expect(MetronomeDisplayCard.Layout.secondaryPulseWidth == 72)
+        #expect(MetronomeDisplayCard.Layout.weakPulseWidth == 40)
     }
 
     @Test func muteUsesOneNeutralSegmentWhileAccentStrengthKeepsItsSemanticCount() {
@@ -58,11 +60,13 @@ struct MetronomeDisplayCardTests {
     }
 
     @Test func beatTrackPulsePolicyMatchesEachMode() {
-        let weakMain = MetronomeVisualEvent(sequence: 1, beat: 1, kind: .weak, isSubdivision: false)
-        let mediumMain = MetronomeVisualEvent(sequence: 2, beat: 1, kind: .medium, isSubdivision: false)
-        let mutedMain = MetronomeVisualEvent(sequence: 3, beat: 1, kind: .mute, isSubdivision: false)
-        let weakSubdivision = MetronomeVisualEvent(sequence: 4, beat: 1, kind: .weak, isSubdivision: true)
-        let mutedSubdivision = MetronomeVisualEvent(sequence: 5, beat: 1, kind: .mute, isSubdivision: true)
+        let weakMain = MetronomeVisualEvent(sequence: 1, beat: 1, kind: .weak, role: .main)
+        let mediumMain = MetronomeVisualEvent(sequence: 2, beat: 1, kind: .medium, role: .main)
+        let mutedMain = MetronomeVisualEvent(sequence: 3, beat: 1, kind: .mute, role: .main)
+        let secondary = MetronomeVisualEvent(sequence: 4, beat: 1, kind: .weak, role: .secondary)
+        let weakSubdivision = MetronomeVisualEvent(sequence: 5, beat: 1, kind: .weak, role: .weak)
+        let mutedSubdivision = MetronomeVisualEvent(sequence: 6, beat: 1, kind: .mute, role: .weak)
+        let rest = MetronomeVisualEvent(sequence: 7, beat: 1, kind: .weak, role: .rest)
 
         #expect(MetronomeDisplayCard.pulseShape(for: .allBeats, event: weakMain) == .full)
         #expect(MetronomeDisplayCard.pulseShape(for: .allBeats, event: mutedMain) == .full)
@@ -72,7 +76,9 @@ struct MetronomeDisplayCardTests {
         #expect(MetronomeDisplayCard.pulseShape(for: .pendulum, event: weakMain) == .pendulum)
         #expect(MetronomeDisplayCard.pulseShape(for: .pendulum, event: weakSubdivision) == .none)
         #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: weakMain) == .full)
-        #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: weakSubdivision) == .subdivision)
+        #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: secondary) == .secondarySubdivision)
+        #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: weakSubdivision) == .weakSubdivision)
         #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: mutedSubdivision) == .none)
+        #expect(MetronomeDisplayCard.pulseShape(for: .accentsAndSubdivisions, event: rest) == .none)
     }
 }

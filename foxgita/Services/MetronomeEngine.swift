@@ -14,6 +14,13 @@ enum MetronomeError: Error, Equatable {
 
 private let metronomeLog = Logger(subsystem: "com.haizei.foxgita", category: "metronome")
 
+private struct MetronomeRhythmConfiguration: Equatable {
+    var beatsPerBar: Int
+    var denominator: Int
+    var accentPattern: [MetronomeBeatKind]
+    var subdivision: MetronomeSubdivision
+}
+
 /// Sample-accurate metronome. Clicks are scheduled onto exact audio frames a
 /// short distance ahead of the audio clock, so beat spacing comes from the
 /// audio hardware rather than from when the scheduling timer happens to fire.
@@ -26,6 +33,11 @@ final class MetronomeEngine {
     private(set) var denominator = MetronomeMeter.defaultDenominator
     private(set) var accentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
     private(set) var subdivision: MetronomeSubdivision = .quarter
+    private(set) var configuredBeatsPerBar = 4
+    private(set) var configuredDenominator = MetronomeMeter.defaultDenominator
+    private(set) var configuredAccentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
+    private(set) var configuredSubdivision: MetronomeSubdivision = .quarter
+    private(set) var hasPendingRhythmChange = false
     private(set) var soundMode: MetronomeSoundMode = .standard
     private(set) var volume = 80
     private(set) var strongBeatBoost = true
@@ -42,14 +54,25 @@ final class MetronomeEngine {
         MetronomeMeter.encodeAccent(accentPattern)
     }
 
+    var configuredTimeSignatureText: String {
+        MetronomeMeter.format(
+            beats: configuredBeatsPerBar, denominator: configuredDenominator
+        )
+    }
+
+    var configuredAccentPatternRaw: String {
+        MetronomeMeter.encodeAccent(configuredAccentPattern)
+    }
+
     var subdivisionRaw: Int { subdivision.rawValue }
+    var configuredSubdivisionRaw: Int { configuredSubdivision.rawValue }
     var flashOnAccent: Bool { soundMode == .highNoise && isPlaying }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
 
-    @ObservationIgnored private let engine = AVAudioEngine()
-    @ObservationIgnored private let player = AVAudioPlayerNode()
+    @ObservationIgnored private var engine = AVAudioEngine()
+    @ObservationIgnored private var player = AVAudioPlayerNode()
     @ObservationIgnored private let format = AVAudioFormat(
         standardFormatWithSampleRate: 44_100, channels: 1
     )!
@@ -58,6 +81,8 @@ final class MetronomeEngine {
     @ObservationIgnored private var strongAccentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var mediumAccentClick: AVAudioPCMBuffer?
     @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
+    @ObservationIgnored private var secondarySubdivisionClick: AVAudioPCMBuffer?
+    @ObservationIgnored private var weakSubdivisionClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
     @ObservationIgnored private var nextClickFrame: AVAudioFramePosition = 0
     @ObservationIgnored private var beatIndex = 0
@@ -72,8 +97,10 @@ final class MetronomeEngine {
     @ObservationIgnored private var pendingBoundarySubdivision: MetronomeSubdivision?
     @ObservationIgnored private var subdivisionBoundaryCountdown = 0
     @ObservationIgnored private var visualEventSequence = 0
+    @ObservationIgnored private var pendingRhythmChange: MetronomeRhythmConfiguration?
 
     var hapticsEnabled = true
+    var foregroundFeedbackEnabled = true
 
     var isEngineRunning: Bool { engine.isRunning }
     var hasPump: Bool { pump != nil }
@@ -111,29 +138,48 @@ final class MetronomeEngine {
 
     func configureMeter(timeSignature: String?, accentRaw: String?) {
         let parsed = MetronomeMeter.parseTimeSignature(timeSignature)
-        beatsPerBar = parsed.beats
-        denominator = parsed.denominator
-        accentPattern = MetronomeMeter.decodeAccent(accentRaw, beats: parsed.beats)
+        let pattern = MetronomeMeter.decodeAccent(accentRaw, beats: parsed.beats)
+        configuredBeatsPerBar = parsed.beats
+        configuredDenominator = parsed.denominator
+        configuredAccentPattern = pattern
+        if isPlaying {
+            queueConfiguredRhythmChange()
+        } else {
+            applyConfiguredRhythm()
+        }
     }
 
     func setBeatsPerBar(_ value: Int) {
         let clamped = min(MetronomeMeter.maxBeats, max(MetronomeMeter.minBeats, value))
-        guard clamped != beatsPerBar else { return }
-        if clamped > beatsPerBar {
-            accentPattern.append(
-                contentsOf: Array(repeating: MetronomeBeatKind.weak, count: clamped - beatsPerBar)
+        guard clamped != configuredBeatsPerBar else { return }
+        if clamped > configuredBeatsPerBar {
+            configuredAccentPattern.append(
+                contentsOf: Array(
+                    repeating: MetronomeBeatKind.weak,
+                    count: clamped - configuredBeatsPerBar
+                )
             )
         } else {
-            accentPattern = Array(accentPattern.prefix(clamped))
+            configuredAccentPattern = Array(configuredAccentPattern.prefix(clamped))
         }
-        beatsPerBar = clamped
+        configuredBeatsPerBar = clamped
+        if isPlaying {
+            queueConfiguredRhythmChange()
+        } else {
+            applyConfiguredRhythm()
+        }
     }
 
-    func bumpBeatsPerBar(_ delta: Int) { setBeatsPerBar(beatsPerBar + delta) }
+    func bumpBeatsPerBar(_ delta: Int) { setBeatsPerBar(configuredBeatsPerBar + delta) }
 
     func cycleAccent(at index: Int) {
-        guard accentPattern.indices.contains(index) else { return }
-        accentPattern[index].cycle()
+        guard configuredAccentPattern.indices.contains(index) else { return }
+        configuredAccentPattern[index].cycle()
+        if isPlaying {
+            queueConfiguredRhythmChange()
+        } else {
+            applyConfiguredRhythm()
+        }
     }
 
     func cycleBeatTrackMode() {
@@ -141,19 +187,30 @@ final class MetronomeEngine {
     }
 
     func configureSubdivision(raw: Int?) {
-        subdivision = MetronomeSubdivision.decode(raw)
+        configuredSubdivision = MetronomeSubdivision.decode(raw)
+        if isPlaying {
+            queueConfiguredRhythmChange()
+        } else {
+            applyConfiguredRhythm()
+        }
     }
 
     func setSubdivision(_ value: MetronomeSubdivision) {
-        guard value != subdivision else { return }
-        subdivision = value
+        guard value != configuredSubdivision else { return }
+        configuredSubdivision = value
         cancelQueuedSubdivision()
+        if isPlaying {
+            queueConfiguredRhythmChange()
+        } else {
+            applyConfiguredRhythm()
+        }
     }
 
     /// Restores a subdivision before scheduling the downbeat that follows the
     /// requested number of complete bars. This keeps count-in quarter notes
     /// from dropping the first subdivision click in the first training bar.
     func queueSubdivision(_ value: MetronomeSubdivision, afterBars bars: Int) {
+        configuredSubdivision = value
         pendingBoundarySubdivision = value
         subdivisionBoundaryCountdown = max(0, bars)
     }
@@ -169,7 +226,7 @@ final class MetronomeEngine {
 
     func bumpSubdivision(_ delta: Int) {
         let all = Array(MetronomeSubdivision.allCases)
-        guard let index = all.firstIndex(of: subdivision) else { return }
+        guard let index = all.firstIndex(of: configuredSubdivision) else { return }
         let next = index + delta
         guard all.indices.contains(next) else { return }
         setSubdivision(all[next])
@@ -261,6 +318,7 @@ final class MetronomeEngine {
         runToken += 1
         previewRemainingBeats = nil
         previewStopScheduled = false
+        applyConfiguredRhythm()
         session.release(.playback)
         metronomeLog.debug(
             "stop running=\(self.engine.isRunning, privacy: .public) other=\(AVAudioSession.sharedInstance().isOtherAudioPlaying, privacy: .public)"
@@ -269,6 +327,15 @@ final class MetronomeEngine {
 
     func toggle() {
         if isPlaying { stop() } else { try? start() }
+    }
+
+    func prepareAfterAudioServicesReset() {
+        stop()
+        engine.stop()
+        engine = AVAudioEngine()
+        player = AVAudioPlayerNode()
+        graphConfigured = false
+        metronomeLog.notice("audio graph reset after media-services reset")
     }
 
     private func configureGraphIfNeeded() {
@@ -284,7 +351,9 @@ final class MetronomeEngine {
               let accent = accentClick,
               let strongAccent = strongAccentClick,
               let mediumAccent = mediumAccentClick,
-              let beat = beatClick else { return }
+              let beat = beatClick,
+              let secondarySubdivision = secondarySubdivisionClick,
+              let weakSubdivision = weakSubdivisionClick else { return }
         let now = currentFrame()
         if nextClickFrame < now {
             nextClickFrame = now + frames(0.05)
@@ -295,16 +364,20 @@ final class MetronomeEngine {
         let horizon = now + frames(Self.lead)
         while nextClickFrame <= horizon {
             let scheduledFrame = nextClickFrame
-            let beatInBar = beatIndex % beatsPerBar
+            var beatInBar = beatIndex % beatsPerBar
             var appliedBPM: Int?
             if subClickIndex == 0, beatInBar == 0 {
                 applyPendingSubdivisionAtDownbeatIfNeeded()
+                if applyPendingRhythmAtDownbeatIfNeeded() {
+                    beatInBar = 0
+                }
                 if let pendingBoundaryBPM {
                     schedulerBPM = pendingBoundaryBPM
                     appliedBPM = pendingBoundaryBPM
                     self.pendingBoundaryBPM = nil
                 }
             }
+            let step = subdivision.steps[subClickIndex]
             if subClickIndex == 0 {
                 scheduleTimelineEvent(
                     MetronomeTimelineEvent(
@@ -315,33 +388,33 @@ final class MetronomeEngine {
                 )
             }
             let beatKind = accentPattern[beatInBar]
-            scheduleVisualEvent(
-                beat: beatInBar,
-                kind: beatKind,
-                isSubdivision: subClickIndex != 0,
-                at: scheduledFrame,
-                now: now
-            )
-            if beatKind != .mute {
-                let buffer: AVAudioPCMBuffer
-                switch beatKind {
-                case .strong:
-                    let strongBuffer = strongBeatBoost ? strongAccent : accent
-                    buffer = (subClickIndex == 0) ? strongBuffer : beat
-                case .medium:
-                    buffer = (subClickIndex == 0) ? mediumAccent : beat
-                case .weak:
-                    buffer = beat
-                case .mute:
-                    buffer = beat
-                }
+            if step.role != .rest, (beatKind != .mute || step.role == .main) {
+                scheduleVisualEvent(
+                    beat: beatInBar,
+                    kind: beatKind,
+                    role: step.role,
+                    at: scheduledFrame,
+                    now: now
+                )
+            }
+            if beatKind != .mute,
+               let buffer = clickBuffer(
+                   for: step.role,
+                   beatKind: beatKind,
+                   accent: accent,
+                   strongAccent: strongAccent,
+                   mediumAccent: mediumAccent,
+                   beat: beat,
+                   secondarySubdivision: secondarySubdivision,
+                   weakSubdivision: weakSubdivision
+               ) {
                 player.scheduleBuffer(
                     buffer,
                     at: AVAudioTime(sampleTime: nextClickFrame, atRate: format.sampleRate),
                     options: [],
                     completionHandler: nil
                 )
-                if beatKind == .strong && subClickIndex == 0 {
+                if beatKind == .strong && step.role == .main {
                     scheduleDownbeatHaptic(at: nextClickFrame, now: now)
                 }
             }
@@ -380,7 +453,7 @@ final class MetronomeEngine {
     private func scheduleVisualEvent(
         beat: Int,
         kind: MetronomeBeatKind,
-        isSubdivision: Bool,
+        role: MetronomePulseRole,
         at frame: AVAudioFramePosition,
         now: AVAudioFramePosition
     ) {
@@ -389,12 +462,13 @@ final class MetronomeEngine {
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isPlaying, self.runToken == token else { return }
+                guard self.foregroundFeedbackEnabled else { return }
                 self.visualEventSequence += 1
                 let event = MetronomeVisualEvent(
                     sequence: self.visualEventSequence,
                     beat: beat,
                     kind: kind,
-                    isSubdivision: isSubdivision
+                    role: role
                 )
                 self.visualEvent = event
                 self.onVisualEvent?(event)
@@ -471,19 +545,60 @@ final class MetronomeEngine {
             amplitude: recipe.beatAmplitude * volumeScale,
             decay: recipe.decay
         )
+        secondarySubdivisionClick = Self.makeClick(
+            format: format,
+            frequency: (recipe.accentFrequency + recipe.beatFrequency) / 2.0,
+            amplitude: recipe.beatAmplitude * volumeScale
+                * MetronomePulseRole.secondary.relativeGain,
+            decay: recipe.decay
+        )
+        weakSubdivisionClick = Self.makeClick(
+            format: format,
+            frequency: recipe.beatFrequency,
+            amplitude: recipe.beatAmplitude * volumeScale
+                * MetronomePulseRole.weak.relativeGain,
+            decay: recipe.decay
+        )
     }
 
     private func intervalToNextClick() -> AVAudioFramePosition {
         let beatDuration = 60.0 / Double(schedulerBPM)
-        let offsets = subdivision.clickOffsets
-        let currentOffset = offsets[subClickIndex]
+        let steps = subdivision.steps
+        let currentOffset = steps[subClickIndex].offset
         let delta: Double
-        if subClickIndex + 1 < offsets.count {
-            delta = offsets[subClickIndex + 1] - currentOffset
+        if subClickIndex + 1 < steps.count {
+            delta = steps[subClickIndex + 1].offset - currentOffset
         } else {
-            delta = 1.0 - currentOffset + offsets[0]
+            delta = 1.0 - currentOffset + steps[0].offset
         }
         return frames(delta * beatDuration)
+    }
+
+    private func clickBuffer(
+        for role: MetronomePulseRole,
+        beatKind: MetronomeBeatKind,
+        accent: AVAudioPCMBuffer,
+        strongAccent: AVAudioPCMBuffer,
+        mediumAccent: AVAudioPCMBuffer,
+        beat: AVAudioPCMBuffer,
+        secondarySubdivision: AVAudioPCMBuffer,
+        weakSubdivision: AVAudioPCMBuffer
+    ) -> AVAudioPCMBuffer? {
+        switch role {
+        case .main:
+            switch beatKind {
+            case .strong: return strongBeatBoost ? strongAccent : accent
+            case .medium: return mediumAccent
+            case .weak: return beat
+            case .mute: return nil
+            }
+        case .secondary:
+            return secondarySubdivision
+        case .weak:
+            return weakSubdivision
+        case .rest:
+            return nil
+        }
     }
 
     private func applyPendingSubdivisionAtDownbeatIfNeeded() {
@@ -496,8 +611,61 @@ final class MetronomeEngine {
         self.pendingBoundarySubdivision = nil
     }
 
+    private var currentRhythm: MetronomeRhythmConfiguration {
+        MetronomeRhythmConfiguration(
+            beatsPerBar: beatsPerBar,
+            denominator: denominator,
+            accentPattern: accentPattern,
+            subdivision: subdivision
+        )
+    }
+
+    private var configuredRhythm: MetronomeRhythmConfiguration {
+        MetronomeRhythmConfiguration(
+            beatsPerBar: configuredBeatsPerBar,
+            denominator: configuredDenominator,
+            accentPattern: configuredAccentPattern,
+            subdivision: configuredSubdivision
+        )
+    }
+
+    private func queueConfiguredRhythmChange() {
+        let target = configuredRhythm
+        if target == currentRhythm {
+            pendingRhythmChange = nil
+            hasPendingRhythmChange = false
+        } else {
+            pendingRhythmChange = target
+            hasPendingRhythmChange = true
+        }
+    }
+
+    private func applyConfiguredRhythm() {
+        apply(configuredRhythm)
+        pendingRhythmChange = nil
+        hasPendingRhythmChange = false
+    }
+
+    @discardableResult
+    private func applyPendingRhythmAtDownbeatIfNeeded() -> Bool {
+        guard let pendingRhythmChange else { return false }
+        apply(pendingRhythmChange)
+        self.pendingRhythmChange = nil
+        hasPendingRhythmChange = false
+        beatIndex = 0
+        subClickIndex = 0
+        return true
+    }
+
+    private func apply(_ rhythm: MetronomeRhythmConfiguration) {
+        beatsPerBar = rhythm.beatsPerBar
+        denominator = rhythm.denominator
+        accentPattern = rhythm.accentPattern
+        subdivision = rhythm.subdivision
+    }
+
     private func advanceClickPosition() {
-        if subClickIndex + 1 < subdivision.clickOffsets.count {
+        if subClickIndex + 1 < subdivision.steps.count {
             subClickIndex += 1
         } else {
             subClickIndex = 0
@@ -506,12 +674,13 @@ final class MetronomeEngine {
     }
 
     private func scheduleDownbeatHaptic(at frame: AVAudioFramePosition, now: AVAudioFramePosition) {
-        guard hapticsEnabled else { return }
+        guard hapticsEnabled, foregroundFeedbackEnabled else { return }
         let token = runToken
         let delay = Double(frame - now) / format.sampleRate
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isPlaying, self.runToken == token else { return }
+                guard self.foregroundFeedbackEnabled else { return }
                 Haptics.downbeat()
             }
         }

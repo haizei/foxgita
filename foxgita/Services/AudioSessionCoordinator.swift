@@ -1,5 +1,10 @@
 import AVFoundation
 import Foundation
+import os
+
+private let audioSessionLog = Logger(
+    subsystem: "com.haizei.foxgita", category: "audio-session"
+)
 
 @MainActor
 final class AudioSessionCoordinator {
@@ -13,10 +18,12 @@ final class AudioSessionCoordinator {
     enum InterruptionEvent: Equatable, Sendable {
         case began
         case ended(shouldResume: Bool)
+        case outputRouteLost
+        case audioServicesReset
     }
 
     private var needCounts: [Need: Int] = [:]
-    private var observer: NSObjectProtocol?
+    private var observers: [NSObjectProtocol] = []
     private let applyOverride: (@MainActor () throws -> Void)?
     private var interruptionObservers: [UUID: (InterruptionEvent) -> Void] = [:]
 
@@ -25,17 +32,33 @@ final class AudioSessionCoordinator {
     init(apply: (@MainActor () throws -> Void)? = nil) {
         applyOverride = apply
         guard apply == nil else { return }
-        observer = NotificationCenter.default.addObserver(
+        observers.append(NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: AVAudioSession.sharedInstance(),
             queue: .main
         ) { [weak self] note in
             MainActor.assumeIsolated { self?.handleInterruption(note) }
-        }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: AVAudioSession.routeChangeNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] note in
+            MainActor.assumeIsolated { self?.handleRouteChange(note) }
+        })
+        observers.append(NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: AVAudioSession.sharedInstance(),
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.notifyInterruptionForTesting(.audioServicesReset)
+            }
+        })
     }
 
     deinit {
-        if let observer { NotificationCenter.default.removeObserver(observer) }
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
     }
 
     func count(for need: Need) -> Int { needCounts[need, default: 0] }
@@ -118,8 +141,17 @@ final class AudioSessionCoordinator {
         }
     }
 
+    private func handleRouteChange(_ note: Notification) {
+        guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+              AVAudioSession.RouteChangeReason(rawValue: raw) == .oldDeviceUnavailable else {
+            return
+        }
+        notifyInterruptionForTesting(.outputRouteLost)
+    }
+
     func notifyInterruptionForTesting(_ event: InterruptionEvent) {
-        if event == .began { needCounts.removeAll() }
+        if event == .began || event == .audioServicesReset { needCounts.removeAll() }
+        audioSessionLog.notice("lifecycle event=\(String(describing: event), privacy: .public)")
         let callbacks = Array(interruptionObservers.values)
         for observer in callbacks { observer(event) }
     }

@@ -9,7 +9,8 @@ struct MetronomeDisplayCard: View {
     enum BeatTrackPulseShape: Equatable {
         case none
         case full
-        case subdivision
+        case secondarySubdivision
+        case weakSubdivision
         case pendulum
     }
 
@@ -26,6 +27,8 @@ struct MetronomeDisplayCard: View {
         static let fourBeatSpacing: CGFloat = 23.5
         static let fourBeatSideInset: CGFloat = 11.75
         static let barCornerRadius: CGFloat = 6
+        static let secondaryPulseWidth: CGFloat = 72
+        static let weakPulseWidth: CGFloat = 40
     }
 
     let metronome: MetronomeEngine
@@ -38,13 +41,11 @@ struct MetronomeDisplayCard: View {
     @State private var pendulumAtTrailing = false
     @State private var visibleModeName: String?
     @State private var pulseResetTask: Task<Void, Never>?
+    @State private var beatBarResetTask: Task<Void, Never>?
     @State private var modeNameTask: Task<Void, Never>?
+    @State private var activeBeat: Int?
 
     private var meterText: String { metronome.timeSignatureText }
-
-    private var activeBeat: Int? {
-        metronome.isPlaying ? metronome.currentBeatInBar : nil
-    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -93,16 +94,17 @@ struct MetronomeDisplayCard: View {
         .shadow(color: GitaTheme.shadowCard, radius: 16, y: 4)
         .onChange(of: metronome.visualEvent) { _, event in
             guard let event else {
-                resetBeatTrackFeedback()
+                resetPlaybackFeedback()
                 return
             }
             handleVisualEvent(event)
         }
         .onChange(of: metronome.isPlaying) { _, isPlaying in
-            if !isPlaying { resetBeatTrackFeedback() }
+            if !isPlaying { resetPlaybackFeedback() }
         }
         .onDisappear {
             pulseResetTask?.cancel()
+            beatBarResetTask?.cancel()
             modeNameTask?.cancel()
         }
         .accessibilityElement(children: .contain)
@@ -272,17 +274,23 @@ struct MetronomeDisplayCard: View {
     ) -> BeatTrackPulseShape {
         switch mode {
         case .allBeats:
-            return event.isSubdivision ? .none : .full
+            return event.role == .main ? .full : .none
         case .accents:
-            guard !event.isSubdivision, event.kind == .medium || event.kind == .strong else {
+            guard event.role == .main,
+                  event.kind == .medium || event.kind == .strong else {
                 return .none
             }
             return .full
         case .pendulum:
-            return event.isSubdivision ? .none : .pendulum
+            return event.role == .main ? .pendulum : .none
         case .accentsAndSubdivisions:
             guard event.kind != .mute else { return .none }
-            return event.isSubdivision ? .subdivision : .full
+            switch event.role {
+            case .main: return .full
+            case .secondary: return .secondarySubdivision
+            case .weak: return .weakSubdivision
+            case .rest: return .none
+            }
         }
     }
 
@@ -304,10 +312,14 @@ struct MetronomeDisplayCard: View {
                     if trackPulseShape == .full {
                         RoundedRectangle(cornerRadius: GitaTheme.radius8)
                             .fill(Self.fillColor(for: trackPulseKind, isActive: false))
-                    } else if trackPulseShape == .subdivision {
+                    } else if trackPulseShape == .secondarySubdivision {
                         RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.58))
-                            .frame(width: 56)
+                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.72))
+                            .frame(width: Layout.secondaryPulseWidth)
+                    } else if trackPulseShape == .weakSubdivision {
+                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.46))
+                            .frame(width: Layout.weakPulseWidth)
                     }
 
                     if metronome.beatTrackMode == .pendulum {
@@ -342,6 +354,10 @@ struct MetronomeDisplayCard: View {
     }
 
     private func handleVisualEvent(_ event: MetronomeVisualEvent) {
+        if event.role == .main {
+            showBeatBarPulse(for: event.beat)
+        }
+
         let shape = Self.pulseShape(for: metronome.beatTrackMode, event: event)
         guard shape != .none else { return }
         trackPulseKind = event.kind
@@ -361,11 +377,34 @@ struct MetronomeDisplayCard: View {
             trackPulseShape = shape
         }
         pulseResetTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(180))
+            try? await Task.sleep(for: pulseDuration(for: shape))
             guard !Task.isCancelled else { return }
             withAnimation(reduceMotion ? nil : .easeIn(duration: 0.1)) {
                 trackPulseShape = .none
             }
+        }
+    }
+
+    private func showBeatBarPulse(for beat: Int) {
+        beatBarResetTask?.cancel()
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.06)) {
+            activeBeat = beat
+        }
+        beatBarResetTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(120))
+            guard !Task.isCancelled else { return }
+            withAnimation(reduceMotion ? nil : .easeIn(duration: 0.08)) {
+                activeBeat = nil
+            }
+        }
+    }
+
+    private func pulseDuration(for shape: BeatTrackPulseShape) -> Duration {
+        switch shape {
+        case .full: .milliseconds(180)
+        case .secondarySubdivision: .milliseconds(120)
+        case .weakSubdivision: .milliseconds(90)
+        case .none, .pendulum: .zero
         }
     }
 
@@ -383,10 +422,12 @@ struct MetronomeDisplayCard: View {
         }
     }
 
-    private func resetBeatTrackFeedback() {
+    private func resetPlaybackFeedback() {
         pulseResetTask?.cancel()
+        beatBarResetTask?.cancel()
         trackPulseShape = .none
         pendulumAtTrailing = false
+        activeBeat = nil
     }
 
     private func metricLabel(_ text: String) -> some View {

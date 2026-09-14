@@ -36,9 +36,17 @@ _Avoid_: 灯效、动画样式、播放模式
 主拍到达时 Beat Track 的整条短时反馈；颜色跟随该拍的强、次强、普通或静音等级。
 _Avoid_: 闪一下、主灯
 
-**Subdivision Pulse**:
-“重音及次节拍”模式中，切分次拍到达时 Beat Track 中央较窄、较浅的短时反馈；静音拍所属的次拍不产生反馈。
-_Avoid_: 次强拍、弱拍闪烁
+**Secondary Pulse**:
+一拍内部的次要支点，例如四个十六分音符中的第三下；力度低于 Main Beat Pulse、高于 Weak Subdivision Pulse。
+_Avoid_: 次强拍、第二拍
+
+**Weak Subdivision Pulse**:
+一拍内部除 Secondary Pulse 外的轻拍；力度低于所属主拍，只在“重音及次节拍”模式中产生较窄、较浅的 Beat Track 反馈。
+_Avoid_: 弱拍、普通拍
+
+**Rest Position**:
+节奏型中占据时间但不发声、不中断拍内推进的位置；它不产生 Beat Bars、Beat Track 或触觉反馈。
+_Avoid_: 静音拍、跳过的拍
 
 **Pendulum Feedback**:
 “单摆”模式中随每个主拍在 Beat Track 两端交替移动的反馈；颜色跟随拍级，切分次拍不改变方向，停止后回到左端。
@@ -72,25 +80,66 @@ _Avoid_: TempoRampRuntime、变速 Session
 一次已经开始的节拍器专项训练结果，记录完成原因、最高稳定 BPM 和暂停/中断次数。
 _Avoid_: PracticeSession、TempoRampRuntime
 
+**Metronome Playback Run**:
+从用户开始播放到明确暂停或停止之间的一次连续节拍过程；自动熄屏、手动锁屏和进入后台不会自行结束它。
+_Avoid_: Playback Session、后台任务
+
+**Playback Continuity**:
+Metronome Playback Run 在亮屏、锁屏和后台之间保持拍点与练习计时连续的产品承诺。
+_Avoid_: 后台保活、锁屏不断音
+
+**Recording Continuity**:
+练习录音在自动熄屏、手动锁屏和进入后台后仍保持连续，直到用户停止或发生 Playback Interruption。
+_Avoid_: 后台录音、锁屏录音模式
+
+**Recording Segment**:
+两次明确开始与结束之间连续采集的练习音频；Playback Interruption 会保存并结束当前片段，恢复后的录音属于新片段。
+_Avoid_: 跨打断录音、临时录音文件
+
+**Playback Interruption**:
+来电、Siri 或独占音频等系统事件强制结束当前连续播放的状态；事件结束后必须由用户明确恢复。
+_Avoid_: 临时卡顿、自动续播
+
+**Audio Service Reset**:
+系统使当前音频引擎失效、无法继续保证原有拍点的事件；它同时暂停节拍器和练习计时，并等待用户明确恢复。
+_Avoid_: 自动重连、普通音频打断
+
+**Output Route Loss**:
+当前耳机或音箱离开音频输出路径的事件；它会安全暂停播放，禁止无提示地切换到手机扬声器。
+_Avoid_: 蓝牙断开、自动外放
+
+**Foreground Beat Feedback**:
+仅在应用位于前台时呈现的 Beat Bars、Beat Track 和强拍触觉反馈；锁屏或后台时，音频与练习计时继续，但此反馈暂停。
+_Avoid_: 后台动画、锁屏震动
+
+**Current Rhythm Configuration**:
+当前实际控制小节结构、声音和 Foreground Beat Feedback 的拍号、细分与重音原子配置。
+_Avoid_: 当前按钮、当前细分
+
+**Configured Rhythm Configuration**:
+用户最后选择、用于下一次开始播放的拍号、细分与重音原子配置；没有待提交变化时，它与 Current Rhythm Configuration 相同。
+_Avoid_: 默认节奏、保存值
+
+**Pending Rhythm Change**:
+播放中最后一次请求、尚未到 Bar Boundary 生效的完整节奏配置；新请求整体替换旧请求，停止或打断前仍未提交时则成为 Configured Rhythm Configuration。
+_Avoid_: 立即切换、局部待办、待切细分
+
+**Playback Reliability Baseline**:
+Metronome Playback Run 必须通过的两小时稳定性承诺，覆盖锁屏、音频边界和高负载配置变化，且不得崩溃、漏拍、重复拍或持续增长内存。
+_Avoid_: 冒烟测试、听起来正常
+
+**Saved Metronome Configuration**:
+跨练习访问保留的拍号、细分、重音和声音选择；它独立于一次练习是否形成有效记录。
+_Avoid_: Practice Session 配置、空练习记录
+
+**Playback Diagnostic Event**:
+用于重建播放生命周期的非内容事件，只包含时间、节拍配置、状态、错误码和设备路由类型，不包含练习内容或用户身份。
+_Avoid_: 用户行为日志、逐拍日志
+
 **Bar Boundary**:
-由节拍器音频时间线定义的下一小节首拍，是 TAP 采用和变速阶段切换的提交点。
+由节拍器音频时间线定义的下一小节首拍，是 TAP 采用、变速阶段切换和 Pending Rhythm Change 的提交点。
 _Avoid_: UI 小节边界、Timer 边界
 
 **Target Hold**:
 完成目标速度的完整阶段后，节拍器继续以目标 BPM 播放的训练状态。
 _Avoid_: 训练已退出、普通播放
-
-## Decisions (updated 2026-09-11, Metronome tempo training)
-
-- **Sheet 架构**：Speed Sheet 独立；Meter + Subdivision 保持合并 Meter Sheet；Sound Sheet 已独立。
-- **Display Card**：移除 tempo name 与速度图标，速度列只显示居中的 BPM（tempo name 仅在 Speed Sheet）。
-- **验收标准**：像素级对齐 Figma `703:104`（含图标资产、spacing token）。
-- **TAP 测速**：纳入 Speed Sheet；只保留一个 TAP 入口，结果需显式采用。
-- **Tempo Ramp Settings**：使用 B Segmented 扩展状态，不叠加第二个 sheet。
-- **Tempo Ruler 范围**：按 A Compact 显示并直接拖动 40–160；Engine、± 和 TAP 仍支持 40–200。
-- **训练边界**：TAP 采用和变速阶段切换只在音频时间线的小节首拍提交。
-- **训练持久化**：Schema V18 使用独立 TempoRampPlan 和 MetronomeTrainingSession；不复用 PracticeSession。
-- **Beat Bars 色阶**：普通 `#FFCCA6`、次强 `#FF9961`、强 `#FF6B1A`、静音 `#BDC2C9`；连续填充格不显示内部缝隙。
-- **Beat Track 交互**：点击按“所有节拍 → 重音节拍 → 单摆 → 重音及次节拍”循环；模式仅在当前练习内保留，静音拍在所有节拍与单摆模式中仍提供灰色视觉反馈。
-- **图标资产**：从 Figma 导出 PNG/SVG 入 `Assets.xcassets`（速度图标、Sound 模式图标、Beat Track SVG）。
-- **实现顺序**：1 tokens/资产 → 2 Display Card → 3 Speed Sheet → 4 Meter Sheet。

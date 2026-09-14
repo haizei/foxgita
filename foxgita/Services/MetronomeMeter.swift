@@ -89,7 +89,7 @@ struct MetronomeVisualEvent: Equatable {
     let sequence: Int
     let beat: Int
     let kind: MetronomeBeatKind
-    let isSubdivision: Bool
+    let role: MetronomePulseRole
 }
 
 enum MetronomeMeter {

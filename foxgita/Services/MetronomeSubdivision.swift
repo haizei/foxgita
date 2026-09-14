@@ -5,6 +5,27 @@
 
 import Foundation
 
+enum MetronomePulseRole: Equatable {
+    case main
+    case secondary
+    case weak
+    case rest
+
+    var relativeGain: Double {
+        switch self {
+        case .main: return 1.0
+        case .secondary: return 0.85
+        case .weak: return 0.65
+        case .rest: return 0
+        }
+    }
+}
+
+struct MetronomeSubdivisionStep: Equatable {
+    let offset: Double
+    let role: MetronomePulseRole
+}
+
 /// Eight rhythm patterns aligned with `metronome-subdivision-sprite.png` / note-1…note-8 assets.
 enum MetronomeSubdivision: Int, CaseIterable, Identifiable, Equatable {
     case quarter = 0
@@ -33,18 +54,52 @@ enum MetronomeSubdivision: Int, CaseIterable, Identifiable, Equatable {
         }
     }
 
-    /// Click positions within one beat interval, as fractions from 0 (inclusive) to 1 (exclusive).
-    var clickOffsets: [Double] {
+    /// Timed positions within one beat. Rest positions remain in the sequence so
+    /// beat boundaries never depend on the first audible click.
+    var steps: [MetronomeSubdivisionStep] {
         switch self {
-        case .quarter: [0]
-        case .twoEighths: [0, 0.5]
-        case .eighthRestEighth: [0.5]
-        case .triplet: [0, 1.0 / 3.0, 2.0 / 3.0]
-        case .tripletRestFirst: [1.0 / 3.0, 2.0 / 3.0]
-        case .tripletRestLast: [0, 1.0 / 3.0]
-        case .twoEighthRest: [0, 0.5]
-        case .fourSixteenths: [0, 0.25, 0.5, 0.75]
+        case .quarter:
+            [MetronomeSubdivisionStep(offset: 0, role: .main)]
+        case .twoEighths:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .main),
+                MetronomeSubdivisionStep(offset: 0.5, role: .weak),
+            ]
+        case .eighthRestEighth:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .rest),
+                MetronomeSubdivisionStep(offset: 0.5, role: .weak),
+            ]
+        case .triplet:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .main),
+                MetronomeSubdivisionStep(offset: 1.0 / 3.0, role: .weak),
+                MetronomeSubdivisionStep(offset: 2.0 / 3.0, role: .weak),
+            ]
+        case .tripletRestFirst:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .rest),
+                MetronomeSubdivisionStep(offset: 1.0 / 3.0, role: .weak),
+                MetronomeSubdivisionStep(offset: 2.0 / 3.0, role: .weak),
+            ]
+        case .tripletRestLast, .twoEighthRest:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .main),
+                MetronomeSubdivisionStep(offset: 1.0 / 3.0, role: .weak),
+                MetronomeSubdivisionStep(offset: 2.0 / 3.0, role: .rest),
+            ]
+        case .fourSixteenths:
+            [
+                MetronomeSubdivisionStep(offset: 0, role: .main),
+                MetronomeSubdivisionStep(offset: 0.25, role: .weak),
+                MetronomeSubdivisionStep(offset: 0.5, role: .secondary),
+                MetronomeSubdivisionStep(offset: 0.75, role: .weak),
+            ]
         }
+    }
+
+    var clickOffsets: [Double] {
+        steps.filter { $0.role != .rest }.map(\.offset)
     }
 
     static func decode(_ raw: Int?) -> MetronomeSubdivision {

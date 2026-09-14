@@ -19,11 +19,11 @@ struct MetronomeSettingsSheet: View {
     }
 
     private var canDecreaseSubdivision: Bool {
-        subdivisionCases.first != metronome.subdivision
+        subdivisionCases.first != metronome.configuredSubdivision
     }
 
     private var canIncreaseSubdivision: Bool {
-        subdivisionCases.last != metronome.subdivision
+        subdivisionCases.last != metronome.configuredSubdivision
     }
 
     var body: some View {
@@ -35,6 +35,11 @@ struct MetronomeSettingsSheet: View {
                             Label("变速训练中，可查看但暂不能修改", systemImage: "lock.fill")
                                 .font(GitaFont.caption())
                                 .foregroundStyle(GitaTheme.textSecondary)
+                        }
+                        if metronome.hasPendingRhythmChange {
+                            Label("下一小节生效", systemImage: "clock.arrow.circlepath")
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.brand500)
                         }
                         meterControls
                             .id(MetronomeSheetAnchor.meter.scrollSectionID)
@@ -71,14 +76,16 @@ struct MetronomeSettingsSheet: View {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
-                        enabled: !isLocked && metronome.beatsPerBar > MetronomeMeter.minBeats
+                        enabled: !isLocked
+                            && metronome.configuredBeatsPerBar > MetronomeMeter.minBeats
                     ) {
                         metronome.bumpBeatsPerBar(-1)
                     }
                     MetronomeStepButton(
                         kind: .increase,
                         diameter: stepButtonSize,
-                        enabled: !isLocked && metronome.beatsPerBar < MetronomeMeter.maxBeats
+                        enabled: !isLocked
+                            && metronome.configuredBeatsPerBar < MetronomeMeter.maxBeats
                     ) {
                         metronome.bumpBeatsPerBar(1)
                     }
@@ -89,7 +96,9 @@ struct MetronomeSettingsSheet: View {
                 Text(String(localized: "拍号"))
                     .font(GitaFont.micro())
                     .foregroundStyle(GitaTheme.textSecondary)
-                Text("\(metronome.beatsPerBar) / \(metronome.denominator)")
+                Text(
+                    "\(metronome.configuredBeatsPerBar) / \(metronome.configuredDenominator)"
+                )
                     .font(GitaFont.title(.bold))
                     .foregroundStyle(GitaTheme.brand500)
                     .monospacedDigit()
@@ -151,9 +160,9 @@ struct MetronomeSettingsSheet: View {
 
     @ViewBuilder
     private var accentSequenceView: some View {
-        if metronome.beatsPerBar <= 4 {
+        if metronome.configuredBeatsPerBar <= 4 {
             HStack(spacing: 8) {
-                ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                ForEach(0..<metronome.configuredBeatsPerBar, id: \.self) { index in
                     accentBeatButton(for: index)
                         .frame(maxWidth: .infinity)
                 }
@@ -167,7 +176,7 @@ struct MetronomeSettingsSheet: View {
         } else {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
-                    ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                    ForEach(0..<metronome.configuredBeatsPerBar, id: \.self) { index in
                         accentBeatButton(for: index)
                             .frame(width: 80)
                     }
@@ -183,8 +192,8 @@ struct MetronomeSettingsSheet: View {
     }
 
     private func accentBeatButton(for index: Int) -> some View {
-        let kind = metronome.accentPattern.indices.contains(index)
-            ? metronome.accentPattern[index]
+        let kind = metronome.configuredAccentPattern.indices.contains(index)
+            ? metronome.configuredAccentPattern[index]
             : MetronomeBeatKind.weak
 
         return Button {
@@ -223,7 +232,7 @@ struct MetronomeSettingsSheet: View {
     }
 
     private func subdivisionCell(_ value: MetronomeSubdivision) -> some View {
-        let selected = metronome.subdivision == value
+        let selected = metronome.configuredSubdivision == value
         return Button {
             metronome.setSubdivision(value)
             Haptics.selection()

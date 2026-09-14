@@ -155,6 +155,24 @@ struct PracticeDetailStateTests {
         )
     }
 
+    @Test func screenStaysAwakeOnlyForForegroundMetronomePlayback() {
+        #expect(
+            PracticeDetailState.shouldPreventScreenSleep(
+                isMetronomePlaying: true, isForeground: true
+            )
+        )
+        #expect(
+            !PracticeDetailState.shouldPreventScreenSleep(
+                isMetronomePlaying: false, isForeground: true
+            )
+        )
+        #expect(
+            !PracticeDetailState.shouldPreventScreenSleep(
+                isMetronomePlaying: true, isForeground: false
+            )
+        )
+    }
+
     @Test func timerStartsFromStoredDurationSeconds() {
         #expect(PracticeDetailState.initialElapsedSeconds(storedDurationSeconds: 600) == 600)
         #expect(PracticeDetailState.initialElapsedSeconds(storedDurationSeconds: 0) == 0)

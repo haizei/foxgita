@@ -29,9 +29,22 @@
 		FBAA0200000000000000B001 /* foxgitaUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = foxgitaUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		FBAC10000000000000000001 /* Exceptions for "foxgita" folder in "foxgita" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = FB8CA63D3018313200AC9BD6 /* foxgita */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		FB8CA6403018313200AC9BD6 /* foxgita */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				FBAC10000000000000000001 /* Exceptions for "foxgita" folder in "foxgita" target */,
+			);
 			path = foxgita;
 			sourceTree = "<group>";
 		};
@@ -399,6 +412,7 @@
 				DEVELOPMENT_TEAM = QB7SGWNASM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = foxgita/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Gita;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便在练习时录下视频。";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便在练习时录下片段供你回听。";
@@ -434,6 +448,7 @@
 				DEVELOPMENT_TEAM = QB7SGWNASM;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = foxgita/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Gita;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便在练习时录下视频。";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便在练习时录下片段供你回听。";

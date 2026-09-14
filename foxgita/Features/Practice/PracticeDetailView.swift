@@ -5,6 +5,12 @@
 
 import SwiftData
 import SwiftUI
+import UIKit
+import os
+
+private let practiceMetronomeLog = Logger(
+    subsystem: "com.haizei.foxgita", category: "metronome-lifecycle"
+)
 
 enum PracticeDetailMode: Equatable {
     case editable
@@ -94,6 +100,12 @@ enum PracticeDetailState {
         mode == .editable
     }
 
+    static func shouldPreventScreenSleep(
+        isMetronomePlaying: Bool, isForeground: Bool
+    ) -> Bool {
+        isMetronomePlaying && isForeground
+    }
+
     static func shouldAllowComplete(mode: PracticeDetailMode) -> Bool {
         mode == .editable
     }
@@ -123,6 +135,7 @@ struct PracticeDetailView: View {
     @Environment(ReviewJobRunner.self) private var reviewRunner
     @Environment(MemoryConsentCoordinator.self) private var consent
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.scenePhase) private var scenePhase
     @Query private var items: [PracticeItem]
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var allPracticeItems: [PracticeItem]
@@ -222,11 +235,11 @@ struct PracticeDetailView: View {
             storedSteps: storedSteps,
             bpm: metronome.bpm,
             storedBpm: storedBpm,
-            timeSignature: metronome.timeSignatureText,
+            timeSignature: metronome.configuredTimeSignatureText,
             storedTimeSignature: storedTimeSignature,
-            accentPatternRaw: metronome.accentPatternRaw,
+            accentPatternRaw: metronome.configuredAccentPatternRaw,
             storedAccentPatternRaw: storedAccentPatternRaw,
-            subdivisionRaw: metronome.subdivisionRaw,
+            subdivisionRaw: metronome.configuredSubdivisionRaw,
             storedSubdivisionRaw: storedSubdivisionRaw,
             metronomeSoundModeRaw: metronome.soundMode.rawValue,
             storedMetronomeSoundModeRaw: storedMetronomeSoundModeRaw,
@@ -335,9 +348,9 @@ struct PracticeDetailView: View {
                     volume: item.metronomeVolume,
                     strongBeatBoost: item.metronomeStrongBeatBoost
                 )
-                storedTimeSignature = metronome.timeSignatureText
-                storedAccentPatternRaw = metronome.accentPatternRaw
-                storedSubdivisionRaw = metronome.subdivisionRaw
+                storedTimeSignature = metronome.configuredTimeSignatureText
+                storedAccentPatternRaw = metronome.configuredAccentPatternRaw
+                storedSubdivisionRaw = metronome.configuredSubdivisionRaw
                 storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
                 storedMetronomeVolume = metronome.volume
                 storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
@@ -351,26 +364,28 @@ struct PracticeDetailView: View {
                 AudioSessionCoordinator.shared.removeInterruptionObserver(interruptionObserverToken)
             }
             interruptionObserverToken = AudioSessionCoordinator.shared.addInterruptionObserver {
-                [tempoController, practiceTimer, recorder] event in
+                event in
                 switch event {
                 case .began:
-                    tempoController.handleInterruption()
-                    MetronomeAnalytics.emit(
-                        "metronome_ramp_interrupted", itemId: itemId.uuidString,
-                        sessionId: activeTrainingSessionId?.uuidString ?? "",
-                        ["reason": "audio_session", "current_bpm": String(metronome.bpm),
-                         "completed_bars": String(tempoController.completedBars)]
-                    )
-                    updateActiveTrainingSnapshot()
-                    tempoController.engine.stop()
-                    practiceTimer.pause()
-                    if recorder.isRecording { recorder.stop(label: item.title) }
+                    handlePlaybackBoundary(reason: "audio_session", itemTitle: item.title)
                 case .ended:
                     tempoController.handleInterruptionEnded()
+                case .outputRouteLost:
+                    handlePlaybackBoundary(reason: "output_route_lost", itemTitle: item.title)
+                    tempoController.handleInterruptionEnded()
+                    show(String(localized: "音频设备已断开，请手动恢复节拍器"))
+                case .audioServicesReset:
+                    handlePlaybackBoundary(reason: "audio_services_reset", itemTitle: item.title)
+                    tempoController.engine.prepareAfterAudioServicesReset()
+                    tempoController.handleInterruptionEnded()
+                    show(String(localized: "系统音频已重置，请手动恢复节拍器"))
                 }
             }
+            updatePlaybackPresentation()
         }
         .onDisappear {
+            UIApplication.shared.isIdleTimerDisabled = false
+            metronome.foregroundFeedbackEnabled = false
             if let interruptionObserverToken {
                 AudioSessionCoordinator.shared.removeInterruptionObserver(interruptionObserverToken)
                 self.interruptionObserverToken = nil
@@ -399,6 +414,17 @@ struct PracticeDetailView: View {
                     RecordingStore.delete(fileName: clip.fileName)
                 }
             }
+        }
+        .onChange(of: metronome.isPlaying) { _, _ in
+            updatePlaybackPresentation()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            metronome.foregroundFeedbackEnabled = newPhase == .active
+            UIApplication.shared.isIdleTimerDisabled = PracticeDetailState.shouldPreventScreenSleep(
+                isMetronomePlaying: metronome.isPlaying,
+                isForeground: newPhase == .active
+            )
+            if newPhase == .active, practiceTimer.isRunning { practiceTimer.refresh() }
         }
         .onChange(of: item?.projectId) { _, newProjectId in
             // Record-stack create-and-join updates projectId via setPracticeItemProject
@@ -561,13 +587,17 @@ struct PracticeDetailView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
-                    if isHistoricalPractice {
-                        historicalMetadataEditor
-                    }
-                    if !item.subtitle.isEmpty,
-                       !isHistoricalPractice,
-                       !AIPracticePresentation.isAIGenerated(subtitle: item.subtitle) {
-                        Text(item.subtitle)
+                    let subtitle = isHistoricalPractice ? draftSubtitle : item.subtitle
+                    if isHistoricalPractice,
+                       !subtitle.isEmpty,
+                       !AIPracticePresentation.isAIGenerated(subtitle: subtitle) {
+                        TextField("练习说明", text: $draftSubtitle, axis: .vertical)
+                            .lineLimit(1...3)
+                            .font(.system(size: 12))
+                            .foregroundStyle(GitaTheme.textSecondary)
+                    } else if !subtitle.isEmpty,
+                              !AIPracticePresentation.isAIGenerated(subtitle: subtitle) {
+                        Text(subtitle)
                             .font(.system(size: 12))
                             .foregroundStyle(GitaTheme.textSecondary)
                     }
@@ -702,24 +732,6 @@ struct PracticeDetailView: View {
     private func normalizedTimeSignature(_ raw: String?) -> String {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? "4/4" : trimmed
-    }
-
-    private var historicalMetadataEditor: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("练习资料")
-                .font(.system(size: 18, weight: .bold))
-            TextField("说明", text: $draftSubtitle, axis: .vertical)
-                .lineLimit(1...3)
-            Picker("分类", selection: $draftCategory) {
-                ForEach(PracticeCategory.allCases) { category in
-                    Text(category.label).tag(category)
-                }
-            }
-            Stepper("目标 \(draftTargetMin) 分钟", value: $draftTargetMin, in: 1...60)
-        }
-        .padding(16)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
     }
 
     private var timerCard: some View {
@@ -1239,6 +1251,27 @@ struct PracticeDetailView: View {
         }
     }
 
+    private func updatePlaybackPresentation() {
+        let isForeground = scenePhase == .active
+        metronome.foregroundFeedbackEnabled = isForeground
+        UIApplication.shared.isIdleTimerDisabled = PracticeDetailState.shouldPreventScreenSleep(
+            isMetronomePlaying: metronome.isPlaying,
+            isForeground: isForeground
+        )
+    }
+
+    private func handlePlaybackBoundary(reason: String, itemTitle: String) {
+        practiceMetronomeLog.notice(
+            "boundary reason=\(reason, privacy: .public) playing=\(self.metronome.isPlaying, privacy: .public) recording=\(self.recorder.isRecording, privacy: .public) ramp=\(self.tempoController.isRampActive, privacy: .public)"
+        )
+        tempoController.handleInterruption()
+        updateActiveTrainingSnapshot()
+        metronome.stop()
+        practiceTimer.pause()
+        if recorder.isRecording { recorder.stop(label: itemTitle) }
+        updatePlaybackPresentation()
+    }
+
     private func startRamp(_ settings: TempoRampSettings) {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
         let startContext = metronome.isPlaying ? "while_playing" : "from_idle"
@@ -1332,9 +1365,9 @@ struct PracticeDetailView: View {
                 note: noteText,
                 steps: steps,
                 bpm: metronome.bpm,
-                timeSignature: metronome.timeSignatureText,
-                metronomeAccentRaw: metronome.accentPatternRaw,
-                metronomeSubdivisionRaw: metronome.subdivisionRaw,
+                timeSignature: metronome.configuredTimeSignatureText,
+                metronomeAccentRaw: metronome.configuredAccentPatternRaw,
+                metronomeSubdivisionRaw: metronome.configuredSubdivisionRaw,
                 metronomeSoundModeRaw: metronome.soundMode.rawValue,
                 metronomeVolume: metronome.volume,
                 metronomeStrongBeatBoost: metronome.strongBeatBoost,
@@ -1344,9 +1377,9 @@ struct PracticeDetailView: View {
             storedNote = noteText
             storedSteps = steps
             storedBpm = metronome.bpm
-            storedTimeSignature = metronome.timeSignatureText
-            storedAccentPatternRaw = metronome.accentPatternRaw
-            storedSubdivisionRaw = metronome.subdivisionRaw
+            storedTimeSignature = metronome.configuredTimeSignatureText
+            storedAccentPatternRaw = metronome.configuredAccentPatternRaw
+            storedSubdivisionRaw = metronome.configuredSubdivisionRaw
             storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
             storedMetronomeVolume = metronome.volume
             storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
@@ -1415,18 +1448,18 @@ struct PracticeDetailView: View {
             existing.barsPerStage = settings.barsPerStage
             existing.stepBPM = settings.stepBPM
             existing.countInBars = settings.countInBars
-            existing.meterRaw = metronome.timeSignatureText
-            existing.subdivisionRaw = metronome.subdivisionRaw
-            existing.accentPatternRaw = metronome.accentPatternRaw
+            existing.meterRaw = metronome.configuredTimeSignatureText
+            existing.subdivisionRaw = metronome.configuredSubdivisionRaw
+            existing.accentPatternRaw = metronome.configuredAccentPatternRaw
             existing.updatedAt = Date()
             plan = existing
         } else {
             let created = TempoRampPlan(
                 practiceItemId: itemId,
                 settings: settings,
-                meterRaw: metronome.timeSignatureText,
-                subdivisionRaw: metronome.subdivisionRaw,
-                accentPatternRaw: metronome.accentPatternRaw
+                meterRaw: metronome.configuredTimeSignatureText,
+                subdivisionRaw: metronome.configuredSubdivisionRaw,
+                accentPatternRaw: metronome.configuredAccentPatternRaw
             )
             modelContext.insert(created)
             plan = created
@@ -1435,9 +1468,9 @@ struct PracticeDetailView: View {
             practiceItemId: itemId,
             planId: plan.id,
             settings: settings,
-            timeSignature: metronome.timeSignatureText,
-            accentPatternRaw: metronome.accentPatternRaw,
-            subdivisionRaw: metronome.subdivisionRaw
+            timeSignature: metronome.configuredTimeSignatureText,
+            accentPatternRaw: metronome.configuredAccentPatternRaw,
+            subdivisionRaw: metronome.configuredSubdivisionRaw
         )
         modelContext.insert(session)
         try modelContext.save()
@@ -1570,9 +1603,9 @@ struct PracticeDetailView: View {
                 now: Date(),
                 steps: steps,
                 bpm: metronome.bpm,
-                timeSignature: metronome.timeSignatureText,
-                metronomeAccentRaw: metronome.accentPatternRaw,
-                metronomeSubdivisionRaw: metronome.subdivisionRaw,
+                timeSignature: metronome.configuredTimeSignatureText,
+                metronomeAccentRaw: metronome.configuredAccentPatternRaw,
+                metronomeSubdivisionRaw: metronome.configuredSubdivisionRaw,
                 metronomeSoundModeRaw: metronome.soundMode.rawValue,
                 metronomeVolume: metronome.volume,
                 metronomeStrongBeatBoost: metronome.strongBeatBoost
@@ -1581,9 +1614,9 @@ struct PracticeDetailView: View {
             storedNote = noteText
             storedSteps = steps
             storedBpm = metronome.bpm
-            storedTimeSignature = metronome.timeSignatureText
-            storedAccentPatternRaw = metronome.accentPatternRaw
-            storedSubdivisionRaw = metronome.subdivisionRaw
+            storedTimeSignature = metronome.configuredTimeSignatureText
+            storedAccentPatternRaw = metronome.configuredAccentPatternRaw
+            storedSubdivisionRaw = metronome.configuredSubdivisionRaw
             storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
             storedMetronomeVolume = metronome.volume
             storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
@@ -1682,26 +1715,39 @@ struct PracticeDetailView: View {
         }
     }
 
-    private func projectName(for id: UUID?) -> String? {
-        guard let id else { return nil }
-        return projects.first(where: { $0.id == id })?.name
-    }
-
     private func historicalProjectMenu(_ item: PracticeItem) -> some View {
+        let currentId = draftProjectId
         let candidates = activeProjects(for: item)
+        let label: String = {
+            if let currentId,
+               let name = candidates.first(where: { $0.id == currentId })?.name
+                ?? projects.first(where: { $0.id == currentId })?.name {
+                return name
+            }
+            return String(localized: "关联项目")
+        }()
         return HStack {
             Menu {
-                Button("无项目") { draftProjectId = nil }
-                ForEach(candidates, id: \.id) { project in
-                    Button(project.name) { draftProjectId = project.id }
+                if currentId == nil {
+                    Menu("加入现有项目") {
+                        ForEach(candidates, id: \.id) { project in
+                            Button(project.name) { draftProjectId = project.id }
+                        }
+                    }
+                } else {
+                    Menu("更换项目") {
+                        ForEach(candidates.filter { $0.id != currentId }, id: \.id) { project in
+                            Button(project.name) { draftProjectId = project.id }
+                        }
+                    }
+                    Button("移出项目") { draftProjectId = nil }
                 }
-                Divider()
                 Button("建立长期项目") {
                     requestCreateProjectFromHistorical(item)
                 }
             } label: {
                 HStack(spacing: 4) {
-                    Text(projectName(for: draftProjectId) ?? String(localized: "无项目"))
+                    Text(label)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 10, weight: .semibold))
                 }

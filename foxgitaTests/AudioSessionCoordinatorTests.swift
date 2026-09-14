@@ -76,4 +76,18 @@ struct AudioSessionCoordinatorTests {
 
         #expect(callCount == 1)
     }
+
+    @Test func routeLossAndMediaResetAreForwardedWithoutAutomaticResume() throws {
+        let coordinator = AudioSessionCoordinator(apply: { })
+        var events: [AudioSessionCoordinator.InterruptionEvent] = []
+        _ = coordinator.addInterruptionObserver { events.append($0) }
+        try coordinator.acquire(.playback)
+
+        coordinator.notifyInterruptionForTesting(.outputRouteLost)
+        #expect(coordinator.count(for: .playback) == 1)
+        coordinator.notifyInterruptionForTesting(.audioServicesReset)
+
+        #expect(events == [.outputRouteLost, .audioServicesReset])
+        #expect(coordinator.count(for: .playback) == 0)
+    }
 }
