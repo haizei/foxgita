@@ -157,7 +157,7 @@ struct AICandidateSyncTests {
         #expect(try onRepo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
     }
 
-    @Test func applyVideoDiagnosisOverwritesSameKey() throws {
+    @Test func applyVideoDiagnosisNeverWritesCandidateMemory() throws {
         let (store, repo, practice, _) = try makeWired()
         try addReadyClip(store: store, practiceRepo: practice, recordingId: "clip-1")
         store.applyReview(
@@ -171,9 +171,7 @@ struct AICandidateSyncTests {
             )
         )
         let rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
-        #expect(rows.count == 1)
-        #expect(rows[0].summaryText == "节奏")
-        #expect(rows[0].valueJSON.contains("practice.diagnose.video@1.1.0"))
+        #expect(rows.isEmpty)
         #expect(try practice.recording(id: "clip-1")?.reviewStatus == .ready)
     }
 
@@ -186,36 +184,29 @@ struct AICandidateSyncTests {
     }
 
     @Test func deletedCandidateDoesNotResurrectOnReview() throws {
-        let (store, repo, practice, _) = try makeWired()
-        try addReadyClip(store: store, practiceRepo: practice, recordingId: "clip-1")
-        store.applyReview(
-            recordingId: "clip-1",
-            draft: MediaReviewDraft(highlight: "稳", focus: "压弦", nextAction: "慢练")
+        let (sync, repo, _, _) = try make()
+        sync.syncFocus(
+            profileId: "p1", focus: "压弦", recordingId: "clip-1", skill: .reviewMedia
         )
         let id = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())[0].id
         try repo.softDelete(profileId: "p1", id: id)
         try repo.save()
-        store.applyReview(
-            recordingId: "clip-1",
-            draft: MediaReviewDraft(highlight: "稳", focus: "新重点", nextAction: "慢练")
+        sync.syncFocus(
+            profileId: "p1", focus: "新重点", recordingId: "clip-1", skill: .reviewMedia
         )
         #expect(try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
-        #expect(try practice.recording(id: "clip-1")?.reviewStatus == .ready)
     }
 
     @Test func userEditedCandidateIsNotOverwritten() throws {
-        let (store, repo, practice, _) = try makeWired()
-        try addReadyClip(store: store, practiceRepo: practice, recordingId: "clip-1")
-        store.applyReview(
-            recordingId: "clip-1",
-            draft: MediaReviewDraft(highlight: "稳", focus: "压弦", nextAction: "慢练")
+        let (sync, repo, _, _) = try make()
+        sync.syncFocus(
+            profileId: "p1", focus: "压弦", recordingId: "clip-1", skill: .reviewMedia
         )
         let id = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())[0].id
         try repo.updateSummary(profileId: "p1", id: id, summaryText: "用户重点")
         try repo.save()
-        store.applyReview(
-            recordingId: "clip-1",
-            draft: MediaReviewDraft(highlight: "稳", focus: "新重点", nextAction: "慢练")
+        sync.syncFocus(
+            profileId: "p1", focus: "新重点", recordingId: "clip-1", skill: .reviewMedia
         )
         let rows = try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date())
         #expect(rows[0].summaryText == "用户重点")
@@ -235,7 +226,7 @@ struct AICandidateSyncTests {
         #expect(try repo.fetch(profileId: "p1", scopes: [.ability], matching: "", now: Date()).isEmpty)
     }
 
-    @Test func memorySaveFailureDoesNotRollbackReview() throws {
+    @Test func reviewSaveDoesNotTouchFailingMemoryRepository() throws {
         let schema = Schema(versionedSchema: GitaSchemaV18.self)
         let container = try ModelContainer(
             for: schema,
@@ -262,7 +253,7 @@ struct AICandidateSyncTests {
             draft: MediaReviewDraft(highlight: "稳", focus: "压弦", nextAction: "慢练")
         )
         #expect(try practiceRepo.recording(id: "clip-1")?.reviewStatus == .ready)
-        #expect(store.lastError == .saveFailed)
+        #expect(store.lastError == nil)
     }
 }
 

@@ -789,6 +789,9 @@ struct PracticeDetailView: View {
             if expandedReviewId == rec.id, rec.reviewStatus == .ready, !hasDiagnosis(rec) {
                 reviewFields(rec)
             }
+            if rec.reviewStatus == .ready {
+                CandidateMemoryCard(recordingID: rec.id)
+            }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)

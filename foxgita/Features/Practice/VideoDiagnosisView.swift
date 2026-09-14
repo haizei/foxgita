@@ -85,6 +85,7 @@ struct VideoDiagnosisView: View {
                         findingCard(currentFinding)
                     }
                 }
+                CandidateMemoryCard(recordingID: recording.id)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 16)

@@ -13,6 +13,12 @@ final class AICandidateSync {
         self.context = context
     }
 
+    func canSync(profileId: String, skill: SkillDefinition) -> Bool {
+        !profileId.isEmpty
+            && skill.memoryWritePolicy == .candidates
+            && consent(for: profileId) == .enabled
+    }
+
     func syncFocus(
         profileId: String,
         focus: String,
@@ -20,10 +26,7 @@ final class AICandidateSync {
         skill: SkillDefinition
     ) {
         lastError = nil
-        guard !profileId.isEmpty,
-              skill.memoryWritePolicy == .candidates,
-              consent(for: profileId) == .enabled
-        else { return }
+        guard canSync(profileId: profileId, skill: skill) else { return }
         do {
             try repository.upsertAICandidate(
                 profileId: profileId,

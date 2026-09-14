@@ -48,11 +48,13 @@ struct PracticeItemInput {
 @MainActor
 final class PracticeStore {
     private(set) var lastError: StoreError?
+    private(set) var candidateMemoryRevision = 0
 
     @ObservationIgnored private let repository: PracticeRepository
     @ObservationIgnored private let defaults: UserDefaults
     @ObservationIgnored private let taskMemorySync: TaskMemorySync?
     @ObservationIgnored private let aiCandidateSync: AICandidateSync?
+    @ObservationIgnored private let candidateApprovalGate: CandidateMemoryApprovalGate
     @ObservationIgnored private let invocationStore: AIInvocationStore?
 
     init(
@@ -60,16 +62,87 @@ final class PracticeStore {
         defaults: UserDefaults = .standard,
         taskMemorySync: TaskMemorySync? = nil,
         aiCandidateSync: AICandidateSync? = nil,
+        candidateApprovalGate: CandidateMemoryApprovalGate? = nil,
         invocationStore: AIInvocationStore? = nil
     ) {
         self.repository = repository
         self.defaults = defaults
         self.taskMemorySync = taskMemorySync
         self.aiCandidateSync = aiCandidateSync
+        self.candidateApprovalGate = candidateApprovalGate ?? CandidateMemoryApprovalGate()
         self.invocationStore = invocationStore
     }
 
     func clearError() { lastError = nil }
+
+    func candidateMemoryDraft(recordingId: String) -> CandidateMemoryDraft? {
+        _ = candidateMemoryRevision
+        guard let recording = try? repository.recording(id: recordingId),
+              recording.reviewStatus == .ready,
+              let profileID = profileId(for: recording),
+              !profileID.isEmpty else { return nil }
+        let semantic = recording.reviewFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !semantic.isEmpty else { return nil }
+        let skill = MediaReviewMedia.isVideo(fileName: recording.fileName)
+            ? SkillDefinition.diagnoseVideo : .reviewMedia
+        guard aiCandidateSync?.canSync(profileId: profileID, skill: skill) == true else { return nil }
+        let kind = MediaReviewMedia.isVideo(fileName: recording.fileName) ? "视频" : "录音"
+        let draft = CandidateMemoryDraft(
+            profileID: profileID,
+            evidenceID: recording.id,
+            evidenceSummary: "来自本次\(kind)复盘 · \(recording.durationLabel)",
+            semantic: semantic,
+            skill: skill
+        )
+        return defaults.bool(forKey: candidateDecisionKey(draft)) ? nil : draft
+    }
+
+    func issueCandidateMemoryApproval(
+        _ draft: CandidateMemoryDraft,
+        userID: String,
+        sessionID: String,
+        now: Date = Date()
+    ) -> ApprovalToken {
+        candidateApprovalGate.issue(draft, userID: userID, sessionID: sessionID, now: now)
+    }
+
+    func rememberCandidateMemory(
+        _ draft: CandidateMemoryDraft,
+        token: ApprovalToken,
+        userID: String,
+        sessionID: String,
+        now: Date = Date()
+    ) async throws {
+        try await candidateApprovalGate.validate(
+            token, draft: draft, userID: userID, sessionID: sessionID, now: now
+        )
+        guard candidateMemoryDraft(recordingId: draft.evidenceID) == draft,
+              let sync = aiCandidateSync,
+              sync.canSync(profileId: draft.profileID, skill: draft.skill) else {
+            throw GateRefusal.constraintViolated("candidate memory is stale or consent is unavailable")
+        }
+        sync.syncFocus(
+            profileId: draft.profileID,
+            focus: draft.semantic,
+            recordingId: draft.evidenceID,
+            skill: draft.skill
+        )
+        if let error = sync.lastError {
+            lastError = error
+            throw error
+        }
+        defaults.set(true, forKey: candidateDecisionKey(draft))
+        candidateMemoryRevision += 1
+    }
+
+    func ignoreCandidateMemory(_ draft: CandidateMemoryDraft) {
+        defaults.set(true, forKey: candidateDecisionKey(draft))
+        candidateMemoryRevision += 1
+    }
+
+    private func candidateDecisionKey(_ draft: CandidateMemoryDraft) -> String {
+        "ai.candidate-memory.decided.\(draft.id)"
+    }
 
     static func snapshot(from item: PracticeItem) -> PracticeItemSnapshot {
         PracticeItemSnapshot(
@@ -890,7 +963,6 @@ final class PracticeStore {
     }
 
     func applyVideoDiagnosis(recordingId: String, draft: VideoDiagnosisDraft) {
-        var pending: (profileId: String, recordingId: String, focus: String)?
         perform {
             if let rec = try repository.recording(id: recordingId) {
                 rec.reviewStatus = .ready
@@ -900,19 +972,8 @@ final class PracticeStore {
                 rec.videoFindings = draft.findings
                 rec.updatedAt = Date()
                 rec.syncState = .local
-                if let profileId = profileId(for: rec) {
-                    pending = (profileId, recordingId, draft.focus)
-                }
             }
             try repository.save()
-        }
-        if lastError == nil, let pending {
-            applyCandidateFocus(
-                profileId: pending.profileId,
-                focus: pending.focus,
-                recordingId: pending.recordingId,
-                skill: .diagnoseVideo
-            )
         }
     }
 
@@ -1131,22 +1192,6 @@ final class PracticeStore {
             return profileId
         }
         return nil
-    }
-
-    private func applyCandidateFocus(
-        profileId: String,
-        focus: String,
-        recordingId: String,
-        skill: SkillDefinition
-    ) {
-        guard let sync = aiCandidateSync else { return }
-        sync.syncFocus(
-            profileId: profileId,
-            focus: focus,
-            recordingId: recordingId,
-            skill: skill
-        )
-        if let error = sync.lastError { lastError = error }
     }
 
     private func applySyncUpsert(_ task: TaskItem) {

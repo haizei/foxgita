@@ -242,6 +242,9 @@ struct RecordDetailView: View {
             Text(reviewHeader(r))
                 .font(.system(size: 13, weight: .semibold))
             reviewBody(r)
+            if r.reviewStatus == .ready {
+                CandidateMemoryCard(recordingID: r.id)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
