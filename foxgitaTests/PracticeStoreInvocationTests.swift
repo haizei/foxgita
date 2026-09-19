@@ -29,18 +29,6 @@ struct PracticeStoreInvocationTests {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let item = try store.createPracticeItem(
-            input: PracticeItemInput(
-                title: "开放弦",
-                category: .left,
-                source: .custom,
-                originId: nil,
-                bpm: nil,
-                timeSignature: nil
-            ),
-            now: now,
-            calendar: calendar
-        )
         invocationStore.record(
             AIInvocationRecordInput(
                 id: "inv-1",
@@ -56,13 +44,22 @@ struct PracticeStoreInvocationTests {
                 draftOutcome: nil
             )
         )
-        invocationStore.setDraftOutcome(
-            id: "inv-1",
-            outcome: .accepted,
-            taskId: item.id.uuidString
+        let item = try store.createPracticeItem(
+            input: PracticeItemInput(
+                title: "开放弦",
+                category: .left,
+                source: .next,
+                originId: PracticeTaskOrigin.nextOriginKey(generationId: "inv-1"),
+                bpm: nil,
+                timeSignature: nil
+            ),
+            now: now,
+            calendar: calendar
         )
+        #expect(invocationStore.recent().first?.businessObjectId == item.id.uuidString)
 
         try store.savePracticeItem(id: item.id, durationSeconds: 0, note: "", now: now)
+        #expect(invocationStore.recent().first?.businessObjectStartedAt == now)
         #expect(invocationStore.recent().first?.completedAt == nil)
         try store.savePracticeItem(id: item.id, durationSeconds: 60, note: "", now: now)
         let first = try #require(invocationStore.recent().first?.completedAt)

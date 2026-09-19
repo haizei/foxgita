@@ -415,6 +415,12 @@ final class PracticeStore {
         do {
             try repository.insertPracticeItem(item)
             try persistPracticeItemChanges()
+            if let invocationID = PracticeTaskOrigin.aiInvocationID(from: item.originId) {
+                invocationStore?.markBusinessObject(
+                    invocationID: invocationID,
+                    businessObjectID: item.id.uuidString
+                )
+            }
             return item
         } catch {
             repository.rollback()
@@ -470,6 +476,7 @@ final class PracticeStore {
             item.projectId = nil
         }
         try persistPracticeItemChanges()
+        markInvocationStarted(item, now: now)
         markInvocationIfEffective(item, now: now)
     }
 
@@ -1155,7 +1162,16 @@ final class PracticeStore {
     private func markInvocationIfEffective(_ item: PracticeItem, now: Date) {
         let snap = PracticeStore.snapshot(from: item)
         guard PracticeItemRules.isEffective(snap) else { return }
-        invocationStore?.markCompleted(taskId: item.id.uuidString, now: now)
+        if let invocationID = PracticeTaskOrigin.aiInvocationID(from: item.originId) {
+            invocationStore?.markCompleted(invocationID: invocationID, at: now)
+        } else {
+            invocationStore?.markCompleted(taskId: item.id.uuidString, now: now)
+        }
+    }
+
+    private func markInvocationStarted(_ item: PracticeItem, now: Date) {
+        guard let invocationID = PracticeTaskOrigin.aiInvocationID(from: item.originId) else { return }
+        invocationStore?.markStarted(invocationID: invocationID, at: now)
     }
 
     private func persistPracticeItemChanges() throws {

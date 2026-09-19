@@ -45,7 +45,7 @@ struct NextSessionGeneratorTests {
         let store = LLMCredentialsStore(service: "foxgita.tests.\(UUID().uuidString)")
         defer { store.clearAPIKey() }
         let generator = NextSessionGenerator(
-            client: StubNextSessionClient(),
+            runner: StubNextSessionClient(),
             credentials: store
         )
         await #expect(throws: NextSessionGeneratorError.notConfigured) {
@@ -64,7 +64,7 @@ struct NextSessionGeneratorTests {
         defer { store.clearAPIKey() }
         try store.saveAPIKey("sk-test")
         let generator = NextSessionGenerator(
-            client: StubNextSessionClient(error: .unauthorized),
+            runner: StubNextSessionClient(error: .unauthorized),
             credentials: store
         )
         do {
@@ -85,7 +85,7 @@ struct NextSessionGeneratorTests {
         let spy = InvocationLogSpy()
         let client = CountingNextSessionClient()
         let generator = NextSessionGenerator(
-            client: client,
+            runner: client,
             credentials: LLMCredentialsStore(service: "foxgita.tests.\(UUID().uuidString)"),
             log: spy
         )

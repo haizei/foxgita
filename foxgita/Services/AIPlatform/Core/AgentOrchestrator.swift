@@ -33,13 +33,55 @@ struct OrchestrationResult: Sendable {
 
 struct AgentOrchestrator: Sendable {
     let registry: ExtensionRegistry
-    let context: any ContextSnapshotting
     let runtimeRouter: RuntimeRouter
     let inputGate: any InputGating
     let presentationGate: any PresentationGating
+    private let defaultContext: (any ContextSnapshotting)?
+
+    init(
+        registry: ExtensionRegistry,
+        runtimeRouter: RuntimeRouter,
+        inputGate: any InputGating,
+        presentationGate: any PresentationGating
+    ) {
+        self.registry = registry
+        self.runtimeRouter = runtimeRouter
+        self.inputGate = inputGate
+        self.presentationGate = presentationGate
+        self.defaultContext = nil
+    }
+
+    init(
+        registry: ExtensionRegistry,
+        context: any ContextSnapshotting,
+        runtimeRouter: RuntimeRouter,
+        inputGate: any InputGating,
+        presentationGate: any PresentationGating
+    ) {
+        self.registry = registry
+        self.runtimeRouter = runtimeRouter
+        self.inputGate = inputGate
+        self.presentationGate = presentationGate
+        self.defaultContext = context
+    }
 
     func run(
         request: InteractionRequest,
+        credentials: RuntimeCredentials
+    ) async throws -> OrchestrationResult {
+        guard let defaultContext else {
+            throw GateRefusal.constraintViolated("execution requires scoped context")
+        }
+        return try await run(
+            request: request,
+            context: defaultContext,
+            credentials: credentials
+        )
+    }
+
+    func run(
+        request: InteractionRequest,
+        context: any ContextSnapshotting,
         credentials: RuntimeCredentials
     ) async throws -> OrchestrationResult {
         let resolved = try registry.resolve(recipeID: request.recipeHint)

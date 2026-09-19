@@ -55,7 +55,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `MigrationTests` | V2→V7 / V5→V7 / V6→V7 磁盘库迁移不丢数据；新行 profileId 默认为空直到 prepare 回填；V6 false → undecided |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制通过 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` 通过 |
-| `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试通过 |
+| `AIPlatformBoundaryTests` | 四个生产 Generator 仅依赖 Recipe Runner，通过共享 GitaAIRunner 装配 |
+| `GitaPracticeExtensionTests` | 四个 Recipe 的 Runner、Artifact、调用指标与安全边界通过 |
 | `SkillRegistryTests` | 内置三 id、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
@@ -67,10 +68,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并 `consent == enabled` |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验通过 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断通过 |
-| `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试通过 |
 | `MediaReviewGeneratorTests` | 波形/抽帧 JPEG、未配置、文件缺失校验通过 |
 | `VideoDiagnosisDraftTests` | normalize 窗口钳制、去空白、最多 5 段、空 summary 失败通过 |
-| `VideoDiagnosisClientTests` | 成功解析、401、非法 JSON 通过 |
 | `VideoFrameSamplerTests` | 短片段三锚点、长片段上限 10、零时长通过 |
 | `VideoDiagnosisGeneratorTests` | 未配置、prepare 失败、401 映射通过 |
 | `ReviewJobRunnerTests` | 顺序写回、401 停后续、单条失败继续；`.mov` 写 `videoFindings` 通过 |
@@ -85,6 +84,26 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `AppRouterTests` | `clearJustCompleted` 清 id |
 
 **通过**：日志出现 `TEST SUCCEEDED`，无 `✘` / `error:`（业务测试失败）。
+
+### Step B2 — AI Platform 与持久化聚焦回归
+
+```bash
+xcodebuild -project foxgita.xcodeproj -scheme foxgita \
+  -destination 'platform=iOS Simulator,name=iPhone 17' \
+  -only-testing:foxgitaTests/AIPlatformBoundaryTests \
+  -only-testing:foxgitaTests/AIPlatformContractTests \
+  -only-testing:foxgitaTests/AIContextSecurityTests \
+  -only-testing:foxgitaTests/AISecurityGateTests \
+  -only-testing:foxgitaTests/PromptAssemblerTests \
+  -only-testing:foxgitaTests/MessagesRuntimeTests \
+  -only-testing:foxgitaTests/AgentOrchestratorTests \
+  -only-testing:foxgitaTests/GitaPracticeExtensionTests \
+  -only-testing:foxgitaTests/AIInvocationStoreTests \
+  -only-testing:foxgitaTests/PracticeStoreInvocationTests \
+  -only-testing:foxgitaTests/MigrationTests test
+```
+
+**通过**：四个 Recipe 单路径运行，Gate、脱敏、BP1/BP2 指纹、Schema V18 与业务结果回链全部通过。BP3、Agent SDK、Managed Agents 不在当前测试范围，因为尚未启用。
 
 ### Step C — 全量测试（单元 + UI 冒烟）
 

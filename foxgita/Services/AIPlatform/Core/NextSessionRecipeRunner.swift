@@ -1,13 +1,10 @@
 import Foundation
 
-private struct NextSessionContextReader: ContextResourceReading {
-    let resource: ContextResource?
-
-    func fetch(ref: ResourceRef, scope: ContextFetchScope) async throws -> ContextResource {
-        guard scope.authorizes(ref) else { throw ContextFetchError.notAuthorized(ref) }
-        guard let resource, resource.ref == ref else { throw ContextFetchError.notFound(ref) }
-        return resource
-    }
+protocol NextSessionGenerating: Sendable {
+    func generateDraft(
+        baseURL: String, model: String, apiKey: String, budgetMinutes: Int,
+        fallbackCategory: PracticeCategory, invocationId: String
+    ) async throws -> AIPracticeDraft
 }
 
 struct StandardInputGate: InputGating {
@@ -28,7 +25,7 @@ struct StandardPresentationGate: PresentationGating {
 }
 
 struct NextSessionRecipeRunner: NextSessionGenerating {
-    let session: URLSession
+    let platform: GitaAIRunner
     let memory: any MemoryContextProviding
     let log: any AIInvocationRecording
 
@@ -37,7 +34,17 @@ struct NextSessionRecipeRunner: NextSessionGenerating {
         memory: any MemoryContextProviding = EmptyMemoryContext(),
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.session = session
+        self.platform = GitaAIRunner(session: session)
+        self.memory = memory
+        self.log = log
+    }
+
+    init(
+        platform: GitaAIRunner,
+        memory: any MemoryContextProviding = EmptyMemoryContext(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
+    ) {
+        self.platform = platform
         self.memory = memory
         self.log = log
     }
@@ -54,7 +61,7 @@ struct NextSessionRecipeRunner: NextSessionGenerating {
         let invocationID = UUID(uuidString: invocationId) ?? UUID()
         let sessionID = UUID()
         let skill = SkillDefinition.nextSession
-        let budget = NextSessionClient.clampBudget(budgetMinutes)
+        let budget = PracticePlanArtifactValidator.clampBudget(budgetMinutes)
         let memorySnapshot = await memory.snapshot(skill: skill, query: "")
         let memoryRef = memorySnapshot.block.isEmpty
             ? nil
@@ -69,22 +76,15 @@ struct NextSessionRecipeRunner: NextSessionGenerating {
             inputText: (skill.userPrompt ?? "").replacingOccurrences(of: "{{minutes}}", with: "\(budget)"),
             selectedResources: memoryRef.map { [$0] } ?? []
         )
-        let orchestrator = AgentOrchestrator(
-            registry: try ExtensionRegistry(extensions: [GitaPracticeExtension()]),
-            context: ContextFetcher(reader: NextSessionContextReader(resource: resource)),
-            runtimeRouter: RuntimeRouter(messages: MessagesRuntime(transport: AITransport(session: session))),
-            inputGate: StandardInputGate(),
-            presentationGate: StandardPresentationGate()
-        )
-
         do {
-            let result = try await orchestrator.run(
+            let result = try await platform.run(
                 request: request,
+                resources: resource.map { [$0.ref: $0] } ?? [:],
                 credentials: RuntimeCredentials(baseURL: baseURL, apiKey: apiKey, model: model)
             )
             let raw = try JSONDecoder().decode(AIPracticeDraft.Raw.self, from: result.artifact.payloadData)
             var draft = AIPracticeDraft.normalize(
-                NextSessionClient.capRaw(raw, budget: budget),
+                PracticePlanArtifactValidator.cap(raw, budget: budget),
                 fallbackCategory: fallbackCategory
             )
             draft.sourceMemoryIDs = memorySnapshot.itemIds

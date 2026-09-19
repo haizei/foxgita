@@ -1,6 +1,6 @@
 # Gita（foxgita）技术开发文档
 
-> 版本：与当前主干一致（Schema V8 / Store + Repository / 橙色设计系统 v2）  
+> 版本：与当前主干一致（Schema V18 / Store + Repository / 共享 AI Platform）
 > 平台：iOS 18+ · SwiftUI · SwiftData · AVFoundation  
 > 范围：本地优先的 P0 MVP；数据层已为云同步预留字段，当前无远程后端  
 > 近期增量：同源练习任务复用（稳定 `active-{templateId}` + AI `originKey`）、首页按日锁定练习、左滑编辑/删除、训练页录音中面板、系统相机录视频、录像 AI 分段诊断、录像来源选择与相册导入
@@ -80,7 +80,6 @@ foxgita/
 │   ├── TaskMemorySync.swift         # custom-* 任务标题 → goal
 │   ├── AICandidateSync.swift        # 复盘/诊断 focus → ability.current_focus
 │   ├── DurationPreferenceSync.swift # 当场时长 → practice.available_minutes
-│   ├── NextSessionClient.swift      # practice.next_session 无图调用
 │   ├── NextSessionGenerator.swift
 │   ├── NextSessionCitation.swift
 │   ├── MemoryStore.swift            # 同意状态 + 用户记忆 CRUD
@@ -222,6 +221,26 @@ Query(filter: #Predicate<PracticeSession> { $0.taskId == taskId }, sort: \.ended
 ---
 
 ## 5. 音频与计时子系统
+
+## 5.0 AI 智能层（Messages Runtime）
+
+四个现有 AI 场景已完成单路径迁移：`practice.next_session`、`practice.plan.from_image`、`practice.review.media`、`practice.diagnose.video`。生产装配只创建一个 `GitaAIRunner`，内部复用一套 `ExtensionRegistry → AgentOrchestrator → MessagesRuntime`；Feature 只依赖领域 Recipe Runner，不再保留旧 Client 或迁移开关。
+
+```text
+Feature UI → Recipe Runner → GitaAIRunner
+  → scoped ContextFetcher / ContextFencer / Snapshot + SeenSet
+  → PromptAssembler（BP1 静态系统，BP2 历史前缀，动态上下文在后）
+  → Input Gate → MessagesRuntime → Artifact + Provenance Gate
+  ├─ Practice Draft → Preview → Host Approval → PracticeItem
+  └─ Review Result → Recording → Candidate Memory Approval
+```
+
+- Gate 拒绝类型覆盖 scope、资源种类/数量、Snapshot/SeenSet、Artifact provenance、审批绑定与重放。
+- 日志只保存调用状态、runtime、指纹、token/cache 指标、Artifact/Snapshot/业务对象 ID 与结果；不保存密钥、原始 Prompt、媒体、完整供应商响应或绝对路径。
+- BP1/BP2 指纹已记录；个性化动态上下文与最终答案不作为共享缓存。BP3、Agent SDK、Managed Agents 当前未启用。
+- AI 练习任务创建、首次开始、有效完成均回链 Invocation；复盘/诊断重跑保留历史审计链。
+
+详细设计与迁移验收见 `docs/superpowers/2026-09-09-ai-platform-foundation/`。
 
 ### 5.1 AudioSessionCoordinator
 
@@ -460,7 +479,7 @@ typealias MemoryItem = GitaSchemaV8.MemoryItem
 
 ### 6.3.1 图片生成练习（Vision）
 
-`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）；生成 Sheet 仅展示进度；和弦与步骤分钟数编码在副标题/步骤字符串中，无 Schema 变更。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。设置「AI 接口」下有独立「AI 记忆」页（总开关、同一套隐私文案、列表、添加目标/偏好、编辑摘要、删除、清空）。首次在四个会读记忆的入口生成前，`MemoryConsentCoordinator.ensureDecided()` 弹出说明 Sheet；已决定不弹。`ImageStepGenerator` 压缩 JPEG（最长边约 1280）后调用 `VisionPracticeClient`；三个 AI Client 经 SkillRegistry 取冻结 Prompt，经 AITransport 发送 chat/completions；输出仍走既有 Draft.normalize。Skill 1.1.0 声明只读记忆范围；`LiveMemoryContext` 仅在 `consent == .enabled` 时查表，`undecided` / `disabled` 时请求体与无记忆等价。授权打开时把 `BACKGROUND_MEMORY` 块接到 user 文本，不改 system prompt。用户手写记忆走 `MemoryStore`。图片 Skill 仍不写候选；复盘/诊断候选见 `AICandidateSync`（§6.2 MemoryItem）。同意 `enabled` 时，`PracticeStore` 对 `custom-*` 任务调用 `TaskMemorySync`：每条练习项一条 goal，`key = task.{taskId}.title`，`sourceType = task`，`importance = 0.6`。用户改摘要后 `sourceType` 变为 `user`，之后改任务标题不再覆盖；用户删除或清空后同 key 不复活。模板与 `active-*` 激活不写记忆。设计说明：`docs/superpowers/2026-08-21-task-memory-sync/specs/2026-08-21-task-memory-sync-design.md`。响应经 `AIPracticeDraft.normalize` 后由 `PracticeStore.createFromAIDraft(_:originKey:)` 落库：`PhotoPracticeSheet` / `NextSessionSheet` 各用当次 `generationId` 生成 `PracticeTaskOrigin.photoOriginKey` / `nextOriginKey`；同 key 活任务复用。图片仅内存上传，不落盘。设计说明：`docs/superpowers/2026-08-06-image-to-practice/specs/2026-08-06-image-to-practice-steps-design.md`。授权 UI：`docs/superpowers/2026-08-21-memory-consent-ui/specs/2026-08-21-memory-consent-ui-design.md`。
+`RecommendSheet` 入口为「拍摄/照片」；`PhotoPracticeSheet` 提供相机拍摄（1 张）或相册选择（≤3 张）。用户在设置「AI 接口」配置 OpenAI-compatible Base URL / Model；API Key 存 Keychain（`LLMCredentialsStore`）。首次生成前，`MemoryConsentCoordinator.ensureDecided()` 执行授权门。`ImageStepGenerator` 将 JPEG 压缩到最长边约 1280 后交给 `ImagePlanRecipeRunner`；图片仅作为 invocation-scoped bytes 进入共享 `GitaAIRunner`，不暴露或持久化本地路径。Artifact 归一化后先进入可编辑预览，只有 Host Approval 通过才创建 PracticeItem。同意记忆时，`LiveMemoryContext` 只读取声明范围；图片 Recipe 不读写长期记忆。任务记忆同步与授权 UI 的既有规则保持不变。
 
 ### 6.3.2 练后媒体复盘
 
@@ -468,8 +487,8 @@ typealias MemoryItem = GitaSchemaV8.MemoryItem
 
 | 媒体 | Runner 分支 | 生成器 | 写回 |
 |---|---|---|---|
-| 音频（m4a） | `generator.review` | `MediaReviewGenerator` → `MediaReviewClient` | `applyReview` → 三段摘要；清空 `videoFindings` |
-| 录像（mov/mp4） | `videoGenerator.diagnose` | `VideoDiagnosisGenerator` → `VideoDiagnosisClient` | `applyVideoDiagnosis` → 三段摘要 + `videoFindings` |
+| 音频（m4a） | `generator.review` | `MediaReviewGenerator` → `MediaReviewRecipeRunner` | `applyReview` → 三段摘要；清空 `videoFindings` |
+| 录像（mov/mp4） | `videoGenerator.diagnose` | `VideoDiagnosisGenerator` → `VideoDiagnosisRecipeRunner` | `applyVideoDiagnosis` → 三段摘要 + `videoFindings` |
 
 **音频三段摘要路径未变**：仍为 1 张波形 JPEG + `MediaReviewDraft.normalize` + `applyReview`。设计说明：`docs/superpowers/2026-08-15-media-review/specs/2026-08-15-media-review-design.md`。片段卡规格：`docs/superpowers/2026-08-15-practice-clip-cards/specs/2026-08-15-practice-clip-cards-design.md`。
 
@@ -490,10 +509,10 @@ flowchart LR
 
 1. **入库与入队**：系统相机录完 → `ingest` 复制到 `Recordings/rec-*.mov` → `persist` / `beginOpenSession` 建 `RecordingRef`。AI 已配置则 `markReviewsPending` + `ReviewJobRunner.enqueue`，并弹出 **C2/04 `VideoAnalysisView`**（S2 阶段进度；「返回」仅 dismiss，不等于完成练习）。相册：`PhotosPicker` → `AlbumPreviewView` 时长门 `[30, 600]` 秒 → `AlbumVideoImporter` 按原扩展名拷贝 → 同一 `persist` / C2/04。系统相册原片不删。`RecordingStore.mediaExtensions` 含 `m4v`。
 2. **C2/04 分析页**：监听 `reviewStatus`；`.ready` 时 `onReady` → dismiss 后链式打开 C2/05；`.failed` 时按 `ReviewJobRunner.lastFailureKind` 展示 prepare / parse / network 文案。
-3. **Runner 视频分支**：`MediaReviewMedia.isVideo` → `VideoDiagnosisGenerator.diagnose`（`VideoFrameSampler.sampleSeconds` 密抽帧 + 可选波形 JPEG，经 `VideoDiagnosisClient.generateDiagnosis` 调 Vision；`VideoDiagnosisDraft.normalize` 钳制窗口 / 去空白 / 最多 5 段）→ `PracticeStore.applyVideoDiagnosis`。
+3. **Runner 视频分支**：`MediaReviewMedia.isVideo` → `VideoDiagnosisGenerator.diagnose`（`VideoFrameSampler.sampleSeconds` 密抽帧 + 可选波形 JPEG，经 `VideoDiagnosisRecipeRunner` 调共享 Messages Runtime；`VideoDiagnosisDraft.normalize` 拒绝越界时间、去空白、最多 5 段，并在无确定性音频证据时降级伪精确音高）→ `PracticeStore.applyVideoDiagnosis`。
 4. **C2/05 诊断页**：`VideoDiagnosisView` 提供时间线 / 总结、`AVPlayer` 完整回放与纠正片段卡；训练页与记录详情「查看诊断」入口。空 `findings` 时仍展示 summary 三段。
 
-Store 命令补充：`applyVideoDiagnosis(recordingId:draft:)` 写 summary + `videoFindings`；`markReviewsPending` / `applyReview` / `markReviewsFailed` 均清空 `videoFindings`。
+Store 命令补充：`applyVideoDiagnosis(recordingId:draft:)` 写 summary + `videoFindings`；重跑进入 pending 时保留当前可见结果，只有新结果成功后才替换；首次失败保持 failed，已有结果的重跑失败继续展示旧结果。
 
 ### 6.4 统计：StatsAggregator
 
@@ -570,7 +589,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `MigrationTests` | V2→V8 / V5→V8 / V6→V8 / V7→V8 磁盘库迁移不丢数据；V8 `originKey` 默认为空；新行 profileId 默认为空直到 prepare 回填；V6 false → undecided |
 | `AIPracticeDraftTests` | normalize 标题/分类/分钟/步骤钳制 |
 | `LLMCredentialsStoreTests` | Keychain 读写清除与 `isConfigured` |
-| `VisionPracticeClientTests` | URL 拼接、成功解析、401、非法 JSON、`response_format` 重试 |
+| `AIPlatformBoundaryTests` | 四个 Generator 仅依赖 Recipe Runner，生产装配共享 `GitaAIRunner` |
+| `GitaPracticeExtensionTests` | 四个 Recipe 的 Artifact、指标、失败与资源边界 |
 | `SkillRegistryTests` | 内置四 id（含 practice.next_session 1.0.0）、version 1.1.0、只读 scopes、write deny、缺 id 为 nil |
 | `AITransportTests` | URL 拼接、fence、401、非法 chat JSON、timeout、response_format 只降级一次 |
 | `MemoryRepositoryTests` | profileId 必填、跨 Profile 隔离、过期/软删不可见、同 key 覆盖 |
@@ -582,10 +602,8 @@ xcodebuild -project foxgita.xcodeproj -scheme foxgita \
 | `MemoryDebugSeederTests` | 无 flag 不写；flag 写入附录 B 三条并 `consent == enabled` |
 | `ImageStepGeneratorTests` | JPEG 压缩与空图/超量/未配置校验 |
 | `MediaReviewDraftTests` | highlight / focus / nextAction 去空白、空段失败、80 字截断 |
-| `MediaReviewClientTests` | 成功解析、401、非法 JSON、`response_format` 重试 |
 | `MediaReviewGeneratorTests` | 波形/抽帧 JPEG、未配置、文件缺失校验 |
 | `VideoDiagnosisDraftTests` | normalize 窗口钳制、去空白、最多 5 段、空 summary 失败 |
-| `VideoDiagnosisClientTests` | 成功解析、401、非法 JSON |
 | `VideoFrameSamplerTests` | 短片段三锚点、长片段上限 10、零时长 |
 | `VideoDiagnosisGeneratorTests` | 未配置、prepare 失败、401 映射 |
 | `ReviewJobRunnerTests` | 顺序写回、401 停批、单条重试；`.mov` 走 `applyVideoDiagnosis` 写 `videoFindings` |

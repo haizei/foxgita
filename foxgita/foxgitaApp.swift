@@ -20,6 +20,7 @@ struct foxgitaApp: App {
     private let invocationStore: AIInvocationStore
     private let coordinator: MemoryConsentCoordinator
     private let durationPreferenceSync: DurationPreferenceSync
+    private let aiRunner: GitaAIRunner
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV18.self)
@@ -54,6 +55,8 @@ struct foxgitaApp: App {
             let invocationStore = AIInvocationStore(context: container.mainContext)
             self.invocationStore = invocationStore
             let invocationLog = LiveAIInvocationLog(store: invocationStore)
+            let aiRunner = GitaAIRunner()
+            self.aiRunner = aiRunner
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
                 taskMemorySync: taskMemorySync,
@@ -65,11 +68,15 @@ struct foxgitaApp: App {
                 initialValue: ReviewJobRunner(
                     store: store,
                     generator: MediaReviewGenerator(
-                        runner: MediaReviewRecipeRunner(memory: liveMemory, log: invocationLog),
+                        runner: MediaReviewRecipeRunner(
+                            platform: aiRunner, memory: liveMemory, log: invocationLog
+                        ),
                         log: invocationLog
                     ),
                     videoGenerator: VideoDiagnosisGenerator(
-                        runner: VideoDiagnosisRecipeRunner(memory: liveMemory, log: invocationLog),
+                        runner: VideoDiagnosisRecipeRunner(
+                            platform: aiRunner, memory: liveMemory, log: invocationLog
+                        ),
                         log: invocationLog
                     ),
                     invocationStore: invocationStore
@@ -92,6 +99,7 @@ struct foxgitaApp: App {
                 .environment(invocationStore)
                 .environment(coordinator)
                 .environment(\.durationPreferenceSync, durationPreferenceSync)
+                .environment(\.gitaAIRunner, aiRunner)
                 .modelContainer(container)
                 .tint(GitaTheme.brand500)
                 .preferredColorScheme(appearance.colorScheme)

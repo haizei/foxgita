@@ -8,6 +8,8 @@ protocol VideoDiagnosisGenerating: Sendable {
 
 @MainActor
 final class VideoDiagnosisGenerator: VideoDiagnosisGenerating {
+    static let dependencyKind = AIRecipeDependencyKind.recipeRunner
+
     private let runner: any VideoDiagnosing
     private let credentials: LLMCredentialsStore
     private let images: any MediaImagePreparing

@@ -27,16 +27,18 @@ enum NextSessionGeneratorError: Error, Equatable {
 
 @MainActor
 final class NextSessionGenerator {
-    private let client: any NextSessionGenerating
+    static let dependencyKind = AIRecipeDependencyKind.recipeRunner
+
+    private let runner: any NextSessionGenerating
     private let credentials: LLMCredentialsStore
     private let log: any AIInvocationRecording
 
     init(
-        client: any NextSessionGenerating,
+        runner: any NextSessionGenerating,
         credentials: LLMCredentialsStore = LLMCredentialsStore(),
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.client = client
+        self.runner = runner
         self.credentials = credentials
         self.log = log
     }
@@ -60,7 +62,7 @@ final class NextSessionGenerator {
             throw NextSessionGeneratorError.notConfigured
         }
         do {
-            return try await client.generateDraft(
+            return try await runner.generateDraft(
                 baseURL: baseURL,
                 model: model,
                 apiKey: apiKey,

@@ -1,17 +1,14 @@
 import Foundation
 
-private struct VideoDiagnosisContextReader: ContextResourceReading {
-    let resources: [ResourceRef: String]
-
-    func fetch(ref: ResourceRef, scope: ContextFetchScope) async throws -> ContextResource {
-        guard scope.authorizes(ref) else { throw ContextFetchError.notAuthorized(ref) }
-        guard let text = resources[ref] else { throw ContextFetchError.notFound(ref) }
-        return ContextResource(ref: ref, text: text, trusted: false, revision: "invocation")
-    }
+protocol VideoDiagnosing: Sendable {
+    func generateDiagnosis(
+        baseURL: String, model: String, apiKey: String, imageJPEGData: [Data],
+        contextText: String, durationSec: Int, invocationId: String
+    ) async throws -> VideoDiagnosisDraft
 }
 
 struct VideoDiagnosisRecipeRunner: VideoDiagnosing {
-    let session: URLSession
+    let platform: GitaAIRunner
     let log: any AIInvocationRecording
     let memory: any MemoryContextProviding
 
@@ -20,7 +17,17 @@ struct VideoDiagnosisRecipeRunner: VideoDiagnosing {
         memory: any MemoryContextProviding = EmptyMemoryContext(),
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.session = session
+        self.platform = GitaAIRunner(session: session)
+        self.memory = memory
+        self.log = log
+    }
+
+    init(
+        platform: GitaAIRunner,
+        memory: any MemoryContextProviding = EmptyMemoryContext(),
+        log: any AIInvocationRecording = EmptyAIInvocationLog()
+    ) {
+        self.platform = platform
         self.memory = memory
         self.log = log
     }
@@ -44,9 +51,12 @@ struct VideoDiagnosisRecipeRunner: VideoDiagnosing {
         let imageRefs = imageJPEGData.indices.map {
             ResourceRef(kind: "image", id: "video-frame-\(invocationID.uuidString)-\($0 + 1)")
         }
-        var resources = [recordingRef: "\(contextText)\ndurationSec=\(max(durationSec, 0))"]
-        if let memoryRef { resources[memoryRef] = memorySnapshot.block }
-        imageRefs.forEach { resources[$0] = "Derived visual frame from the selected recording." }
+        var resourceTexts = [recordingRef: "\(contextText)\ndurationSec=\(max(durationSec, 0))"]
+        if let memoryRef { resourceTexts[memoryRef] = memorySnapshot.block }
+        imageRefs.forEach { resourceTexts[$0] = "Derived visual frame from the selected recording." }
+        let resources = Dictionary(uniqueKeysWithValues: resourceTexts.map { ref, text in
+            (ref, ContextResource(ref: ref, text: text, trusted: false, revision: "invocation"))
+        })
         let media = zip(imageRefs, imageJPEGData).map {
             InvocationMediaResource(ref: $0.0, mimeType: "image/jpeg", data: $0.1)
         }
@@ -59,19 +69,10 @@ struct VideoDiagnosisRecipeRunner: VideoDiagnosing {
             selectedResources: [recordingRef] + imageRefs + (memoryRef.map { [$0] } ?? []),
             mediaResources: media
         )
-        let orchestrator = AgentOrchestrator(
-            registry: try ExtensionRegistry(extensions: [GitaPracticeExtension()]),
-            context: ContextFetcher(reader: VideoDiagnosisContextReader(resources: resources)),
-            runtimeRouter: RuntimeRouter(
-                messages: MessagesRuntime(transport: AITransport(session: session))
-            ),
-            inputGate: StandardInputGate(),
-            presentationGate: StandardPresentationGate()
-        )
-
         do {
-            let result = try await orchestrator.run(
+            let result = try await platform.run(
                 request: request,
+                resources: resources,
                 credentials: RuntimeCredentials(baseURL: baseURL, apiKey: apiKey, model: model)
             )
             let raw = try JSONDecoder().decode(

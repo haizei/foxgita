@@ -28,6 +28,8 @@ protocol MediaReviewGenerating: Sendable {
 
 @MainActor
 final class MediaReviewGenerator: MediaReviewGenerating {
+    static let dependencyKind = AIRecipeDependencyKind.recipeRunner
+
     private let runner: any MediaReviewing
     private let credentials: LLMCredentialsStore
     private let images: any MediaImagePreparing

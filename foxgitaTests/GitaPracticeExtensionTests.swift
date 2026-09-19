@@ -2,19 +2,42 @@ import Foundation
 import Testing
 @testable import foxgita
 
-@Suite(.serialized)
-struct GitaPracticeExtensionTests {
-    @Test func migrationResolverSelectsExactlyOnePathPerRecipe() {
-        let suite = "gita.migration.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let key = "ai.recipe.migration.\(SkillID.nextSession)"
-        defaults.set(RecipeMigrationState.legacy.rawValue, forKey: key)
-        #expect(!RecipeMigrationResolver(defaults: defaults).usesPlatform(for: SkillID.nextSession))
-        defaults.set(RecipeMigrationState.internalPlatform.rawValue, forKey: key)
-        #expect(RecipeMigrationResolver(defaults: defaults).usesPlatform(for: SkillID.nextSession))
+private struct DiagnosisStubMemoryContext: MemoryContextProviding {
+    var text: String
+    func block(skill: SkillDefinition, query: String) async -> String { text }
+}
+
+private final class GitaMockURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var storedHandler: (@Sendable (URLRequest) throws -> (Int, Data))?
+
+    static var handler: (@Sendable (URLRequest) throws -> (Int, Data))? {
+        get { lock.withLock { storedHandler } }
+        set { lock.withLock { storedHandler = newValue } }
     }
 
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        do {
+            guard let handler = Self.handler else { throw URLError(.badServerResponse) }
+            let (status, data) = try handler(request)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: status, httpVersion: nil,
+                headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+    override func stopLoading() {}
+}
+
+@Suite(.serialized)
+struct GitaPracticeExtensionTests {
     @Test @MainActor func approvalBindsEditedDraftAndCannotReplay() async throws {
         let gate = PracticeDraftApprovalGate(secret: Data("test-secret".utf8))
         let original = AIPracticeDraft(
@@ -57,10 +80,10 @@ struct GitaPracticeExtensionTests {
             "choices": [["message": ["content": rawContent]]],
             "usage": ["prompt_tokens": 21, "completion_tokens": 8],
         ])
-        TransportMockURLProtocol.handler = { _ in (200, response) }
-        defer { TransportMockURLProtocol.handler = nil }
+        GitaMockURLProtocol.handler = { _ in (200, response) }
+        defer { GitaMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [TransportMockURLProtocol.self]
+        config.protocolClasses = [GitaMockURLProtocol.self]
         let log = InvocationLogSpy()
         let invocationID = UUID().uuidString
         let runner = NextSessionRecipeRunner(
@@ -94,10 +117,10 @@ struct GitaPracticeExtensionTests {
             "choices": [["message": ["content": rawContent]]],
         ])
         let marker = Data("private-image-marker".utf8)
-        TransportMockURLProtocol.handler = { _ in (200, response) }
-        defer { TransportMockURLProtocol.handler = nil }
+        GitaMockURLProtocol.handler = { _ in (200, response) }
+        defer { GitaMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [TransportMockURLProtocol.self]
+        config.protocolClasses = [GitaMockURLProtocol.self]
         let log = InvocationLogSpy()
         let invocationID = UUID()
         let runner = ImagePlanRecipeRunner(session: URLSession(configuration: config), log: log)
@@ -116,10 +139,10 @@ struct GitaPracticeExtensionTests {
     }
 
     @Test func imageRunnerFailureRecordsFailedOutcome() async {
-        TransportMockURLProtocol.handler = { _ in (500, Data()) }
-        defer { TransportMockURLProtocol.handler = nil }
+        GitaMockURLProtocol.handler = { _ in (500, Data()) }
+        defer { GitaMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [TransportMockURLProtocol.self]
+        config.protocolClasses = [GitaMockURLProtocol.self]
         let log = InvocationLogSpy()
         let runner = ImagePlanRecipeRunner(session: URLSession(configuration: config), log: log)
 
@@ -142,10 +165,10 @@ struct GitaPracticeExtensionTests {
             "choices": [["message": ["content": content]]],
             "usage": ["prompt_tokens": 12, "completion_tokens": 6],
         ])
-        TransportMockURLProtocol.handler = { _ in (200, response) }
-        defer { TransportMockURLProtocol.handler = nil }
+        GitaMockURLProtocol.handler = { _ in (200, response) }
+        defer { GitaMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [TransportMockURLProtocol.self]
+        config.protocolClasses = [GitaMockURLProtocol.self]
         let log = InvocationLogSpy()
         let invocationID = UUID().uuidString
         let runner = MediaReviewRecipeRunner(session: URLSession(configuration: config), log: log)
@@ -174,10 +197,10 @@ struct GitaPracticeExtensionTests {
             "choices": [["message": ["content": content]]],
             "usage": ["prompt_tokens": 18, "completion_tokens": 9],
         ])
-        TransportMockURLProtocol.handler = { _ in (200, response) }
-        defer { TransportMockURLProtocol.handler = nil }
+        GitaMockURLProtocol.handler = { _ in (200, response) }
+        defer { GitaMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [TransportMockURLProtocol.self]
+        config.protocolClasses = [GitaMockURLProtocol.self]
         let log = InvocationLogSpy()
         let runner = VideoDiagnosisRecipeRunner(
             session: URLSession(configuration: config),

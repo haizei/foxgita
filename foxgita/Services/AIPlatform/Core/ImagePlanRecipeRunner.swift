@@ -9,30 +9,20 @@ protocol ImagePlanRunning: Sendable {
     ) async throws -> AIPracticeDraft
 }
 
-private struct ImageInvocationContextReader: ContextResourceReading {
-    let refs: Set<ResourceRef>
-
-    func fetch(ref: ResourceRef, scope: ContextFetchScope) async throws -> ContextResource {
-        guard scope.authorizes(ref) else { throw ContextFetchError.notAuthorized(ref) }
-        guard refs.contains(ref) else { throw ContextFetchError.notFound(ref) }
-        return ContextResource(
-            ref: ref,
-            text: "User-selected image available as invocation-scoped binary input.",
-            trusted: false,
-            revision: "invocation"
-        )
-    }
-}
-
 struct ImagePlanRecipeRunner: ImagePlanRunning {
-    let session: URLSession
+    let platform: GitaAIRunner
     let log: any AIInvocationRecording
 
     init(
         session: URLSession = .shared,
         log: any AIInvocationRecording = EmptyAIInvocationLog()
     ) {
-        self.session = session
+        self.platform = GitaAIRunner(session: session)
+        self.log = log
+    }
+
+    init(platform: GitaAIRunner, log: any AIInvocationRecording = EmptyAIInvocationLog()) {
+        self.platform = platform
         self.log = log
     }
 
@@ -59,16 +49,21 @@ struct ImagePlanRecipeRunner: ImagePlanRunning {
             selectedResources: refs,
             mediaResources: media
         )
-        let orchestrator = AgentOrchestrator(
-            registry: try ExtensionRegistry(extensions: [GitaPracticeExtension()]),
-            context: ContextFetcher(reader: ImageInvocationContextReader(refs: Set(refs))),
-            runtimeRouter: RuntimeRouter(messages: MessagesRuntime(transport: AITransport(session: session))),
-            inputGate: StandardInputGate(),
-            presentationGate: StandardPresentationGate()
-        )
+        let resources = Dictionary(uniqueKeysWithValues: refs.map {
+            ($0, ContextResource(
+                ref: $0,
+                text: "User-selected image available as invocation-scoped binary input.",
+                trusted: false,
+                revision: "invocation"
+            ))
+        })
 
         do {
-            let result = try await orchestrator.run(request: request, credentials: credentials)
+            let result = try await platform.run(
+                request: request,
+                resources: resources,
+                credentials: credentials
+            )
             let raw = try JSONDecoder().decode(AIPracticeDraft.Raw.self, from: result.artifact.payloadData)
             let draft = AIPracticeDraft.normalize(raw, fallbackCategory: fallbackCategory)
             await log.record(AIInvocationRecordInput(

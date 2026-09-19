@@ -9,6 +9,7 @@ import Testing
 @testable import foxgita
 
 @MainActor
+@Suite(.serialized)
 struct PracticeStoreTests {
     private func makeStore(seeded: Bool = false) -> (PracticeStore, InMemoryPracticeRepository, UserDefaults) {
         let repo = InMemoryPracticeRepository()
@@ -708,7 +709,7 @@ struct PracticeStoreTests {
 
     // MARK: - Review writes
 
-    @Test func markPendingClearsReadyText() throws {
+    @Test func markPendingPreservesReadyTextUntilReplacementSucceeds() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let now = Date()
@@ -729,7 +730,7 @@ struct PracticeStoreTests {
         store.markReviewsPending(recordingIds: ["clip-1"])
         let after = try #require(try repo.recording(id: "clip-1"))
         #expect(after.reviewStatus == .pending)
-        #expect(after.reviewHighlight.isEmpty)
+        #expect(after.reviewHighlight == "旧")
     }
 
     @Test func applyReviewWritesThreeFields() throws {
@@ -809,7 +810,7 @@ struct PracticeStoreTests {
         #expect(rec.videoFindings[0].startSec == 8)
     }
 
-    @Test func markPendingClearsFindingsJSON() throws {
+    @Test func markPendingPreservesFindingsUntilReplacementSucceeds() throws {
         let (store, repo, _) = makeStore(seeded: true)
         try seedActive(into: repo)
         let now = Date()
@@ -829,7 +830,7 @@ struct PracticeStoreTests {
         store.markReviewsPending(recordingIds: ["clip-p"])
         let after = try #require(try repo.recording(id: "clip-p"))
         #expect(after.reviewStatus == .pending)
-        #expect(after.videoFindings.isEmpty)
+        #expect(after.videoFindings.count == 1)
     }
 
     @Test func updateThenFinishWithoutOpenIdCreatesSecondSession() throws {

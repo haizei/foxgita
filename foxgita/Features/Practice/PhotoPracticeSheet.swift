@@ -21,6 +21,7 @@ struct PhotoPracticeDraftLifecycle: Equatable {
 }
 
 struct PhotoPracticeSheet: View {
+    @Environment(\.gitaAIRunner) private var aiRunner
     private enum Phase {
         case source
         case generating
@@ -406,10 +407,11 @@ struct PhotoPracticeSheet: View {
     }
 
     private func generate(blobs: [Data]) async throws {
+        guard let aiRunner else { throw ImageStepGeneratorError.notConfigured }
         selectedBlobs = blobs
         let log = LiveAIInvocationLog(store: invocationStore)
         let generator = ImageStepGenerator(
-            runner: ImagePlanRecipeRunner(log: log),
+            runner: ImagePlanRecipeRunner(platform: aiRunner, log: log),
             log: log
         )
         let draft = try await generator.generate(

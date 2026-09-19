@@ -13,6 +13,15 @@ enum PracticeTaskOrigin {
         "ai.next.\(generationId)"
     }
 
+    static func aiInvocationID(from originId: String?) -> String? {
+        guard let originId else { return nil }
+        for prefix in ["ai.photo.", "ai.next."] where originId.hasPrefix(prefix) {
+            let id = String(originId.dropFirst(prefix.count))
+            return id.isEmpty ? nil : id
+        }
+        return nil
+    }
+
     static func templateOriginKey(templateId: String) -> String {
         "template.\(templateId)"
     }

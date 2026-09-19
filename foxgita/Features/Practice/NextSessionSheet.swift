@@ -16,6 +16,7 @@ struct NextSessionSheet: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.memoryContext) private var memoryContext
+    @Environment(\.gitaAIRunner) private var aiRunner
     @Environment(\.durationPreferenceSync) private var durationSync
     @Environment(PracticeStore.self) private var store
     @Environment(MemoryStore.self) private var memoryStore
@@ -238,14 +239,14 @@ struct NextSessionSheet: View {
             isGenerating = true
             toast = nil
             do {
+                guard let aiRunner else { throw NextSessionGeneratorError.notConfigured }
                 let log = LiveAIInvocationLog(store: invocationStore)
-                let client: any NextSessionGenerating = RecipeMigrationResolver().usesPlatform(
-                    for: SkillID.nextSession
-                )
-                    ? NextSessionRecipeRunner(memory: memoryContext, log: log)
-                    : NextSessionClient(memory: memoryContext, log: log)
                 let generator = NextSessionGenerator(
-                    client: client,
+                    runner: NextSessionRecipeRunner(
+                        platform: aiRunner,
+                        memory: memoryContext,
+                        log: log
+                    ),
                     log: log
                 )
                 let draft = try await generator.generate(

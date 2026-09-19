@@ -64,6 +64,8 @@ enum PracticeImageCodec {
 
 @MainActor
 final class ImageStepGenerator {
+    static let dependencyKind = AIRecipeDependencyKind.recipeRunner
+
     private let runner: any ImagePlanRunning
     private let credentials: LLMCredentialsStore
     private let log: any AIInvocationRecording
