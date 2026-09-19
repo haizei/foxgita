@@ -27,7 +27,7 @@ struct VideoDiagnosisGeneratorTests {
         }
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         let gen = VideoDiagnosisGenerator(
-            client: StubClient(), credentials: credentials, images: StubImages()
+            runner: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.notConfigured) {
             try await gen.diagnose(context(), baseURL: "", model: "", invocationId: "inv-test")
@@ -51,7 +51,7 @@ struct VideoDiagnosisGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = VideoDiagnosisGenerator(
-            client: StubClient(), credentials: credentials, images: Boom()
+            runner: StubClient(), credentials: credentials, images: Boom()
         )
         await #expect(throws: MediaReviewGeneratorError.prepareFailed) {
             try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -73,7 +73,7 @@ struct VideoDiagnosisGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = VideoDiagnosisGenerator(
-            client: StubClient(), credentials: credentials, images: StubImages()
+            runner: StubClient(), credentials: credentials, images: StubImages()
         )
         await #expect(throws: MediaReviewGeneratorError.failed(.unauthorized)) {
             try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -98,7 +98,7 @@ struct VideoDiagnosisGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = VideoDiagnosisGenerator(
-            client: StubClient(), credentials: credentials, images: Missing()
+            runner: StubClient(), credentials: credentials, images: Missing()
         )
         await #expect(throws: MediaReviewGeneratorError.fileMissing) {
             try await gen.diagnose(context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test")
@@ -122,7 +122,7 @@ struct VideoDiagnosisGeneratorTests {
         let credentials = LLMCredentialsStore(service: "t.\(UUID().uuidString)")
         try credentials.saveAPIKey("sk")
         let gen = VideoDiagnosisGenerator(
-            client: StubClient(), credentials: credentials, images: StubImages()
+            runner: StubClient(), credentials: credentials, images: StubImages()
         )
         let draft = try await gen.diagnose(
             context(), baseURL: "https://api.openai.com/v1", model: "gpt-4o", invocationId: "inv-test"

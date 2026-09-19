@@ -2,7 +2,7 @@ import Testing
 @testable import foxgita
 
 struct VideoDiagnosisDraftTests {
-    @Test func normalizeMidVideoInvertedTimestamps() throws {
+    @Test func normalizeDropsInvertedAndOutOfRangeTimestamps() throws {
         let draft = try VideoDiagnosisDraft.normalize(
             .init(
                 highlight: "稳", focus: "F", nextAction: "慢练",
@@ -16,9 +16,7 @@ struct VideoDiagnosisDraftTests {
             ),
             durationSec: 180
         )
-        #expect(draft.findings.count == 1)
-        #expect(draft.findings[0].startSec == 40)
-        #expect(draft.findings[0].endSec == 60)
+        #expect(draft.findings.isEmpty)
     }
 
     @Test func normalizeHappyPathClampsAndSorts() throws {
@@ -43,12 +41,9 @@ struct VideoDiagnosisDraftTests {
             durationSec: 180
         )
         #expect(draft.highlight == "稳")
-        #expect(draft.findings.count == 2)
+        #expect(draft.findings.count == 1)
         #expect(draft.findings[0].startSec == 10)
-        #expect(draft.findings[1].startSec == 180)
-        #expect(draft.findings[1].endSec == 180)
-        #expect(draft.findings[0].endSec - draft.findings[0].startSec >= 10)
-        #expect(draft.findings[0].endSec - draft.findings[0].startSec <= 30)
+        #expect(draft.findings[0].endSec == 40)
     }
 
     @Test func normalizeDropsIncompleteFindingsAndAllowsEmpty() throws {
@@ -87,5 +82,32 @@ struct VideoDiagnosisDraftTests {
         )
         #expect(draft.findings.count == 5)
         #expect(draft.highlight.count == 80)
+    }
+
+    @Test func normalizeDowngradesUnsupportedPrecisePitchClaims() throws {
+        let draft = try VideoDiagnosisDraft.normalize(
+            .init(
+                highlight: "检测A4偏低20音分", focus: "440Hz不稳", nextAction: "校准到A4",
+                findings: [
+                    .init(
+                        startSec: 2, endSec: 8, title: "A4 音高",
+                        evidence: "检测到438Hz，低8cents需调整",
+                        cause: "弦频率偏低", action: "精确提高8音分"
+                    )
+                ]
+            ),
+            durationSec: 12,
+            hasDeterministicAudioEvidence: false
+        )
+
+        let allText = ([draft.highlight, draft.focus, draft.nextAction] + draft.findings.flatMap {
+            [$0.title, $0.evidence, $0.cause, $0.action]
+        }).joined(separator: " ")
+        #expect(!allText.contains("A4"))
+        #expect(!allText.contains("440Hz"))
+        #expect(!allText.contains("438Hz"))
+        #expect(!allText.localizedCaseInsensitiveContains("cents"))
+        #expect(!allText.contains("音分"))
+        #expect(draft.findings[0].evidence == "音高需要进一步确认")
     }
 }

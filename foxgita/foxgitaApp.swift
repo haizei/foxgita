@@ -69,7 +69,7 @@ struct foxgitaApp: App {
                         log: invocationLog
                     ),
                     videoGenerator: VideoDiagnosisGenerator(
-                        client: VideoDiagnosisClient(memory: liveMemory, log: invocationLog),
+                        runner: VideoDiagnosisRecipeRunner(memory: liveMemory, log: invocationLog),
                         log: invocationLog
                     ),
                     invocationStore: invocationStore

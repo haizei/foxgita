@@ -162,4 +162,40 @@ struct GitaPracticeExtensionTests {
         #expect(log.inputs.first?.usage?.inputTokens == 12)
         #expect(log.artifactLinks.count == 1)
     }
+
+    @Test func videoDiagnosisRunnerValidatesEvidenceAndRecordsArtifact() async throws {
+        let content = """
+        {"highlight":"稳定","focus":"节奏","nextAction":"慢练","findings":[
+          {"startSec":2,"endSec":8,"title":"节奏","evidence":"拍点落后","cause":"看谱","action":"跟节拍器"},
+          {"startSec":10,"endSec":20,"title":"越界","evidence":"画面","cause":"未知","action":"重试"}
+        ]}
+        """
+        let response = try JSONSerialization.data(withJSONObject: [
+            "choices": [["message": ["content": content]]],
+            "usage": ["prompt_tokens": 18, "completion_tokens": 9],
+        ])
+        TransportMockURLProtocol.handler = { _ in (200, response) }
+        defer { TransportMockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral
+        config.protocolClasses = [TransportMockURLProtocol.self]
+        let log = InvocationLogSpy()
+        let runner = VideoDiagnosisRecipeRunner(
+            session: URLSession(configuration: config),
+            memory: DiagnosisStubMemoryContext(text: "已授权练习偏好"),
+            log: log
+        )
+
+        let draft = try await runner.generateDiagnosis(
+            baseURL: "https://api.openai.com/v1", model: "model", apiKey: "key",
+            imageJPEGData: (0..<11).map { Data([$0]) }, contextText: "recording=v1",
+            durationSec: 12, invocationId: UUID().uuidString
+        )
+
+        #expect(draft.findings.count == 1)
+        #expect(draft.findings[0].startSec == 2)
+        #expect(log.inputs.first?.skillId == SkillID.diagnoseVideo)
+        #expect(log.inputs.first?.usage?.inputTokens == 18)
+        #expect(log.inputs.first?.memoryIds == [])
+        #expect(log.artifactLinks.count == 1)
+    }
 }

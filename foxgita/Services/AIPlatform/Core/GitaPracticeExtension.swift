@@ -93,7 +93,8 @@ struct GitaPracticeExtension: AgentExtension {
     private static func maxItems(for skillID: String) -> Int {
         switch skillID {
         case SkillID.planFromImage: return 3
-        case SkillID.reviewMedia, SkillID.diagnoseVideo: return 9
+        case SkillID.reviewMedia: return 9
+        case SkillID.diagnoseVideo: return 13
         default: return 1
         }
     }

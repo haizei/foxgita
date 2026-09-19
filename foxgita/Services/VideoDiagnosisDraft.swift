@@ -35,32 +35,36 @@ struct VideoDiagnosisDraft: Equatable, Sendable {
         var findings: [RawFinding]?
     }
 
-    static func normalize(_ raw: Raw, durationSec: Int) throws -> VideoDiagnosisDraft {
-        let highlight = clampText(raw.highlight)
-        let focus = clampText(raw.focus)
-        let nextAction = clampText(raw.nextAction)
+    static func normalize(
+        _ raw: Raw,
+        durationSec: Int,
+        hasDeterministicAudioEvidence: Bool = false
+    ) throws -> VideoDiagnosisDraft {
+        let highlight = safeText(raw.highlight, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
+        let focus = safeText(raw.focus, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
+        let nextAction = safeText(raw.nextAction, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
         guard !highlight.isEmpty, !focus.isEmpty, !nextAction.isEmpty else {
             throw VideoDiagnosisDraftError.emptyField
         }
         let duration = max(durationSec, 0)
         var findings: [VideoFinding] = []
         for item in raw.findings ?? [] {
-            let title = clampText(item.title)
-            let evidence = clampText(item.evidence)
-            let cause = clampText(item.cause)
-            let action = clampText(item.action)
+            let title = safeText(item.title, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
+            let evidence = safeText(item.evidence, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
+            let cause = safeText(item.cause, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
+            let action = safeText(item.action, hasDeterministicAudioEvidence: hasDeterministicAudioEvidence)
             guard !title.isEmpty, !evidence.isEmpty, !cause.isEmpty, !action.isEmpty else {
                 continue
             }
-            let window = clipWindow(
-                start: item.startSec ?? 0,
-                end: item.endSec ?? 0,
-                durationSec: duration
-            )
+            guard let start = item.startSec,
+                  let end = item.endSec,
+                  start >= 0,
+                  start < end,
+                  end <= duration else { continue }
             findings.append(
                 VideoFinding(
-                    startSec: window.start,
-                    endSec: window.end,
+                    startSec: start,
+                    endSec: end,
                     title: title,
                     evidence: evidence,
                     cause: cause,
@@ -77,25 +81,33 @@ struct VideoDiagnosisDraft: Equatable, Sendable {
         )
     }
 
-    static func clipWindow(start: Int, end: Int, durationSec: Int) -> (start: Int, end: Int) {
-        let duration = max(durationSec, 0)
-        var s = min(max(start, 0), duration)
-        var e = min(max(end, 0), duration)
-        if e <= s {
-            e = min(s + 20, duration)
-        }
-        var length = e - s
-        length = min(max(length, 10), 30)
-        e = min(s + length, duration)
-        if duration - s < 10 {
-            e = duration
-        }
-        if e < s { e = s }
-        return (s, e)
-    }
-
     private static func clampText(_ value: String?) -> String {
         let trimmed = (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.count <= 80 ? trimmed : String(trimmed.prefix(80))
+    }
+
+    private static func safeText(
+        _ value: String?,
+        hasDeterministicAudioEvidence: Bool
+    ) -> String {
+        let text = clampText(value)
+        guard !hasDeterministicAudioEvidence, containsUnsupportedPitchPrecision(text) else {
+            return text
+        }
+        return "音高需要进一步确认"
+    }
+
+    private static func containsUnsupportedPitchPrecision(_ text: String) -> Bool {
+        let range = NSRange(text.startIndex..., in: text)
+        let patterns = [
+            #"(?i)(?<![A-Za-z0-9_])[A-G](?:#|b)?[0-8](?![A-Za-z0-9_])"#,
+            #"(?i)\d+(?:\.\d+)?\s*(?:hz|cents?)(?![A-Za-z])"#,
+            #"\d+(?:\.\d+)?\s*音分"#,
+        ]
+        return patterns.contains { pattern in
+            (try? NSRegularExpression(pattern: pattern))?.firstMatch(
+                in: text, range: range
+            ) != nil
+        }
     }
 }
