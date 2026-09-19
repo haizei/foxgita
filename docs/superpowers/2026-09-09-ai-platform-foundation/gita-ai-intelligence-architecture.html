@@ -114,11 +114,46 @@
     .principle p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
     .principle strong { color: var(--ink); }
 
+    .examples { margin-top: 22px; padding: 26px; }
+    .examples-head { display: flex; align-items: end; justify-content: space-between; gap: 24px; margin-bottom: 20px; }
+    .examples h2 { margin: 7px 0 0; font: 500 34px/1.08 Georgia, "Songti SC", serif; }
+    .examples-note { max-width: 460px; margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .scenario-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-bottom: 18px; }
+    .scenario-tab { padding: 13px 12px; border: 1px solid rgba(40, 55, 47, .12); border-radius: 13px; color: var(--muted); background: rgba(255,255,255,.58); font: 700 12px/1.35 inherit; cursor: pointer; transition: .2s ease; }
+    .scenario-tab:hover, .scenario-tab.active { color: white; border-color: var(--green); background: var(--green); transform: translateY(-1px); }
+    .scenario-tab:focus-visible { outline: 3px solid rgba(35,108,80,.24); outline-offset: 2px; }
+    .scenario-summary { display: grid; grid-template-columns: minmax(250px, .72fr) minmax(0, 1.8fr); gap: 14px; }
+    .case-card { padding: 20px; border-radius: 18px; background: var(--ink); color: white; }
+    .case-card .case-id { color: #a8d3bd; font: 700 10px/1 ui-monospace, monospace; letter-spacing: .12em; }
+    .case-card h3 { margin: 11px 0 9px; font: 500 25px/1.1 Georgia, "Songti SC", serif; }
+    .case-card p { margin: 0; color: rgba(255,255,255,.72); font-size: 12.5px; line-height: 1.65; }
+    .case-result { margin-top: 16px; padding: 12px; border-radius: 12px; color: #183628; background: #dceee5; font-size: 12px; line-height: 1.55; }
+    .case-result b { display: block; margin-bottom: 4px; }
+    .case-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin-top: 14px; }
+    .case-metric { padding: 9px 7px; border: 1px solid rgba(255,255,255,.12); border-radius: 10px; text-align: center; }
+    .case-metric b { display: block; font-size: 14px; }
+    .case-metric span { display: block; margin-top: 3px; color: rgba(255,255,255,.55); font-size: 9px; }
+    .scenario-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; }
+    .case-step { position: relative; min-height: 150px; padding: 16px; border: 1px solid rgba(40,55,47,.11); border-radius: 16px; background: rgba(255,255,255,.74); }
+    .case-step::after { position: absolute; right: -10px; top: 25px; z-index: 2; color: #9ca39d; content: "→"; font-weight: 800; }
+    .case-step:nth-child(4)::after, .case-step:last-child::after { display: none; }
+    .case-step:nth-child(n+5) { margin-top: 1px; }
+    .step-no { color: var(--orange); font: 800 10px/1 ui-monospace, monospace; }
+    .case-step b { display: block; margin: 9px 0 7px; font-size: 13px; }
+    .case-step p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+    .payload { display: inline-block; margin-top: 10px; padding: 5px 7px; border-radius: 7px; color: var(--blue); background: var(--blue-soft); font: 700 9px/1.35 ui-monospace, monospace; }
+    .safety { color: var(--orange); background: var(--orange-soft); }
+    .approval { color: var(--purple); background: var(--purple-soft); }
+
     @media (max-width: 980px) {
       main { width: min(100% - 24px, 720px); padding-top: 30px; }
       header { align-items: start; flex-direction: column; }
       .architecture { grid-template-columns: 1fr; }
       .side { grid-template-columns: 1fr; }
+      .scenario-summary { grid-template-columns: 1fr; }
+      .scenario-flow { grid-template-columns: repeat(2, 1fr); }
+      .case-step:nth-child(2n)::after { display: none; }
+      .case-step:nth-child(n+3) { margin-top: 1px; }
     }
 
     @media (max-width: 560px) {
@@ -126,6 +161,11 @@
       .flow { grid-template-columns: 42px 1fr; }
       .node { padding-right: 44px; }
       .node::after { right: 12px; }
+      .examples { padding: 17px; }
+      .examples-head { align-items: start; flex-direction: column; }
+      .scenario-tabs { grid-template-columns: 1fr 1fr; }
+      .scenario-flow { grid-template-columns: 1fr; }
+      .case-step::after { display: none; }
     }
   </style>
 </head>
@@ -206,6 +246,38 @@
       </aside>
     </section>
 
+    <section class="panel examples">
+      <div class="examples-head">
+        <div>
+          <span class="detail-label">Four production recipes</span>
+          <h2>四个实际 AI 场景，完整跑一次</h2>
+        </div>
+        <p class="examples-note">点击场景查看一条具体请求如何经过数据围栏、模型、Artifact、门禁、业务写入和结果追踪。示例值来自当前产品契约，用于说明真实体感，不代表固定生成文案。</p>
+      </div>
+
+      <div class="scenario-tabs" role="tablist" aria-label="AI 应用场景">
+        <button type="button" id="scenario-tab-next" class="scenario-tab active" data-scenario="next" role="tab" aria-selected="true" aria-controls="scenario-panel" tabindex="0">01 · 下一次练习</button>
+        <button type="button" id="scenario-tab-image" class="scenario-tab" data-scenario="image" role="tab" aria-selected="false" aria-controls="scenario-panel" tabindex="-1">02 · 图片生成计划</button>
+        <button type="button" id="scenario-tab-review" class="scenario-tab" data-scenario="review" role="tab" aria-selected="false" aria-controls="scenario-panel" tabindex="-1">03 · 音频媒体复盘</button>
+        <button type="button" id="scenario-tab-video" class="scenario-tab" data-scenario="video" role="tab" aria-selected="false" aria-controls="scenario-panel" tabindex="-1">04 · 视频分段诊断</button>
+      </div>
+
+      <div class="scenario-summary" id="scenario-panel" role="tabpanel" aria-labelledby="scenario-tab-next" aria-live="polite">
+        <aside class="case-card">
+          <span class="case-id" id="caseId">RECIPE · practice.next_session</span>
+          <h3 id="caseTitle">“我今天有 20 分钟，帮我安排练习”</h3>
+          <p id="caseStory">用户从今日练习入口选择 20 分钟。系统在用户已授权记忆时读取相关目标和当前难点，生成一份可编辑草稿。</p>
+          <div class="case-result"><b>用户最终看到</b><span id="caseResult">20 分钟练习卡：热身 5 分钟、F 和弦转换 10 分钟、歌曲巩固 5 分钟；确认前不会创建任务。</span></div>
+          <div class="case-metrics">
+            <div class="case-metric"><b id="metricResources">1</b><span>授权资源</span></div>
+            <div class="case-metric"><b id="metricWrites">1</b><span>批准后写入</span></div>
+            <div class="case-metric"><b id="metricAudit">完整</b><span>审计链</span></div>
+          </div>
+        </aside>
+        <div class="scenario-flow" id="scenarioFlow" aria-live="polite"></div>
+      </div>
+    </section>
+
     <section class="panel principle">
       <div class="principle-mark">G</div>
       <p><strong>Gita AI 的边界：</strong>AI 生成候选结果，平台约束可见数据，用户掌握关键决策，确定性业务代码执行最终写入。</p>
@@ -239,6 +311,127 @@
       document.getElementById("detailBody").textContent = body;
       document.getElementById("detailList").innerHTML = list.map(item => `<li>${item}</li>`).join("");
     }));
+
+    const scenarios = {
+      next: {
+        id: "RECIPE · practice.next_session",
+        title: "“我今天有 20 分钟，帮我安排练习”",
+        story: "用户从今日练习入口选择 20 分钟。系统在用户已授权记忆时读取相关目标和当前难点，生成一份可编辑草稿。",
+        result: "20 分钟练习卡：热身 5 分钟、F 和弦转换 10 分钟、歌曲巩固 5 分钟；确认前不会创建任务。",
+        metrics: ["1", "1", "完整"],
+        steps: [
+          ["用户输入", "选择 20 分钟并点击“生成安排”。", "minutes=20"],
+          ["Recipe 路由", "匹配下一次练习；声明 memory 读取范围、Practice Draft Schema 与 Host Approval。", "next_session@1.0"],
+          ["Fetching 围栏", "仅在同意后读取相关目标/能力，例如“F 和弦转换仍慢”；形成 Snapshot + SeenSet。", "memory × 1", "safety"],
+          ["Prompt + Runtime", "BP1 放稳定教练规则，BP2 后加入本次 20 分钟与围栏上下文，Messages Runtime 调模型。", "cache-ready BP1/BP2"],
+          ["Artifact 校验", "得到标题、分类、总时长、步骤和步骤分钟；代码将总预算钳制到 20 分钟并移除超额步骤。", "5 + 10 + 5 = 20"],
+          ["预览与门禁", "用户把“歌曲巩固”改成“晴天副歌”；编辑后重新绑定 Approval Token。", "explicit approve", "approval"],
+          ["业务写入", "PracticeStore 创建一条 PracticeItem，并把 Invocation 关联到业务对象。", "PracticeItem × 1"],
+          ["结果追踪", "记录 accepted / edited、开始练习时间、完成时间与 token/cache 成本。", "Invocation → completed"]
+        ]
+      },
+      image: {
+        id: "RECIPE · practice.plan.from_image",
+        title: "拍两张和弦谱，生成一份练习计划",
+        story: "用户选择一张指法图和一张谱面。图片只作为本次 Invocation 的 JPEG 字节进入模型，不保存路径，也不读取长期记忆。",
+        result: "识别出 C–G–Am–F 循环，生成三步练习；用户可以改标题、分钟和步骤，点“加入今日练习”后才落库。",
+        metrics: ["2", "1", "零路径"],
+        steps: [
+          ["用户输入", "相册选择两张图片，点击“生成练习”。", "JPEG × 2"],
+          ["Recipe 路由", "匹配图片计划；最多 3 张图、memory deny、输出 Practice Draft。", "plan.from_image"],
+          ["Fetching 围栏", "为两张图生成 invocation-scoped ResourceRef；只允许 image/jpeg 且必须属于本次选择。", "image-…-1 / 2", "safety"],
+          ["Prompt + Runtime", "文本 Prompt 只描述任务；JPEG bytes 走独立媒体字段，本地文件名与绝对路径不会进入 Prompt。", "bytes ≠ text"],
+          ["Artifact 校验", "解析出“和弦循环练习”、分类 chord、目标 15 分钟与三个步骤；非法 JSON 直接失败。", "typed draft"],
+          ["强制预览", "关闭页面记为 abandoned 且零写入；重新生成会创建新的 Invocation。", "no auto-submit", "approval"],
+          ["业务写入", "用户确认后 Mutation Gate 防重放，只创建一次 PracticeItem。", "idempotent write"],
+          ["结果追踪", "关联 Snapshot、Artifact、PracticeItem，以及 accepted / abandoned / regenerated。", "zero hidden writes"]
+        ]
+      },
+      review: {
+        id: "RECIPE · practice.review.media",
+        title: "录完一段音频，自动得到练后复盘",
+        story: "用户完成 60 秒练习录音。系统上传派生波形图和练习上下文，不上传完整音频；结构化复盘验证通过后关联到该 Recording。",
+        result: "片段卡显示：亮点“节奏稳定”、重点“F 和弦换把”、下一步“60 BPM 慢练 3 轮”；原录音始终可播放。",
+        metrics: ["2–3", "结果自动", "记忆另批"],
+        steps: [
+          ["业务触发", "Recording 入库并进入 pending；后台 ReviewJobRunner 顺序处理。", "recording=clip-42"],
+          ["Recipe 路由", "匹配媒体复盘；读取 recording、派生 image 与已授权候选记忆上下文。", "review.media"],
+          ["Fetching 围栏", "只获取本次录音元数据、波形 JPEG 和允许的 memory；Snapshot 与 SeenSet 必须一致。", "recording + image", "safety"],
+          ["Prompt + Runtime", "模型看见任务、步骤、BPM、笔记和视觉证据；看不到文件路径、密钥或全量数据库。", "scoped evidence"],
+          ["Artifact 校验", "输出 highlight / focus / nextAction；空字段、非法结构，或 Snapshot 与 SeenSet 越界、不一致时会被拒绝。", "Review Result"],
+          ["结果与记忆分流", "Review Result 可自动写回 Recording；“记住 F 换把困难”只是 Candidate Memory。", "result ≠ memory", "approval"],
+          ["用户决策", "结果页提供“记住 / 忽略”；只有“记住”通过 Host Approval 后写长期记忆。", "explicit memory"],
+          ["重跑与审计", "重跑时继续展示旧结果，成功后替换；历次 Invocation/Artifact 都保留。", "latest view + history"]
+        ]
+      },
+      video: {
+        id: "RECIPE · practice.diagnose.video",
+        title: "上传演奏视频，得到可跳转的分段诊断",
+        story: "用户选择一段 90 秒练习视频。系统抽取最多 10 帧及可用波形作为派生证据，模型输出带时间区间的 Finding。",
+        result: "诊断页出现 12–20 秒“左手换把停顿”，点击即可播放对应片段；越界区间不会显示，伪精确音高会降级为“需进一步确认”。",
+        metrics: ["≤13", "结果自动", "最多 5 段"],
+        steps: [
+          ["用户输入", "选择 90 秒视频并进入分析页；原视频仍由业务层管理和播放。", "duration=90s"],
+          ["Recipe 路由", "匹配视频诊断；允许 recording、image、memory，要求 Video Review Artifact。", "diagnose.video"],
+          ["Fetching 围栏", "抽帧/波形成为 invocation-scoped JPEG，最多 13 个上下文资源；未选择资源不能被模型引用。", "frames ≤ 10", "safety"],
+          ["Prompt + Runtime", "Prompt 包含 duration、练习任务和派生证据；Messages Runtime 返回结构化诊断。", "evidence bound"],
+          ["Artifact 校验", "每段必须满足 0 ≤ start < end ≤ 90，最多 5 条；越界条目直接丢弃。", "12s → 20s"],
+          ["真实性门禁", "没有确定性音频分析时，“A4 低 8 cents / 438Hz”会被代码降级，避免伪精确。", "precision refused", "safety"],
+          ["业务写入", "合法 Finding 与三段摘要自动关联 Recording；Candidate Memory 仍需用户批准。", "Recording review"],
+          ["用户与审计", "用户点时间线回放片段；失败可重试且不损伤视频、手写记录或旧诊断。", "safe retry"]
+        ]
+      }
+    };
+
+    function renderScenario(key) {
+      const scenario = scenarios[key];
+      document.getElementById("caseId").textContent = scenario.id;
+      document.getElementById("caseTitle").textContent = scenario.title;
+      document.getElementById("caseStory").textContent = scenario.story;
+      document.getElementById("caseResult").textContent = scenario.result;
+      document.getElementById("metricResources").textContent = scenario.metrics[0];
+      document.getElementById("metricWrites").textContent = scenario.metrics[1];
+      document.getElementById("metricAudit").textContent = scenario.metrics[2];
+      document.getElementById("scenarioFlow").innerHTML = scenario.steps.map((step, index) => `
+        <article class="case-step">
+          <span class="step-no">${String(index + 1).padStart(2, "0")}</span>
+          <b>${step[0]}</b>
+          <p>${step[1]}</p>
+          <span class="payload ${step[3] || ""}">${step[2]}</span>
+        </article>
+      `).join("");
+    }
+
+    const scenarioTabs = Array.from(document.querySelectorAll(".scenario-tab"));
+
+    function activateScenario(tab, moveFocus = false) {
+      scenarioTabs.forEach(item => {
+        item.classList.remove("active");
+        item.setAttribute("aria-selected", "false");
+        item.setAttribute("tabindex", "-1");
+      });
+      tab.classList.add("active");
+      tab.setAttribute("aria-selected", "true");
+      tab.setAttribute("tabindex", "0");
+      document.getElementById("scenario-panel").setAttribute("aria-labelledby", tab.id);
+      renderScenario(tab.dataset.scenario);
+      if (moveFocus) tab.focus();
+    }
+
+    scenarioTabs.forEach((tab, index) => {
+      tab.addEventListener("click", () => activateScenario(tab));
+      tab.addEventListener("keydown", event => {
+        let targetIndex;
+        if (event.key === "ArrowRight" || event.key === "ArrowDown") targetIndex = (index + 1) % scenarioTabs.length;
+        if (event.key === "ArrowLeft" || event.key === "ArrowUp") targetIndex = (index - 1 + scenarioTabs.length) % scenarioTabs.length;
+        if (event.key === "Home") targetIndex = 0;
+        if (event.key === "End") targetIndex = scenarioTabs.length - 1;
+        if (targetIndex === undefined) return;
+        event.preventDefault();
+        activateScenario(scenarioTabs[targetIndex], true);
+      });
+    });
+    renderScenario("next");
   </script>
 </body>
 </html>
