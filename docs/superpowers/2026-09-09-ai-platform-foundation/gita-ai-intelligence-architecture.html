@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gita AI 智能层架构</title>
+  <style>
+    :root {
+      --ink: #17221d;
+      --muted: #637067;
+      --paper: #f4f0e7;
+      --card: rgba(255, 255, 255, .82);
+      --line: #c9c9ba;
+      --green: #236c50;
+      --green-soft: #e3f0e9;
+      --orange: #d26832;
+      --orange-soft: #fae9dc;
+      --blue: #365f87;
+      --blue-soft: #e4edf5;
+      --purple: #745b83;
+      --purple-soft: #eee8f2;
+      --shadow: 0 18px 52px rgba(36, 48, 40, .09);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, rgba(210, 104, 50, .10), transparent 28rem),
+        radial-gradient(circle at 100% 20%, rgba(35, 108, 80, .10), transparent 30rem),
+        var(--paper);
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif;
+    }
+
+    main { width: min(1440px, calc(100% - 40px)); margin: 0 auto; padding: 52px 0 64px; }
+
+    header { display: flex; align-items: end; justify-content: space-between; gap: 32px; margin-bottom: 32px; }
+    .eyebrow { margin: 0 0 10px; color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; }
+    h1 { max-width: 800px; margin: 0; font-family: Georgia, "Songti SC", serif; font-size: clamp(36px, 5vw, 68px); font-weight: 500; letter-spacing: -.04em; line-height: .98; }
+    .lede { max-width: 410px; margin: 0; color: var(--muted); font-size: 15px; line-height: 1.75; }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: minmax(620px, 1.6fr) minmax(300px, .72fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .panel { border: 1px solid rgba(86, 91, 82, .18); border-radius: 28px; background: var(--card); box-shadow: var(--shadow); backdrop-filter: blur(18px); }
+    .flow-panel { padding: 25px; }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+    .panel-title { font-size: 13px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+    .live-badge { display: inline-flex; align-items: center; gap: 7px; color: var(--green); font-size: 12px; font-weight: 700; }
+    .live-badge::before { width: 7px; height: 7px; border-radius: 99px; background: var(--green); content: ""; box-shadow: 0 0 0 5px rgba(35, 108, 80, .12); }
+
+    .flow { display: grid; grid-template-columns: 72px 1fr; }
+    .stage-number { position: relative; display: flex; justify-content: center; color: #8a918a; font: 700 11px/1 ui-monospace, monospace; }
+    .stage-number::after { position: absolute; top: 28px; bottom: -17px; width: 1px; background: var(--line); content: ""; }
+    .flow-row:last-child .stage-number::after { display: none; }
+    .flow-row { display: contents; }
+
+    .node {
+      position: relative;
+      min-height: 80px;
+      margin: 0 0 17px;
+      padding: 17px 56px 17px 19px;
+      border: 1px solid rgba(40, 55, 47, .12);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .78);
+      cursor: pointer;
+      width: 100%;
+      color: inherit;
+      font: inherit;
+      text-align: left;
+      transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+    }
+    .node:hover, .node.active { transform: translateY(-2px); border-color: var(--tone); box-shadow: 0 10px 24px rgba(37, 46, 41, .10); }
+    .node:focus-visible { outline: 3px solid color-mix(in srgb, var(--tone) 42%, white); outline-offset: 3px; }
+    .node::after { position: absolute; right: 19px; top: 50%; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; color: var(--tone); background: var(--soft); content: "→"; transform: translateY(-50%); }
+    .node strong { display: block; margin-bottom: 5px; font-size: 17px; }
+    .node small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+    .node.green { --tone: var(--green); --soft: var(--green-soft); }
+    .node.orange { --tone: var(--orange); --soft: var(--orange-soft); }
+    .node.blue { --tone: var(--blue); --soft: var(--blue-soft); }
+    .node.purple { --tone: var(--purple); --soft: var(--purple-soft); }
+
+    .decision { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 11px; }
+    .branch { padding: 9px 11px; border-radius: 10px; font-size: 11px; font-weight: 700; text-align: center; }
+    .branch.read { color: var(--blue); background: var(--blue-soft); }
+    .branch.write { color: var(--orange); background: var(--orange-soft); }
+
+    .side { display: grid; grid-template-rows: auto 1fr; gap: 18px; }
+    .detail { min-height: 252px; padding: 25px; }
+    .detail-label { color: var(--green); font-size: 11px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
+    .detail h2 { margin: 13px 0 10px; font: 500 27px/1.1 Georgia, "Songti SC", serif; }
+    .detail p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.75; }
+    .detail ul { margin: 17px 0 0; padding: 0; list-style: none; }
+    .detail li { position: relative; margin-top: 9px; padding-left: 18px; color: #47524b; font-size: 12.5px; line-height: 1.5; }
+    .detail li::before { position: absolute; left: 0; top: .55em; width: 7px; height: 7px; border-radius: 50%; background: var(--green); content: ""; }
+
+    .rails { display: grid; gap: 11px; padding: 18px; }
+    .rail { padding: 17px; border-radius: 17px; border: 1px solid transparent; }
+    .rail:nth-child(1) { color: var(--green); background: var(--green-soft); border-color: rgba(35,108,80,.12); }
+    .rail:nth-child(2) { color: var(--purple); background: var(--purple-soft); border-color: rgba(116,91,131,.12); }
+    .rail:nth-child(3) { color: var(--blue); background: var(--blue-soft); border-color: rgba(54,95,135,.12); }
+    .rail:nth-child(4) { color: var(--orange); background: var(--orange-soft); border-color: rgba(210,104,50,.12); }
+    .rail b { display: block; margin-bottom: 6px; font-size: 13px; }
+    .rail span { display: block; color: #5e665f; font-size: 11.5px; line-height: 1.55; }
+
+    .principle { display: grid; grid-template-columns: auto 1fr; gap: 16px; align-items: center; margin-top: 18px; padding: 20px 24px; }
+    .principle-mark { width: 47px; height: 47px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--ink); font: 700 20px Georgia, serif; }
+    .principle p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .principle strong { color: var(--ink); }
+
+    @media (max-width: 980px) {
+      main { width: min(100% - 24px, 720px); padding-top: 30px; }
+      header { align-items: start; flex-direction: column; }
+      .architecture { grid-template-columns: 1fr; }
+      .side { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 560px) {
+      .flow-panel { padding: 16px; }
+      .flow { grid-template-columns: 42px 1fr; }
+      .node { padding-right: 44px; }
+      .node::after { right: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="eyebrow">Gita Intelligence Architecture · V1</p>
+        <h1>从用户意图，到可信的业务结果</h1>
+      </div>
+      <p class="lede">模型负责理解与生成；平台控制上下文和风险；用户决定关键写入；业务代码完成最终执行。</p>
+    </header>
+
+    <section class="architecture">
+      <article class="panel flow-panel">
+        <div class="panel-head">
+          <span class="panel-title">一次 AI 请求的主链路</span>
+          <span class="live-badge">Messages Runtime</span>
+        </div>
+        <div class="flow" id="flow">
+          <div class="flow-row">
+            <div class="stage-number">01</div>
+            <button type="button" class="node green active" data-key="intent" aria-pressed="true"><strong>用户意图</strong><small>生成下一次练习、从图片制定计划、媒体复盘或视频诊断</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">02</div>
+            <button type="button" class="node green" data-key="recipe" aria-pressed="false"><strong>Recipe / Skill 选择</strong><small>确定场景、版本、读取权限、输出 Schema 与审批策略</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">03</div>
+            <button type="button" class="node orange" data-key="fetch" aria-pressed="false"><strong>Fetching 数据围栏</strong><small>Selected Resources → Context Snapshot → Seen Set，一次调用只看被授权的数据</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">04</div>
+            <button type="button" class="node green" data-key="prompt" aria-pressed="false"><strong>Prompt 结构化组装</strong><small>静态指令 + 动态上下文 + 历史前缀 + 当前输入</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">05</div>
+            <button type="button" class="node blue" data-key="runtime" aria-pressed="false"><strong>Messages Runtime</strong><small>当前生产运行时；Agent SDK 与 Managed Agents 保持可替换接口</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">06</div>
+            <button type="button" class="node purple" data-key="artifact" aria-pressed="false"><strong>Artifact 解析与校验</strong><small>把模型输出转为结构化产物，并执行字段、时长与证据约束</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">07</div>
+            <button type="button" class="node orange" data-key="gate" aria-pressed="false">
+              <strong>Approval / Mutation Gate</strong>
+              <small>区分只读展示和写操作；确认令牌绑定用户、会话与草稿</small>
+              <div class="decision"><span class="branch read">只读 → 直接展示</span><span class="branch write">写入 → 确认与防重放</span></div>
+            </button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">08</div>
+            <button type="button" class="node blue" data-key="write" aria-pressed="false"><strong>业务对象写入</strong><small>创建 Practice / Task，更新 Review，或在明确授权后保存 Memory</small></button>
+          </div>
+          <div class="flow-row">
+            <div class="stage-number">09</div>
+            <button type="button" class="node purple" data-key="audit" aria-pressed="false"><strong>Invocation 审计与结果追踪</strong><small>关联调用、上下文、Artifact、成本、用户决策与最终业务结果</small></button>
+          </div>
+        </div>
+      </article>
+
+      <aside class="side">
+        <section class="panel detail" aria-live="polite">
+          <span class="detail-label" id="detailLabel">入口</span>
+          <h2 id="detailTitle">用户表达目标，而不是操作模型</h2>
+          <p id="detailBody">Gita 把用户目标转换成一个明确的业务场景，并为这次请求创建独立 Invocation。</p>
+          <ul id="detailList"><li>保持原有产品入口和操作习惯</li><li>每次请求都有唯一审计身份</li><li>后续所有资源和结果都归属于本次调用</li></ul>
+        </section>
+
+        <section class="panel rails">
+          <div class="rail"><b>数据安全 · Fetching</b><span>资源白名单、调用级 Scope、Snapshot 与 Seen Set 一致性校验。</span></div>
+          <div class="rail"><b>结果安全 · Gates</b><span>模型输出先成为 Artifact；写入必须经过审批、时效校验和防重放。</span></div>
+          <div class="rail"><b>成本控制 · Prompt Caching</b><span>稳定静态指令、历史前缀和动态上下文三个断点，并记录缓存 Token。</span></div>
+          <div class="rail"><b>持续改进 · Invocation</b><span>将调用成本与接受、放弃、重生成和任务完成等业务结果关联。</span></div>
+        </section>
+      </aside>
+    </section>
+
+    <section class="panel principle">
+      <div class="principle-mark">G</div>
+      <p><strong>Gita AI 的边界：</strong>AI 生成候选结果，平台约束可见数据，用户掌握关键决策，确定性业务代码执行最终写入。</p>
+    </section>
+  </main>
+
+  <script>
+    const details = {
+      intent: ["入口", "用户表达目标，而不是操作模型", "Gita 把用户目标转换成一个明确的业务场景，并为这次请求创建独立 Invocation。", ["保持原有产品入口和操作习惯", "每次请求都有唯一审计身份", "后续所有资源和结果都归属于本次调用"]],
+      recipe: ["能力路由", "先确定规则，再调用模型", "Recipe 是一次 AI 任务的执行合同，统一描述读取范围、运行时、输出结构和审批方式。", ["领域能力由 GitaPracticeExtension 注册", "Skill 与版本可以独立演进", "四个场景共享同一平台规则"]],
+      fetch: ["安全边界", "模型只能看见本次授权的数据", "Fetching 不是全库检索，而是从用户选择的资源形成调用级快照，并核对模型实际读取集合。", ["图片、录音、视频和记忆均有资源身份", "未选择、未读取或类型错误的媒体会被拒绝", "数据边界由代码强制，而不是 Prompt 提醒"]],
+      prompt: ["上下文工程", "Prompt 被拆成稳定且可观测的组成", "平台按固定顺序组装系统规则、动态上下文、历史和当前请求，为缓存和问题定位建立稳定边界。", ["媒体二进制不混入文本 Prompt", "各段生成独立指纹", "支持三断点缓存指标分析"]],
+      runtime: ["模型执行", "业务层不依赖具体模型接入方式", "Runtime 层承接流式事件、取消、失败、Token 用量和格式修复，让上层 Recipe 保持领域中立。", ["Messages API 当前投入生产", "Agent SDK 和 Managed Agents 尚未启用", "运行时可以按能力要求替换"]],
+      artifact: ["结构化结果", "AI 输出先变成受约束的产品对象", "解析器把模型文本转成 Artifact，并验证必填字段、练习时长、媒体证据和时间范围。", ["非法 JSON 不进入业务层", "结果保留上下文来源", "业务约束由确定性代码校验"]],
+      gate: ["执行门禁", "建议与执行之间必须有明确边界", "只读复盘可以直接展示；创建任务或写入记忆必须经过与当前草稿绑定的确认令牌。", ["编辑草稿后旧令牌失效", "令牌具有时效且不可重复使用", "未经同意不产生隐式记忆"]],
+      write: ["业务执行", "最终落库仍由 Gita 的确定性代码完成", "通过门禁后，业务服务执行具体写入，使 AI 无法绕过领域规则直接修改数据库。", ["支持 Practice、Task、Review 和 Memory", "沿用现有业务事务与校验", "可将 Artifact 追溯到最终对象"]],
+      audit: ["闭环度量", "每次调用都能追到成本和业务结果", "Invocation 把 Skill、模型、上下文、Artifact、缓存用量、用户决策和业务对象连接成完整审计链。", ["区分成功、失败与取消", "记录接受、放弃、重生成和完成", "支持用业务价值而非调用次数评估 AI"]]
+    };
+
+    const nodes = document.querySelectorAll(".node");
+    nodes.forEach(node => node.addEventListener("click", () => {
+      nodes.forEach(item => {
+        item.classList.remove("active");
+        item.setAttribute("aria-pressed", "false");
+      });
+      node.classList.add("active");
+      node.setAttribute("aria-pressed", "true");
+      const [label, title, body, list] = details[node.dataset.key];
+      document.getElementById("detailLabel").textContent = label;
+      document.getElementById("detailTitle").textContent = title;
+      document.getElementById("detailBody").textContent = body;
+      document.getElementById("detailList").innerHTML = list.map(item => `<li>${item}</li>`).join("");
+    }));
+  </script>
+</body>
+</html>
