@@ -59,6 +59,23 @@ struct MetronomeDisplayCardTests {
         #expect(!MetronomeDisplayCard.showsDivider(at: 2, displayedSegmentCount: 3))
     }
 
+    @Test func accentAccessibilityDescribesStateAndLock() {
+        #expect(
+            MetronomeDisplayCard.accentAccessibilityLabel(
+                index: 0,
+                kind: .strong,
+                isLocked: false
+            ) == "第 1 拍，强拍"
+        )
+        #expect(
+            MetronomeDisplayCard.accentAccessibilityLabel(
+                index: 2,
+                kind: .mute,
+                isLocked: true
+            ) == "第 3 拍，静音拍，已锁定"
+        )
+    }
+
     @Test func beatTrackPulsePolicyMatchesEachMode() {
         let weakMain = MetronomeVisualEvent(sequence: 1, beat: 1, kind: .weak, role: .main)
         let mediumMain = MetronomeVisualEvent(sequence: 2, beat: 1, kind: .medium, role: .main)

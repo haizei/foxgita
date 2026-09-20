@@ -108,22 +108,28 @@ final class PracticeFlowUITests: XCTestCase {
         app.buttons["创建练习"].tap()
 
         app.buttons["拍号，打开节拍器设置"].tap()
-        app.buttons["第 1 拍，强，点击切换"].tap()
-        app.buttons["第 1 拍，静音，点击切换"].tap()
-        app.buttons["第 2 拍，普通，点击切换"].tap()
-        app.buttons["第 3 拍，普通，点击切换"].tap()
-        app.buttons["第 3 拍，次强，点击切换"].tap()
-        app.buttons["第 3 拍，强，点击切换"].tap()
-        app.buttons["第 4 拍，普通，点击切换"].tap()
-        app.buttons["第 4 拍，次强，点击切换"].tap()
-        XCTAssertTrue(app.buttons["第 1 拍，普通，点击切换"].exists)
-        XCTAssertTrue(app.buttons["第 2 拍，次强，点击切换"].exists)
-        XCTAssertTrue(app.buttons["第 3 拍，静音，点击切换"].exists)
-        XCTAssertTrue(app.buttons["第 4 拍，强，点击切换"].exists)
+        app.buttons["第 1 拍，强拍。轻点切换为次强拍"].tap()
+        app.buttons["第 1 拍，次强拍。轻点切换为普通拍"].tap()
+        app.buttons["第 2 拍，普通拍。轻点切换为静音拍"].tap()
+        app.buttons["第 2 拍，静音拍。轻点切换为强拍"].tap()
+        app.buttons["第 2 拍，强拍。轻点切换为次强拍"].tap()
+        app.buttons["第 3 拍，普通拍。轻点切换为静音拍"].tap()
+        app.buttons["第 4 拍，普通拍。轻点切换为静音拍"].tap()
+        app.buttons["第 4 拍，静音拍。轻点切换为强拍"].tap()
+        XCTAssertTrue(app.buttons["第 1 拍，普通拍。轻点切换为静音拍"].exists)
+        XCTAssertTrue(app.buttons["第 2 拍，次强拍。轻点切换为普通拍"].exists)
+        XCTAssertTrue(app.buttons["第 3 拍，静音拍。轻点切换为强拍"].exists)
+        XCTAssertTrue(app.buttons["第 4 拍，强拍。轻点切换为次强拍"].exists)
         app.buttons["metronome.settings.done"].tap()
 
         let card = app.descendants(matching: .any)["metronome.display-card"]
         XCTAssertTrue(card.waitForExistence(timeout: 5))
+
+        let firstAccentBar = app.buttons["metronome.accent-beat.1"]
+        XCTAssertTrue(firstAccentBar.exists)
+        XCTAssertEqual(firstAccentBar.label, "第 1 拍，普通拍")
+        firstAccentBar.tap()
+        XCTAssertEqual(firstAccentBar.label, "第 1 拍，静音拍")
 
         let allBeatsTrack = app.buttons["节拍反馈：所有节拍"]
         XCTAssertTrue(allBeatsTrack.exists)

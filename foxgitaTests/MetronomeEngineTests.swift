@@ -106,11 +106,11 @@ struct MetronomeEngineTests {
         let metronome = MetronomeEngine()
         metronome.configureMeter(timeSignature: "2/4", accentRaw: "31")
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .medium)
+        #expect(metronome.accentPattern[1] == .mute)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .strong)
         metronome.cycleAccent(at: 1)
-        #expect(metronome.accentPattern[1] == .mute)
+        #expect(metronome.accentPattern[1] == .medium)
         metronome.cycleAccent(at: 1)
         #expect(metronome.accentPattern[1] == .weak)
     }
@@ -245,13 +245,13 @@ struct MetronomeEngineTests {
         #expect(metronome.accentPattern == [.strong, .weak])
         #expect(metronome.configuredBeatsPerBar == 3)
         #expect(metronome.configuredSubdivision == .twoEighths)
-        #expect(metronome.configuredAccentPattern == [.strong, .medium, .weak])
+        #expect(metronome.configuredAccentPattern == [.strong, .mute, .weak])
 
         try await Task.sleep(for: .milliseconds(850))
 
         #expect(metronome.beatsPerBar == 3)
         #expect(metronome.subdivision == .twoEighths)
-        #expect(metronome.accentPattern == [.strong, .medium, .weak])
+        #expect(metronome.accentPattern == [.strong, .mute, .weak])
         metronome.stop()
     }
 

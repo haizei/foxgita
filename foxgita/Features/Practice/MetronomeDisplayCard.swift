@@ -34,6 +34,9 @@ struct MetronomeDisplayCard: View {
     let metronome: MetronomeEngine
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
     var onSoundTap: () -> Void = {}
+    var onAccentTap: (Int) -> Void = { _ in }
+    var isAccentEditingLocked = false
+    var onLockedAccentTap: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var trackPulseShape = BeatTrackPulseShape.none
@@ -167,8 +170,17 @@ struct MetronomeDisplayCard: View {
                     }
                 }
                 .padding(.horizontal, Layout.fourBeatSideInset)
+            } else if metronome.beatsPerBar > 6 {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
+                            beatBar(index: index)
+                                .frame(width: 44)
+                        }
+                    }
+                }
             } else {
-                HStack(spacing: metronome.beatsPerBar > 6 ? 4 : GitaTheme.s8) {
+                HStack(spacing: GitaTheme.s8) {
                     ForEach(0..<metronome.beatsPerBar, id: \.self) { index in
                         beatBar(index: index)
                             .frame(maxWidth: metronome.beatsPerBar <= 4 ? 80 : .infinity)
@@ -180,56 +192,82 @@ struct MetronomeDisplayCard: View {
         .frame(maxWidth: .infinity)
         .animation(.easeInOut(duration: 0.12), value: activeBeat)
         .animation(.easeInOut(duration: 0.12), value: metronome.beatsPerBar)
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: metronome.accentPattern)
+        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: metronome.configuredAccentPattern)
     }
 
     private func beatBar(index: Int) -> some View {
         let isActive = activeBeat == index
-        let kind = metronome.accentPattern.indices.contains(index)
-            ? metronome.accentPattern[index]
+        let kind = metronome.configuredAccentPattern.indices.contains(index)
+            ? metronome.configuredAccentPattern[index]
             : MetronomeBeatKind.weak
         let displayedCount = Self.displayedSegmentCount(for: kind)
         let segmentColor = Self.fillColor(for: kind, isActive: isActive)
 
-        return GeometryReader { proxy in
-            let segmentHeight = proxy.size.height / 3
-            let fillHeight = segmentHeight * CGFloat(displayedCount)
+        return Button {
+            if isAccentEditingLocked {
+                onLockedAccentTap()
+            } else {
+                onAccentTap(index)
+            }
+        } label: {
+            GeometryReader { proxy in
+                let segmentHeight = proxy.size.height / 3
+                let fillHeight = segmentHeight * CGFloat(displayedCount)
 
-            ZStack(alignment: .top) {
-                GitaTheme.accentSlotEmpty
+                ZStack(alignment: .top) {
+                    GitaTheme.accentSlotEmpty
 
-                Rectangle()
-                    .fill(segmentColor)
-                    .frame(height: fillHeight)
-                    .frame(maxHeight: .infinity, alignment: .bottom)
-
-                if Self.showsDivider(at: 1, displayedSegmentCount: displayedCount) {
                     Rectangle()
-                        .fill(GitaTheme.accentTrackDivider)
-                        .frame(height: 1)
-                        .offset(y: segmentHeight)
-                }
+                        .fill(segmentColor)
+                        .frame(height: fillHeight)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
 
-                if Self.showsDivider(at: 2, displayedSegmentCount: displayedCount) {
-                    Rectangle()
-                        .fill(GitaTheme.accentTrackDivider)
-                        .frame(height: 1)
-                        .offset(y: segmentHeight * 2)
-                }
+                    if Self.showsDivider(at: 1, displayedSegmentCount: displayedCount) {
+                        Rectangle()
+                            .fill(GitaTheme.accentTrackDivider)
+                            .frame(height: 1)
+                            .offset(y: segmentHeight)
+                    }
 
-                if metronome.flashOnAccent, isActive, kind == .strong {
-                    RoundedRectangle(cornerRadius: Layout.barCornerRadius)
-                        .fill(Color.white.opacity(0.35))
+                    if Self.showsDivider(at: 2, displayedSegmentCount: displayedCount) {
+                        Rectangle()
+                            .fill(GitaTheme.accentTrackDivider)
+                            .frame(height: 1)
+                            .offset(y: segmentHeight * 2)
+                    }
+
+                    if metronome.flashOnAccent, isActive, kind == .strong {
+                        RoundedRectangle(cornerRadius: Layout.barCornerRadius)
+                            .fill(Color.white.opacity(0.35))
+                    }
                 }
             }
+            .overlay {
+                RoundedRectangle(cornerRadius: Layout.barCornerRadius)
+                    .stroke(Self.borderColor(isActive: isActive), lineWidth: 1)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Layout.barCornerRadius))
+            .contentShape(Rectangle())
         }
-        .overlay {
-            RoundedRectangle(cornerRadius: Layout.barCornerRadius)
-                .stroke(Self.borderColor(isActive: isActive), lineWidth: 1)
-        }
-        .clipShape(RoundedRectangle(cornerRadius: Layout.barCornerRadius))
+        .buttonStyle(.plain)
+        .frame(minWidth: 44, minHeight: 44)
         .animation(.easeOut(duration: 0.08), value: activeBeat)
-        .accessibilityHidden(true)
+        .accessibilityIdentifier("metronome.accent-beat.\(index + 1)")
+        .accessibilityLabel(
+            Text(Self.accentAccessibilityLabel(index: index, kind: kind, isLocked: isAccentEditingLocked))
+        )
+        .accessibilityHint(
+            Text(isAccentEditingLocked ? "变速训练中暂不可调整重音" : "轻点切换为\(kind.next.displayName)拍")
+        )
+    }
+
+    static func accentAccessibilityLabel(
+        index: Int,
+        kind: MetronomeBeatKind,
+        isLocked: Bool
+    ) -> String {
+        let status = isLocked ? "，已锁定" : ""
+        return "第 \(index + 1) 拍，\(kind.displayName)拍\(status)"
     }
 
     static func fillColor(for kind: MetronomeBeatKind?, isActive: Bool) -> Color {

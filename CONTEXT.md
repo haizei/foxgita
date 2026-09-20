@@ -21,7 +21,7 @@ _Avoid_: 拍号设置页
 _Avoid_: 声音设置页、MetronomeSoundSheet（实现文件名可保留，但产品语言用 Sound Sheet）
 
 **Beat Bars**:
-Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。强、次强、普通以递增橙色强度显示，静音以一格中性灰标记显示；落拍时柱内填充替换为高对比深暖棕色，边框始终保持中性。
+Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。强、次强、普通以递增橙色强度显示，静音以一格中性灰标记显示；点击整根柱只改变对应拍，视觉立即更新，播放声音从下一 Bar Boundary 统一采用新序列。
 _Avoid_: 四拍柱、beat bar（口语）
 
 **Beat Track**:
@@ -57,7 +57,7 @@ Speed Sheet 中按 Figma 显示并直接拖动 40–160 BPM 的刻度滑杆；�
 _Avoid_: 速度滑块、slider
 
 **Accent Pattern**:
-每拍的重音状态；点击单拍音符时按静音 → 普通 → 次强 → 强 → 静音逐步递增循环。
+每拍的重音状态；Meter Sheet 音符与 Beat Bars 统一按强 → 次强 → 普通 → 静音 → 强单向循环。
 _Avoid_: accent、重音模式（作为泛称时）
 
 **Tap Tempo Attempt**:

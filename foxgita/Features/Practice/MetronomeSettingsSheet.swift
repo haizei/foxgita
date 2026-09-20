@@ -214,7 +214,7 @@ struct MetronomeSettingsSheet: View {
 
     private func accentAccessibilityLabel(for index: Int, kind: MetronomeBeatKind) -> Text {
         let beat = index + 1
-        return Text("第 \(beat) 拍，\(kind.displayName)，点击切换")
+        return Text("第 \(beat) 拍，\(kind.displayName)拍。轻点切换为\(kind.next.displayName)拍")
     }
 
     private var subdivisionSection: some View {

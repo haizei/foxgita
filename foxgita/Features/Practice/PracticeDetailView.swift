@@ -623,6 +623,17 @@ struct PracticeDetailView: View {
                             noteFocused = false
                             metronomeSheetAnchor = nil
                             showMetronomeSoundSheet = true
+                        },
+                        onAccentTap: { index in
+                            guard PracticeDetailState.shouldAllowContentEditing(mode: mode) else { return }
+                            metronome.cycleAccent(at: index)
+                            Haptics.selection()
+                        },
+                        isAccentEditingLocked: tempoController.isRampActive
+                            || !PracticeDetailState.shouldAllowContentEditing(mode: mode),
+                        onLockedAccentTap: {
+                            guard tempoController.isRampActive else { return }
+                            show(String(localized: "变速训练中暂不可调整重音"))
                         }
                     )
                     if tempoController.isRampActive || tempoController.rampState == .interrupted {
