@@ -1,0 +1,17 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D411837A-75F5-4BE8-975C-1FD07C67C634",
+        "deviceName" : "iPhone 17",
+        "exportedFileName" : "E11F6C78-A61C-4BA6-AFEF-D2D3F301919D.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Screenshot of Target Application 'com.haizei.foxgita'_0_21375A04-0EC4-46C0-A94E-6E21E0192247.png",
+        "timestamp" : 1789224550.487
+      }
+    ],
+    "testIdentifier" : "PracticeFlowUITests/testMetronomeDisplayCardMatchesFigmaFrame()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/PracticeFlowUITests/testMetronomeDisplayCardMatchesFigmaFrame"
+  }
+]

@@ -1,0 +1,17 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "6DEED84B-D7D0-4B39-8FA6-02678DB8DBAB",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "8225434D-DC9A-4ACE-AA41-143C567B48FA.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Screenshot of Target Application 'com.haizei.foxgita'_0_59F41F15-94ED-4D35-9032-FBBC05002B5F.png",
+        "timestamp" : 1789253791.442
+      }
+    ],
+    "testIdentifier" : "PracticeFlowUITests/testMetronomeDisplayCardMatchesFigmaFrame()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/PracticeFlowUITests/testMetronomeDisplayCardMatchesFigmaFrame"
+  }
+]
