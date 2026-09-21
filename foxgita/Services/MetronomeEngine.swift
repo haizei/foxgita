@@ -73,6 +73,7 @@ final class MetronomeEngine {
 
     @ObservationIgnored private var engine = AVAudioEngine()
     @ObservationIgnored private var player = AVAudioPlayerNode()
+    @ObservationIgnored private var cutoffPlayer = AVAudioPlayerNode()
     @ObservationIgnored private let format = AVAudioFormat(
         standardFormatWithSampleRate: 44_100, channels: 1
     )!
@@ -98,12 +99,17 @@ final class MetronomeEngine {
     @ObservationIgnored private var subdivisionBoundaryCountdown = 0
     @ObservationIgnored private var visualEventSequence = 0
     @ObservationIgnored private var pendingRhythmChange: MetronomeRhythmConfiguration?
+    @ObservationIgnored private var cutoffFrame: AVAudioFramePosition?
+    @ObservationIgnored private var cutoffToken = 0
+    @ObservationIgnored private var cutoffCompletion: (() -> Void)?
+    @ObservationIgnored private var cutoffBuffer: AVAudioPCMBuffer?
 
     var hapticsEnabled = true
     var foregroundFeedbackEnabled = true
 
     var isEngineRunning: Bool { engine.isRunning }
     var hasPump: Bool { pump != nil }
+    var hasArmedCountdownStop: Bool { cutoffFrame != nil }
 
     init(session: AudioSessionCoordinator) {
         self.session = session
@@ -275,6 +281,7 @@ final class MetronomeEngine {
             }
             guard engine.isRunning else { throw MetronomeError.engineNotRunning }
             player.stop()
+            cancelArmedCountdownStop()
             beatIndex = 0
             subClickIndex = 0
             scheduledBarIndex = 0
@@ -306,6 +313,7 @@ final class MetronomeEngine {
 
     func stop() {
         guard isPlaying || pump != nil else { return }
+        cancelArmedCountdownStop()
         pump?.invalidate()
         pump = nil
         player.stop()
@@ -329,11 +337,45 @@ final class MetronomeEngine {
         if isPlaying { stop() } else { try? start() }
     }
 
+    /// Arms a hard stop on the audio sample timeline. `fill()` also clamps its
+    /// scheduling horizon so no click can be queued at or beyond the cutoff.
+    func armCountdownStop(after seconds: TimeInterval, onReached: @escaping () -> Void) {
+        guard isPlaying, seconds > 0 else { return }
+        cancelArmedCountdownStop()
+        let frame = currentFrame() + frames(seconds)
+        cutoffFrame = frame
+        cutoffCompletion = onReached
+        cutoffToken += 1
+        let token = cutoffToken
+        guard let buffer = cutoffBuffer else { return }
+        cutoffPlayer.scheduleBuffer(
+            buffer,
+            at: AVAudioTime(sampleTime: frame, atRate: format.sampleRate),
+            options: [],
+            completionCallbackType: .dataPlayedBack
+        ) { [weak self] _ in
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.finishArmedCountdownStop(token: token)
+                }
+            }
+        }
+        if !cutoffPlayer.isPlaying { cutoffPlayer.play() }
+    }
+
+    func cancelArmedCountdownStop() {
+        cutoffToken += 1
+        cutoffFrame = nil
+        cutoffCompletion = nil
+        cutoffPlayer.stop()
+    }
+
     func prepareAfterAudioServicesReset() {
         stop()
         engine.stop()
         engine = AVAudioEngine()
         player = AVAudioPlayerNode()
+        cutoffPlayer = AVAudioPlayerNode()
         graphConfigured = false
         metronomeLog.notice("audio graph reset after media-services reset")
     }
@@ -341,7 +383,12 @@ final class MetronomeEngine {
     private func configureGraphIfNeeded() {
         guard !graphConfigured else { return }
         engine.attach(player)
+        engine.attach(cutoffPlayer)
         engine.connect(player, to: engine.mainMixerNode, format: format)
+        engine.connect(cutoffPlayer, to: engine.mainMixerNode, format: format)
+        cutoffBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1)
+        cutoffBuffer?.frameLength = 1
+        cutoffBuffer?.floatChannelData?[0][0] = 0
         rebuildClickBuffers()
         graphConfigured = true
     }
@@ -355,13 +402,18 @@ final class MetronomeEngine {
               let secondarySubdivision = secondarySubdivisionClick,
               let weakSubdivision = weakSubdivisionClick else { return }
         let now = currentFrame()
+        if let cutoffFrame, now >= cutoffFrame {
+            finishArmedCountdownStop(token: cutoffToken)
+            return
+        }
         if nextClickFrame < now {
             nextClickFrame = now + frames(0.05)
             beatIndex = 0
             subClickIndex = 0
             currentBeatInBar = 0
         }
-        let horizon = now + frames(Self.lead)
+        let normalHorizon = now + frames(Self.lead)
+        let horizon = cutoffFrame.map { min(normalHorizon, $0 - 1) } ?? normalHorizon
         while nextClickFrame <= horizon {
             let scheduledFrame = nextClickFrame
             var beatInBar = beatIndex % beatsPerBar
@@ -431,6 +483,17 @@ final class MetronomeEngine {
             }
         }
         if !player.isPlaying { player.play() }
+    }
+
+    private func finishArmedCountdownStop(token: Int) {
+        guard token == cutoffToken, cutoffFrame != nil else { return }
+        let completion = cutoffCompletion
+        cutoffFrame = nil
+        cutoffCompletion = nil
+        cutoffToken += 1
+        cutoffPlayer.stop()
+        stop()
+        completion?()
     }
 
     private func scheduleTimelineEvent(

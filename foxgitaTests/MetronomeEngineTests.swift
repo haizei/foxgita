@@ -62,6 +62,33 @@ struct MetronomeEngineTests {
         #expect(!metronome.hasPump)
     }
 
+    @Test func countdownCutoffStopsPlaybackAndCompletesOnce() async throws {
+        let metronome = MetronomeEngine()
+        var completionCount = 0
+        try metronome.start()
+
+        metronome.armCountdownStop(after: 0.2) { completionCount += 1 }
+        #expect(metronome.hasArmedCountdownStop)
+        try await Task.sleep(for: .seconds(0.7))
+
+        #expect(!metronome.isPlaying)
+        #expect(!metronome.hasArmedCountdownStop)
+        #expect(completionCount == 1)
+    }
+
+    @Test func cancellingCountdownCutoffKeepsPlaybackRunning() async throws {
+        let metronome = MetronomeEngine()
+        try metronome.start()
+        metronome.armCountdownStop(after: 0.2) {}
+
+        metronome.cancelArmedCountdownStop()
+        try await Task.sleep(for: .seconds(0.4))
+
+        #expect(metronome.isPlaying)
+        #expect(!metronome.hasArmedCountdownStop)
+        metronome.stop()
+    }
+
     @Test func currentBeatInBarStartsAtZero() {
         let metronome = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
         #expect(metronome.currentBeatInBar == 0)

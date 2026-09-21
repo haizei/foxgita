@@ -3,6 +3,7 @@
 //  foxgita
 //
 
+import AudioToolbox
 import SwiftData
 import SwiftUI
 import UIKit
@@ -151,6 +152,7 @@ struct PracticeDetailView: View {
 
     @State private var tempoController = MetronomeTempoController()
     @State private var practiceTimer = PracticeTimer()
+    @State private var countdown = PracticeCountdown(defaultMinutes: 10)
     @State private var recorder = AudioRecorderService()
     @State private var video = VideoRecorderService()
     @State private var noteText = ""
@@ -194,6 +196,8 @@ struct PracticeDetailView: View {
     @State private var showCreateFromPracticeSheet = false
     @State private var metronomeSheetAnchor: MetronomeSheetAnchor?
     @State private var showMetronomeSoundSheet = false
+    @State private var showCountdownSettings = false
+    @State private var showCountdownNotificationDenied = false
     @State private var activeTrainingSessionId: UUID?
     @State private var activeTrainingStartedAt: Date?
     @State private var interruptionObserverToken: UUID?
@@ -315,6 +319,7 @@ struct PracticeDetailView: View {
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             guard let item else { return }
+            countdown.onCompletion = { handleCountdownCompletion(item) }
             if !didLoadItem {
                 didLoadItem = true
                 draftTitle = item.title
@@ -398,6 +403,10 @@ struct PracticeDetailView: View {
             }
             practiceTimer.pause()
             metronome.stop()
+            if countdown.isActive {
+                countdown.close()
+                CountdownReminderScheduler.cancel(itemId: itemId)
+            }
             if recorder.isRecording { recorder.stop(label: item?.title ?? "") }
             player.stop()
             videoPlayURL = nil
@@ -424,7 +433,10 @@ struct PracticeDetailView: View {
                 isMetronomePlaying: metronome.isPlaying,
                 isForeground: newPhase == .active
             )
-            if newPhase == .active, practiceTimer.isRunning { practiceTimer.refresh() }
+            if newPhase == .active {
+                if practiceTimer.isRunning { practiceTimer.refresh() }
+                countdown.refresh()
+            }
         }
         .onChange(of: item?.projectId) { _, newProjectId in
             // Record-stack create-and-join updates projectId via setPracticeItemProject
@@ -738,6 +750,32 @@ struct PracticeDetailView: View {
                 showMetronomeSoundSheet = false
             }
         }
+        .sheet(isPresented: $showCountdownSettings) {
+            CountdownSettingsSheet(
+                minutes: countdown.isActive
+                    ? countdown.configuredSeconds / 60
+                    : initialCountdownMinutes(for: item),
+                reminderEnabled: countdown.reminderEnabled,
+                isExistingPlan: countdown.isActive,
+                onApply: { minutes, reminderEnabled in
+                    applyCountdownPlan(
+                        minutes: minutes,
+                        wantsReminder: reminderEnabled,
+                        item: item
+                    )
+                },
+                onCloseCountdown: { closeCountdown() }
+            )
+        }
+        .alert("无法开启通知", isPresented: $showCountdownNotificationDenied) {
+            Button("前往设置") {
+                guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+                UIApplication.shared.open(url)
+            }
+            Button("暂不开启", role: .cancel) {}
+        } message: {
+            Text("倒计时仍可正常使用；如需后台结束提醒，请在系统设置中允许通知。")
+        }
     }
 
     private func normalizedTimeSignature(_ raw: String?) -> String {
@@ -746,28 +784,45 @@ struct PracticeDetailView: View {
     }
 
     private var timerCard: some View {
-        HStack {
+        HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(practiceTimer.display)
+                Text(countdown.isActive ? countdown.display : practiceTimer.display)
                     .font(GitaFont.timer())
+                Text(timerSupportingText)
+                    .font(GitaFont.micro())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            Spacer()
-            Button("RESET") {
-                resetTrip()
-            }
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(GitaTheme.textSecondary)
-            .padding(.horizontal, 12)
-            .frame(minHeight: 38)
-            .background(GitaTheme.bgSubtle)
-            .clipShape(Capsule())
-            .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode) || tempoController.isRampActive)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(practiceTimer.isRunning ? "暂停" : "开始") { togglePlay() }
+            Button("RESET") { resetTimerCard() }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(GitaTheme.textSecondary)
+                .padding(.horizontal, 11)
+                .frame(minHeight: 44)
+                .background(GitaTheme.bgSubtle)
+                .clipShape(Capsule())
+                .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode) || tempoController.isRampActive)
+
+            if PracticeDetailState.shouldAllowTimer(mode: mode) {
+                Button("倒计时") { openCountdownSettings() }
+                    .font(GitaFont.caption(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .padding(.horizontal, 11)
+                    .frame(minHeight: 44)
+                    .background(GitaTheme.brand50)
+                    .clipShape(Capsule())
+                    .disabled(tempoController.isRampActive)
+                    .accessibilityLabel(countdown.isActive ? "调整倒计时" : "倒计时")
+                    .accessibilityIdentifier("countdown.open-settings")
+            }
+
+            Button(timerPrimaryTitle) { togglePlay() }
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(GitaTheme.brandOn)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 11)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
                 .background(GitaTheme.brand500)
                 .clipShape(Capsule())
                 .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode))
@@ -1233,8 +1288,128 @@ struct PracticeDetailView: View {
         .accessibilityAddTraits(on ? [.isSelected] : [])
     }
 
+    private var timerSupportingText: String {
+        guard countdown.isActive else {
+            let target = item.map(initialCountdownMinutes(for:)) ?? 10
+            return String(localized: "已练 / 目标 \(target):00")
+        }
+        let total = String(format: "%02d:%02d", countdown.configuredSeconds / 60, countdown.configuredSeconds % 60)
+        switch countdown.phase {
+        case .running: return String(localized: "剩余 / 共 \(total)")
+        case .paused: return String(localized: "已暂停 / 共 \(total)")
+        case .completed: return String(localized: "已完成 / 共 \(total)")
+        case .inactive: return String(localized: "已练")
+        }
+    }
+
+    private var timerPrimaryTitle: String {
+        switch countdown.phase {
+        case .running: return String(localized: "暂停")
+        case .completed: return String(localized: "再来一次")
+        case .paused: return String(localized: "继续")
+        case .inactive: return practiceTimer.isRunning ? String(localized: "暂停") : String(localized: "开始")
+        }
+    }
+
+    private func initialCountdownMinutes(for item: PracticeItem) -> Int {
+        let target = item.targetMin > 0 ? item.targetMin : 10
+        return min(60, max(1, target))
+    }
+
+    private func resetTimerCard() {
+        if countdown.isActive {
+            pauseCountdownPlayback()
+            countdown.reset()
+        } else {
+            resetTrip()
+        }
+    }
+
+    private func openCountdownSettings() {
+        guard !tempoController.isRampActive else { return }
+        if countdown.phase == .running { pauseCountdownPlayback() }
+        showCountdownSettings = true
+    }
+
+    private func applyCountdownPlan(
+        minutes: Int,
+        wantsReminder: Bool,
+        item: PracticeItem
+    ) {
+        Task { @MainActor in
+            let reminderEnabled = wantsReminder
+                ? await CountdownReminderScheduler.requestAuthorization()
+                : false
+            if wantsReminder && !reminderEnabled {
+                showCountdownNotificationDenied = true
+            }
+            countdown.applyPlan(
+                minutes: minutes,
+                reminderEnabled: reminderEnabled,
+                startImmediately: false
+            )
+            startCountdownPlayback(item)
+        }
+    }
+
+    private func startCountdownPlayback(_ item: PracticeItem) {
+        guard countdown.phase == .paused || countdown.phase == .completed else { return }
+        do {
+            try metronome.start()
+            if countdown.phase == .completed { countdown.restart() } else { countdown.resume() }
+            practiceTimer.start()
+            metronome.armCountdownStop(after: TimeInterval(countdown.remainingSeconds)) {
+                countdown.complete()
+            }
+            if countdown.reminderEnabled {
+                Task {
+                    await CountdownReminderScheduler.schedule(
+                        itemId: itemId,
+                        title: item.title,
+                        after: countdown.remainingSeconds
+                    )
+                }
+            }
+        } catch {
+            show(String(localized: "节拍器无法启动"))
+        }
+    }
+
+    private func pauseCountdownPlayback() {
+        countdown.pause()
+        CountdownReminderScheduler.cancel(itemId: itemId)
+        practiceTimer.pause()
+        metronome.stop()
+    }
+
+    private func closeCountdown() {
+        pauseCountdownPlayback()
+        countdown.close()
+    }
+
+    private func handleCountdownCompletion(_ item: PracticeItem) {
+        metronome.stop()
+        practiceTimer.pause()
+        if recorder.isRecording { recorder.stop(label: item.title) }
+        persistPending(item: item)
+        if countdown.reminderEnabled, scenePhase == .active {
+            CountdownReminderScheduler.cancel(itemId: itemId)
+            AudioServicesPlaySystemSound(1005)
+            Haptics.success()
+        }
+    }
+
     private func togglePlay() {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+        if countdown.isActive {
+            guard let item else { return }
+            if countdown.phase == .running {
+                pauseCountdownPlayback()
+            } else {
+                startCountdownPlayback(item)
+            }
+            return
+        }
         if tempoController.rampState == .interrupted,
            !tempoController.interruptionRecoveryAvailable { return }
         noteFocused = false
@@ -1279,12 +1454,20 @@ struct PracticeDetailView: View {
         updateActiveTrainingSnapshot()
         metronome.stop()
         practiceTimer.pause()
+        if countdown.phase == .running {
+            countdown.pause()
+            CountdownReminderScheduler.cancel(itemId: itemId)
+        }
         if recorder.isRecording { recorder.stop(label: itemTitle) }
         updatePlaybackPresentation()
     }
 
     private func startRamp(_ settings: TempoRampSettings) {
         guard PracticeDetailState.shouldAllowTimer(mode: mode) else { return }
+        guard !countdown.isActive else {
+            show(String(localized: "请先关闭倒计时再开始变速训练"))
+            return
+        }
         let startContext = metronome.isPlaying ? "while_playing" : "from_idle"
         do {
             try saveRampPlanAndBeginSession(settings)

@@ -113,7 +113,14 @@ struct foxgitaApp: App {
                     #endif
                     memoryStore.reload()
                     if reminderDelegate == nil {
-                        reminderDelegate = ReminderDelegate { router.openTodayFirstPractice = true }
+                        reminderDelegate = ReminderDelegate { itemId in
+                            router.selectedTab = .practice
+                            if let itemId {
+                                router.practicePath = [.detail(itemId: itemId)]
+                            } else {
+                                router.openTodayFirstPractice = true
+                            }
+                        }
                     }
                 }
         }
