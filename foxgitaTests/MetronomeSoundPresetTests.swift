@@ -34,7 +34,10 @@ struct MetronomeSoundPresetTests {
         #expect(MetronomeSoundPreset.decode("future-preset") == .realMetronome)
     }
 
-    @Test func currentSoundSheetKeepsLegacySelectionsUntilSamplesArrive() {
-        #expect(MetronomeSoundMode.allCases == [.standard, .penetrating, .highNoise])
+    @Test func resourceNamesFollowStablePresetValues() {
+        #expect(MetronomeSoundPreset.realMetronome.beatResourceName == "realMetronome-beat")
+        #expect(MetronomeSoundPreset.realMetronome.strongResourceName == "realMetronome-strong")
+        #expect(MetronomeSoundPreset.handClap.beatResourceName == "handClap-beat")
+        #expect(MetronomeSoundPreset.handClap.strongResourceName == "handClap-strong")
     }
 }

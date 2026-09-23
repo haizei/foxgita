@@ -8,18 +8,23 @@ import SwiftUI
 struct MetronomeSoundSheet: View {
     let metronome: MetronomeEngine
     var onDone: () -> Void
+    @State private var previewError: String?
+
+    private let columns = Array(
+        repeating: GridItem(.flexible(), spacing: GitaTheme.s8), count: 3
+    )
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: GitaTheme.s12) {
-                    Text(String(localized: "选择更适合当前练习环境的节拍声"))
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
+                    Text(String(localized: "音效选择"))
+                        .font(GitaFont.headline())
+                        .foregroundStyle(GitaTheme.textPrimary)
 
-                    VStack(spacing: GitaTheme.s12) {
-                        ForEach(MetronomeSoundMode.allCases) { mode in
-                            modeCard(mode)
+                    LazyVGrid(columns: columns, spacing: GitaTheme.s8) {
+                        ForEach(MetronomeSoundPreset.allCases) { preset in
+                            presetCard(preset)
                         }
                     }
 
@@ -40,66 +45,51 @@ struct MetronomeSoundSheet: View {
                 }
             }
         }
-        .presentationDetents([.fraction(0.6)])
+        .presentationDetents([.fraction(0.72), .large])
         .presentationDragIndicator(.visible)
+        .alert(
+            String(localized: "无法试听"),
+            isPresented: Binding(
+                get: { previewError != nil },
+                set: { if !$0 { previewError = nil } }
+            )
+        ) {
+            Button(String(localized: "知道了"), role: .cancel) { previewError = nil }
+        } message: {
+            Text(previewError ?? "")
+        }
     }
 
-    private func modeCard(_ mode: MetronomeSoundMode) -> some View {
-        let selected = metronome.soundMode == mode
+    private func presetCard(_ preset: MetronomeSoundPreset) -> some View {
+        let selected = metronome.soundPreset == preset
         return Button {
-            metronome.setSoundMode(mode)
+            metronome.setSoundPreset(preset)
         } label: {
-            HStack(spacing: GitaTheme.s12) {
-                modeIcon(mode, selected: selected)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(mode.displayName)
-                        .font(GitaFont.headline())
-                        .foregroundStyle(GitaTheme.textPrimary)
-                    Text(mode.subtitle)
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                        .multilineTextAlignment(.leading)
-                }
-                Spacer(minLength: 8)
+            ZStack(alignment: .topTrailing) {
+                Text(preset.displayName)
+                    .font(GitaFont.callout())
+                    .foregroundStyle(selected ? GitaTheme.brand500 : GitaTheme.textPrimary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 if selected {
                     Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 20))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(GitaTheme.brand500)
+                        .padding(8)
                 }
             }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 58)
             .background(selected ? GitaTheme.brand50 : GitaTheme.bgSubtle)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(selected ? GitaTheme.brand500 : .clear, lineWidth: 1.5)
+            }
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(preset.displayName)
+        .accessibilityValue(selected ? String(localized: "已选择") : "")
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-
-    private func modeIcon(_ mode: MetronomeSoundMode, selected: Bool) -> some View {
-        ZStack(alignment: .bottom) {
-            Image(mode.iconAssetName)
-                .resizable()
-                .scaledToFit()
-                .frame(width: 36, height: 36)
-            RoundedRectangle(cornerRadius: 2)
-                .fill(audibilityMarkColor(mode: mode, selected: selected))
-                .frame(width: audibilityMarkWidth(mode: mode, selected: selected), height: 4)
-                .offset(y: -10)
-        }
-        .frame(width: 36, height: 36)
-    }
-
-    private func audibilityMarkColor(mode: MetronomeSoundMode, selected: Bool) -> Color {
-        if mode == .penetrating, selected {
-            return GitaTheme.brandOn
-        }
-        return GitaTheme.brand500
-    }
-
-    private func audibilityMarkWidth(mode: MetronomeSoundMode, selected: Bool) -> CGFloat {
-        if mode == .penetrating, selected { return 18 }
-        return 13
     }
 
     private var volumeSection: some View {
@@ -128,7 +118,11 @@ struct MetronomeSoundSheet: View {
 
     private var previewButton: some View {
         Button {
-            try? metronome.preview(bars: 2)
+            do {
+                try metronome.preview(bars: 2)
+            } catch {
+                previewError = String(localized: "节拍声音加载失败，请重试。")
+            }
         } label: {
             Text(String(localized: "试听节拍"))
                 .font(GitaFont.headline())

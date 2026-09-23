@@ -245,7 +245,7 @@ struct PracticeDetailView: View {
             storedAccentPatternRaw: storedAccentPatternRaw,
             subdivisionRaw: metronome.configuredSubdivisionRaw,
             storedSubdivisionRaw: storedSubdivisionRaw,
-            metronomeSoundModeRaw: metronome.soundMode.rawValue,
+            metronomeSoundModeRaw: metronome.soundPreset.rawValue,
             storedMetronomeSoundModeRaw: storedMetronomeSoundModeRaw,
             metronomeVolume: metronome.volume,
             storedMetronomeVolume: storedMetronomeVolume,
@@ -356,7 +356,7 @@ struct PracticeDetailView: View {
                 storedTimeSignature = metronome.configuredTimeSignatureText
                 storedAccentPatternRaw = metronome.configuredAccentPatternRaw
                 storedSubdivisionRaw = metronome.configuredSubdivisionRaw
-                storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+                storedMetronomeSoundModeRaw = metronome.soundPreset.rawValue
                 storedMetronomeVolume = metronome.volume
                 storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
                 loadLatestRampPlan()
@@ -1562,7 +1562,7 @@ struct PracticeDetailView: View {
                 timeSignature: metronome.configuredTimeSignatureText,
                 metronomeAccentRaw: metronome.configuredAccentPatternRaw,
                 metronomeSubdivisionRaw: metronome.configuredSubdivisionRaw,
-                metronomeSoundModeRaw: metronome.soundMode.rawValue,
+                metronomeSoundModeRaw: metronome.soundPreset.rawValue,
                 metronomeVolume: metronome.volume,
                 metronomeStrongBeatBoost: metronome.strongBeatBoost,
                 projectId: projectId
@@ -1574,7 +1574,7 @@ struct PracticeDetailView: View {
             storedTimeSignature = metronome.configuredTimeSignatureText
             storedAccentPatternRaw = metronome.configuredAccentPatternRaw
             storedSubdivisionRaw = metronome.configuredSubdivisionRaw
-            storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+            storedMetronomeSoundModeRaw = metronome.soundPreset.rawValue
             storedMetronomeVolume = metronome.volume
             storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
             draftProjectId = projectId
@@ -1800,7 +1800,7 @@ struct PracticeDetailView: View {
                 timeSignature: metronome.configuredTimeSignatureText,
                 metronomeAccentRaw: metronome.configuredAccentPatternRaw,
                 metronomeSubdivisionRaw: metronome.configuredSubdivisionRaw,
-                metronomeSoundModeRaw: metronome.soundMode.rawValue,
+                metronomeSoundModeRaw: metronome.soundPreset.rawValue,
                 metronomeVolume: metronome.volume,
                 metronomeStrongBeatBoost: metronome.strongBeatBoost
             )
@@ -1811,7 +1811,7 @@ struct PracticeDetailView: View {
             storedTimeSignature = metronome.configuredTimeSignatureText
             storedAccentPatternRaw = metronome.configuredAccentPatternRaw
             storedSubdivisionRaw = metronome.configuredSubdivisionRaw
-            storedMetronomeSoundModeRaw = metronome.soundMode.rawValue
+            storedMetronomeSoundModeRaw = metronome.soundPreset.rawValue
             storedMetronomeVolume = metronome.volume
             storedMetronomeStrongBeatBoost = metronome.strongBeatBoost
         } catch {

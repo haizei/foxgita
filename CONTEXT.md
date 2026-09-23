@@ -17,8 +17,20 @@ _Avoid_: 速度设置页、BPM sheet
 _Avoid_: 拍号设置页
 
 **Sound Sheet**:
-点击「声音」列弹出的底部面板，标题为「节拍提示」，含音色模式、音量、试听、强拍增强。
+点击「声音」列弹出的底部面板，标题为「节拍提示」，含七种 Metronome Sound Preset、音量、试听与强拍增强。
 _Avoid_: 声音设置页、MetronomeSoundSheet（实现文件名可保留，但产品语言用 Sound Sheet）
+
+**Metronome Sound Preset**:
+用户明确选择并保存的一种节拍声音，共有真实节拍器、电子节拍器、风铃声、木鱼声、架子鼓1、架子鼓2、拍手七种。
+_Avoid_: Beat Cue Mode、声音模式、标准/穿透/高噪声模式
+
+**Strong-Beat Sound Variant**:
+与普通拍属于同一 Metronome Sound Preset、但让第一强拍在音色与响度上清楚可辨的声音变体。
+_Avoid_: boost sample、简单放大、第二种声音预设
+
+**Cross-Preset Loudness Consistency**:
+相同音量与拍级下切换 Metronome Sound Preset 时，感知响度保持在可接受的小范围内。
+_Avoid_: peak matching、全部一样响、自动音量
 
 **Beat Bars**:
 Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。强、次强、普通以递增橙色强度显示，静音以一格中性灰标记显示；点击整根柱只改变对应拍，视觉立即更新，播放声音从下一 Bar Boundary 统一采用新序列。

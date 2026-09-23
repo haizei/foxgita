@@ -760,7 +760,7 @@ struct MigrationTests {
         items[0].metronomeVolume = 80
         items[0].metronomeStrongBeatBoost = true
         try context.save()
-        #expect(MetronomeSoundMode.decode(items[0].metronomeSoundModeRaw) == .highNoise)
+        #expect(MetronomeSoundPreset.decode(items[0].metronomeSoundModeRaw) == .handClap)
         #expect(items[0].metronomeVolume == 80)
         #expect(items[0].metronomeStrongBeatBoost == true)
     }
@@ -789,7 +789,7 @@ struct MigrationTests {
                 timeSignature: "4/4",
                 metronomeAccentRaw: "2111",
                 metronomeSubdivisionRaw: MetronomeSubdivision.twoEighths.rawValue,
-                metronomeSoundModeRaw: MetronomeSoundMode.standard.rawValue,
+                metronomeSoundModeRaw: MetronomeSoundPreset.realMetronome.rawValue,
                 metronomeVolume: 75,
                 metronomeStrongBeatBoost: true
             ))
@@ -864,14 +864,14 @@ struct MigrationTests {
         )
         let items = try ModelContext(container).fetch(FetchDescriptor<PracticeItem>())
         let decoded = Dictionary(uniqueKeysWithValues: items.map {
-            ($0.title, MetronomeSoundMode.decode($0.metronomeSoundModeRaw))
+            ($0.title, MetronomeSoundPreset.decode($0.metronomeSoundModeRaw))
         })
 
         #expect(items.count == legacyValues.count)
-        #expect(decoded["standard"] == .standard)
-        #expect(decoded["acousticGuitar"] == .penetrating)
-        #expect(decoded["drums"] == .highNoise)
-        #expect(decoded["unknown-mode"] == .standard)
+        #expect(decoded["standard"] == .realMetronome)
+        #expect(decoded["acousticGuitar"] == .electronicMetronome)
+        #expect(decoded["drums"] == .handClap)
+        #expect(decoded["unknown-mode"] == .realMetronome)
     }
 
     @Test func legacyV18StoreMigratesToV19WithoutLosingRampHistory() throws {

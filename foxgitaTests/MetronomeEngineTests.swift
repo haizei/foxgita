@@ -338,12 +338,12 @@ struct MetronomeEngineTests {
         metronome.stop()
     }
 
-    @Test func setSoundModeWhilePlayingKeepsPlaying() throws {
+    @Test func setSoundPresetWhilePlayingKeepsPlaying() throws {
         let metronome = MetronomeEngine()
         try metronome.start()
-        metronome.setSoundMode(.drums)
+        metronome.setSoundPreset(.drumKit2)
         #expect(metronome.isPlaying)
-        #expect(metronome.soundMode == .drums)
+        #expect(metronome.soundPreset == .drumKit2)
         metronome.stop()
     }
 

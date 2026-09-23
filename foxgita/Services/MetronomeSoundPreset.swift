@@ -5,8 +5,7 @@
 
 import Foundation
 
-/// The persisted sound choice. The Sound Sheet keeps using legacy modes until
-/// the corresponding licensed samples are available.
+/// The persisted sound choice and the stable prefix of its bundled PCM pair.
 enum MetronomeSoundPreset: String, CaseIterable, Identifiable, Sendable {
     case realMetronome
     case electronicMetronome
@@ -17,6 +16,9 @@ enum MetronomeSoundPreset: String, CaseIterable, Identifiable, Sendable {
     case handClap
 
     var id: String { rawValue }
+
+    var beatResourceName: String { "\(rawValue)-beat" }
+    var strongResourceName: String { "\(rawValue)-strong" }
 
     var displayName: String {
         switch self {
