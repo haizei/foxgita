@@ -1,0 +1,3 @@
+# Keep photo-plan inputs ephemeral and provider capabilities explicit
+
+The 图片计划 Recipe will accelerate camera and photo-library inputs by creating reusable 会话级派生图片 that live only for the active generation session, while model transport features are enabled from explicit Provider Capability configuration rather than trial requests. This preserves photo privacy and predictable cost while allowing background compression, in-session regeneration reuse, streaming status, and provider-specific optimization behind the existing MessagesRuntime boundary; the trade-off is that unknown providers use conservative behavior until their capabilities are configured.
