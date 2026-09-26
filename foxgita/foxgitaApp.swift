@@ -23,7 +23,7 @@ struct foxgitaApp: App {
     private let aiRunner: GitaAIRunner
 
     init() {
-        let schema = Schema(versionedSchema: GitaSchemaV18.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let isUnitTesting = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
         let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isUnitTesting)
         do {

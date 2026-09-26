@@ -1,6 +1,6 @@
-import Combine
 import PhotosUI
 import SwiftUI
+@preconcurrency import UIKit
 
 struct PhotoPracticeDraftLifecycle: Equatable {
     enum State: Equatable { case source, generating, pending, committed, abandoned }
@@ -48,9 +48,6 @@ struct PhotoPracticeSheet: View {
     @State private var isGenerating = false
     @State private var generateTask: Task<Void, Never>?
     @State private var confirmTask: Task<Void, Never>?
-    @State private var generationStartedAt = Date()
-    @State private var elapsed: TimeInterval = 0
-    @State private var completed = false
     @State private var generationId = UUID().uuidString
     @State private var toast: String?
     @State private var entryGate = PracticeEntryGate()
@@ -68,8 +65,10 @@ struct PhotoPracticeSheet: View {
     @State private var isSubmitting = false
     @State private var didFinishOutcome = false
     @State private var lifecycle = PhotoPracticeDraftLifecycle()
-
-    private let progressTimer = Timer.publish(every: 0.1, on: .main, in: .common).autoconnect()
+    @State private var imageSession = PhotoPlanImageSession()
+    @State private var selectedSourceKind: PreparedImageSourceKind = .photoLibrary
+    @State private var imageQuality: PreparedImageQuality = .standard
+    @State private var generationStage: PhotoPlanGenerationStage = .preparing
 
     var body: some View {
         VStack(spacing: 0) {
@@ -116,18 +115,15 @@ struct PhotoPracticeSheet: View {
         .fullScreenCover(isPresented: $isCameraPresented) {
             StillImageCameraPicker(
                 isPresented: $isCameraPresented,
-                onPicked: { beginGeneration(blobs: [$0]) },
+                onPicked: beginGeneration(cameraImage:),
                 onCancel: {}
             )
             .ignoresSafeArea()
         }
-        .onReceive(progressTimer) { _ in
-            guard isGenerating else { return }
-            elapsed = Date().timeIntervalSince(generationStartedAt)
-        }
         .onDisappear {
             generateTask?.cancel()
             confirmTask?.cancel()
+            Task { await imageSession.release() }
             if (phase == .generating || phase == .preview), !didFinishOutcome {
                 invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
                 lifecycle.abandon()
@@ -206,42 +202,23 @@ struct PhotoPracticeSheet: View {
             Text("正在识别图片内容")
                 .font(.system(size: 18, weight: .bold))
 
-            GeometryReader { proxy in
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(GitaTheme.bgSubtle)
-                    Capsule()
-                        .fill(GitaTheme.brand500)
-                        .frame(
-                            width: proxy.size.width * CGFloat(
-                                PhotoGenerationProgress.fraction(
-                                    elapsed: elapsed,
-                                    completed: completed
-                                )
-                            )
-                        )
-                }
-            }
-            .frame(height: 8)
-            .padding(.horizontal, 32)
-
             VStack(alignment: .leading, spacing: 14) {
-                ForEach(Array(PhotoGenerationProgress.captions.enumerated()), id: \.offset) { index, caption in
+                ForEach(Array(["正在准备图片", "正在请求模型", "正在校验结果"].enumerated()), id: \.offset) { index, caption in
                     HStack(spacing: 10) {
                         Image(
-                            systemName: index <= activeProgressIndex
+                            systemName: index <= generationStage.rawValue
                                 ? "checkmark.circle.fill"
                                 : "circle"
                         )
                         .foregroundStyle(
-                            index <= activeProgressIndex
+                            index <= generationStage.rawValue
                                 ? GitaTheme.brand500
                                 : GitaTheme.borderSubtle
                         )
                         Text(caption)
-                            .font(.system(size: 13, weight: index == activeProgressIndex ? .semibold : .regular))
+                            .font(.system(size: 13, weight: index == generationStage.rawValue ? .semibold : .regular))
                             .foregroundStyle(
-                                index <= activeProgressIndex
+                                index <= generationStage.rawValue
                                     ? GitaTheme.textSecondary
                                     : GitaTheme.textTertiary
                             )
@@ -289,6 +266,15 @@ struct PhotoPracticeSheet: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(GitaTheme.brand500)
                 .disabled(isSubmitting)
+            if imageQuality == .standard, selectedSourceKind != .camera {
+                Button("文字不清楚？以高清重新生成") {
+                    imageQuality = .highReadability
+                    regenerate()
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(GitaTheme.textSecondary)
+                .disabled(isSubmitting)
+            }
             Button(action: confirm) {
                 Text("确认并加入今日练习")
                     .font(.system(size: 16, weight: .semibold))
@@ -304,10 +290,6 @@ struct PhotoPracticeSheet: View {
         }
         .padding(.horizontal, 16)
         .disabled(isSubmitting)
-    }
-
-    private var activeProgressIndex: Int {
-        PhotoGenerationProgress.activeIndex(elapsed: elapsed, completed: completed)
     }
 
     private func sourceCard(
@@ -359,6 +341,7 @@ struct PhotoPracticeSheet: View {
 
     private func beginGeneration(items: [PhotosPickerItem]) {
         guard !isGenerating else { return }
+        imageQuality = .standard
         generateTask = Task {
             prepareGeneration()
             do {
@@ -369,7 +352,7 @@ struct PhotoPracticeSheet: View {
                         blobs.append(data)
                     }
                 }
-                try await generate(blobs: blobs)
+                try await generate(blobs: blobs, sourceKind: .photoLibrary)
             } catch is CancellationError {
                 return
             } catch {
@@ -379,12 +362,38 @@ struct PhotoPracticeSheet: View {
         }
     }
 
-    private func beginGeneration(blobs: [Data]) {
+    private func beginGeneration(blobs: [Data], sourceKind: PreparedImageSourceKind = .photoLibrary) {
         guard !isGenerating else { return }
+        imageQuality = .standard
         generateTask = Task {
             prepareGeneration()
             do {
-                try await generate(blobs: blobs)
+                try await generate(blobs: blobs, sourceKind: sourceKind)
+            } catch is CancellationError {
+                return
+            } catch {
+                if Task.isCancelled { return }
+                fail(with: error)
+            }
+        }
+    }
+
+    private func beginGeneration(cameraImage: UIImage) {
+        guard !isGenerating else { return }
+        imageQuality = .standard
+        generateTask = Task {
+            prepareGeneration()
+            do {
+                let image = cameraImage
+                let blobs = try await Task.detached(priority: .userInitiated) {
+                    try Task.checkCancellation()
+                    guard let jpeg = PracticeImageCodec.jpegData(from: image, maxEdge: 1024, quality: 0.68) else {
+                        throw PhotoPlanGenerationError.noUsableImages
+                    }
+                    return [jpeg]
+                }.value
+                try Task.checkCancellation()
+                try await generate(blobs: blobs, sourceKind: .camera)
             } catch is CancellationError {
                 return
             } catch {
@@ -399,31 +408,60 @@ struct PhotoPracticeSheet: View {
         submitToken = PracticeEntryToken()
         phase = .generating
         isGenerating = true
-        completed = false
-        elapsed = 0
-        generationStartedAt = Date()
         toast = nil
+        generationStage = .preparing
         lifecycle.begin()
     }
 
-    private func generate(blobs: [Data]) async throws {
+    private func generate(blobs: [Data], sourceKind: PreparedImageSourceKind) async throws {
         guard let aiRunner else { throw ImageStepGeneratorError.notConfigured }
         selectedBlobs = blobs
+        selectedSourceKind = sourceKind
+        let credentialsStore = LLMCredentialsStore()
+        guard credentialsStore.isConfigured(baseURL: baseURL, model: model),
+              let apiKey = credentialsStore.loadAPIKey()?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !apiKey.isEmpty
+        else {
+            await recordNotConfigured()
+            throw ImageStepGeneratorError.notConfigured
+        }
         let log = LiveAIInvocationLog(store: invocationStore)
-        let generator = ImageStepGenerator(
+        let pipeline = PhotoPlanGenerationPipeline(
+            session: imageSession,
+            preparer: DefaultPhotoPlanImagePreparer(quality: imageQuality, sourceKind: sourceKind),
             runner: ImagePlanRecipeRunner(platform: aiRunner, log: log),
-            log: log
+            log: log,
+            onStage: { stage in
+                await MainActor.run { generationStage = stage }
+            }
         )
-        let draft = try await generator.generate(
-            imageData: blobs,
-            baseURL: baseURL,
-            model: model,
-            fallbackCategory: fallbackCategory,
-            invocationId: generationId
-        )
+        let draft: AIPracticeDraft
+        do {
+            draft = try await pipeline.generate(PhotoPlanGenerationRequest(
+                sourceImages: blobs,
+                fallbackCategory: fallbackCategory,
+                credentials: RuntimeCredentials(baseURL: baseURL, apiKey: apiKey, model: model),
+                invocationID: UUID(uuidString: generationId) ?? UUID(),
+                sourceKind: sourceKind,
+                quality: imageQuality
+            ))
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as VisionPracticeError {
+            throw ImageStepGeneratorError.failed(error)
+        } catch let error as PhotoPlanGenerationError {
+            switch error {
+            case .noImages, .noUsableImages: throw ImageStepGeneratorError.noImages
+            case .tooManyImages: throw ImageStepGeneratorError.tooManyImages
+            case .payloadTooLarge: throw ImageStepGeneratorError.payloadTooLarge
+            }
+        } catch {
+            if AIInvocationStore.errorType(from: error) == .cancelled { throw error }
+            throw ImageStepGeneratorError.failed(.transport)
+        }
         try Task.checkCancellation()
         applyDraft(draft)
-        completed = true
         isGenerating = false
         phase = .preview
         lifecycle.present()
@@ -502,7 +540,7 @@ struct PhotoPracticeSheet: View {
         prepareGeneration()
         generateTask = Task {
             do {
-                try await generate(blobs: selectedBlobs)
+                try await generate(blobs: selectedBlobs, sourceKind: selectedSourceKind)
                 invocationStore.markRegenerated(invocationID: predecessor, successorInvocationID: generationId)
             } catch is CancellationError {
                 invocationStore.markRegenerated(invocationID: predecessor, successorInvocationID: generationId)
@@ -532,17 +570,17 @@ struct PhotoPracticeSheet: View {
             generateTask = nil
             pickerItems = []
             isGenerating = false
-            completed = false
-            elapsed = 0
             phase = .source
             invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
             lifecycle.abandon()
+            Task { await imageSession.release() }
             return
         }
         if phase == .preview, !didFinishOutcome {
             invocationStore.setDraftOutcome(id: generationId, outcome: .abandoned, taskId: nil)
             lifecycle.abandon()
         }
+        Task { await imageSession.release() }
         dismiss()
     }
 
@@ -550,5 +588,22 @@ struct PhotoPracticeSheet: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
             toast = nil
         }
+    }
+
+    private func recordNotConfigured() async {
+        let skill = SkillRegistry.builtin.skill(id: SkillID.planFromImage)!
+        await LiveAIInvocationLog(store: invocationStore).record(AIInvocationRecordInput(
+            id: generationId,
+            skillId: skill.id,
+            skillVersion: skill.version,
+            model: model,
+            startedAt: Date(),
+            durationMs: 0,
+            status: .failure,
+            errorType: .notConfigured,
+            memoryIds: [],
+            formatRetryUsed: false,
+            draftOutcome: nil
+        ))
     }
 }

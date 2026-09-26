@@ -44,6 +44,12 @@ final class AIInvocationStore {
                 outputTokens: input.usage?.outputTokens,
                 cacheWriteTokens: input.usage?.cacheWriteTokens,
                 cacheReadTokens: input.usage?.cacheReadTokens,
+                imagePreparationMs: input.performance?.imagePreparationMs,
+                preparedImageBytes: input.performance?.preparedImageBytes,
+                preparedImageCount: input.performance?.preparedImageCount,
+                modelWaitMs: input.performance?.modelWaitMs,
+                firstResponseMs: input.performance?.firstResponseMs,
+                imageSourceKindRaw: Self.safeMetadata(input.performance?.imageSourceKind),
                 formatRetryUsed: input.formatRetryUsed,
                 fallbackUsed: input.fallbackUsed,
                 draftOutcomeRaw: (input.draftOutcome ?? (input.status == .failure ? .failed : nil))?.rawValue ?? "",
@@ -147,6 +153,17 @@ final class AIInvocationStore {
             try context.save()
         } catch {
             return
+        }
+    }
+
+    func markPerformance(invocationID: String, performance: AIInvocationPerformance) {
+        update(invocationID: invocationID) { row in
+            row.imagePreparationMs = performance.imagePreparationMs
+            row.preparedImageBytes = performance.preparedImageBytes
+            row.preparedImageCount = performance.preparedImageCount
+            row.modelWaitMs = performance.modelWaitMs
+            row.firstResponseMs = performance.firstResponseMs
+            row.imageSourceKindRaw = Self.safeMetadata(performance.imageSourceKind)
         }
     }
 
@@ -312,5 +329,9 @@ final class LiveAIInvocationLog: AIInvocationRecording {
             artifactID: artifactID,
             contextSnapshotID: contextSnapshotID
         )
+    }
+
+    func recordPerformance(invocationID: String, performance: AIInvocationPerformance) async {
+        store.markPerformance(invocationID: invocationID, performance: performance)
     }
 }

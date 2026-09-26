@@ -3,7 +3,7 @@ import UIKit
 
 struct StillImageCameraPicker: UIViewControllerRepresentable {
     @Binding var isPresented: Bool
-    var onPicked: (Data) -> Void
+    var onPicked: (UIImage) -> Void
     var onCancel: () -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
@@ -44,13 +44,11 @@ struct StillImageCameraPicker: UIViewControllerRepresentable {
             didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
         ) {
             parent.isPresented = false
-            guard let image = info[.originalImage] as? UIImage,
-                  let data = image.jpegData(compressionQuality: 0.9)
-            else {
+            guard let image = info[.originalImage] as? UIImage else {
                 parent.onCancel()
                 return
             }
-            parent.onPicked(data)
+            parent.onPicked(image)
         }
     }
 }

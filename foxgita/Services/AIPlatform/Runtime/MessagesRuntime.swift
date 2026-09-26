@@ -16,6 +16,10 @@ struct MessagesRuntime: AgentRuntime {
 
                 do {
                     try Task.checkCancellation()
+                    let capabilities = ProviderCapabilityResolver.resolve(
+                        baseURL: credentials.baseURL,
+                        model: credentials.model
+                    )
                     let result = try await transport.complete(
                         MessagesTransportRequest(
                             baseURL: credentials.baseURL,
@@ -25,8 +29,10 @@ struct MessagesRuntime: AgentRuntime {
                             userText: userText(for: prompt),
                             imageJPEGData: plan.mediaResources.map(\.data),
                             orderedTools: prompt.orderedTools,
-                            includeResponseFormat: true,
-                            allowsFormatRetry: plan.recipe.allowsFormatRepair,
+                            includeResponseFormat: capabilities.supportsResponseFormat,
+                            // Capability discovery must never create a hidden
+                            // second paid model request.
+                            allowsFormatRetry: false,
                             timeout: plan.recipe.timeoutSeconds
                         )
                     )

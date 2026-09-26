@@ -12,6 +12,15 @@ enum AIDraftOutcome: String, Sendable {
     case accepted, edited, regenerated, abandoned, failed
 }
 
+struct AIInvocationPerformance: Equatable, Sendable {
+    var imagePreparationMs: Int?
+    var preparedImageBytes: Int?
+    var preparedImageCount: Int?
+    var modelWaitMs: Int?
+    var firstResponseMs: Int?
+    var imageSourceKind: String?
+}
+
 struct AIInvocationRecordInput: Equatable, Sendable {
     var id: String
     var skillId: String
@@ -34,15 +43,18 @@ struct AIInvocationRecordInput: Equatable, Sendable {
     var usage: RuntimeUsage? = nil
     var refusalType: String? = nil
     var fallbackUsed: Bool? = nil
+    var performance: AIInvocationPerformance? = nil
 }
 
 protocol AIInvocationRecording: Sendable {
     func record(_ input: AIInvocationRecordInput) async
     func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async
+    func recordPerformance(invocationID: String, performance: AIInvocationPerformance) async
 }
 
 extension AIInvocationRecording {
     func linkArtifact(invocationID: String, artifactID: String, contextSnapshotID: String) async {}
+    func recordPerformance(invocationID: String, performance: AIInvocationPerformance) async {}
 }
 
 struct EmptyAIInvocationLog: AIInvocationRecording {

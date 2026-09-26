@@ -5,6 +5,7 @@ enum ImageStepGeneratorError: Error, Equatable {
     case notConfigured
     case noImages
     case tooManyImages
+    case payloadTooLarge
     case failed(VisionPracticeError)
 
     var userMessage: String {
@@ -15,6 +16,8 @@ enum ImageStepGeneratorError: Error, Equatable {
             return String(localized: "请选择图片")
         case .tooManyImages:
             return String(localized: "一次最多 3 张图片")
+        case .payloadTooLarge:
+            return String(localized: "图片内容过大，请减少图片或重新拍摄")
         case .failed(let vision):
             switch vision {
             case .unauthorized:
@@ -33,16 +36,13 @@ enum ImageStepGeneratorError: Error, Equatable {
 }
 
 enum PracticeImageCodec {
-    static func jpegData(
-        from imageData: Data,
+    nonisolated static func jpegData(
+        from image: UIImage,
         maxEdge: CGFloat = 1280,
         quality: CGFloat = 0.7
     ) -> Data? {
-        guard let image = UIImage(data: imageData) else { return nil }
         let size = image.size
         guard size.width > 0, size.height > 0 else { return nil }
-
-        // Prefer pixel size when available so @2x/@3x sources shrink correctly.
         let pixelWidth = image.cgImage.map { CGFloat($0.width) } ?? (size.width * image.scale)
         let pixelHeight = image.cgImage.map { CGFloat($0.height) } ?? (size.height * image.scale)
         let longest = max(pixelWidth, pixelHeight)
@@ -51,7 +51,6 @@ enum PracticeImageCodec {
             width: max(1, floor(pixelWidth * factor)),
             height: max(1, floor(pixelHeight * factor))
         )
-
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
         let renderer = UIGraphicsImageRenderer(size: target, format: format)
@@ -59,6 +58,15 @@ enum PracticeImageCodec {
             image.draw(in: CGRect(origin: .zero, size: target))
         }
         return resized.jpegData(compressionQuality: quality)
+    }
+
+    nonisolated static func jpegData(
+        from imageData: Data,
+        maxEdge: CGFloat = 1280,
+        quality: CGFloat = 0.7
+    ) -> Data? {
+        guard let image = UIImage(data: imageData) else { return nil }
+        return jpegData(from: image, maxEdge: maxEdge, quality: quality)
     }
 }
 

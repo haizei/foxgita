@@ -1,0 +1,618 @@
+//
+//  SchemaV17.swift
+//  foxgita
+//
+
+import Foundation
+import SwiftData
+
+enum GitaSchemaV19: VersionedSchema {
+    static var versionIdentifier: Schema.Version { Schema.Version(19, 0, 0) }
+
+    static var models: [any PersistentModel.Type] {
+        [TaskItem.self, PracticeSession.self, RecordingRef.self, LocalProfile.self, MemoryItem.self, PracticeItem.self, Project.self, AIInvocationLog.self]
+    }
+
+    @Model
+    final class TaskItem {
+        @Attribute(.unique) var id: String
+        var title: String
+        var subtitle: String
+        var categoryRaw: String
+        var targetMin: Int
+        var defaultBpm: Int
+        var timeSig: String
+        var stepsRaw: String
+        var statusRaw: String
+        var startedOn: Date?
+        var sortOrder: Int
+        var isTemplate: Bool
+        var profileId: String = ""
+        var originKey: String = ""
+
+        var createdAt: Date = Date()
+        var updatedAt: Date = Date()
+        var deletedAt: Date?
+        var syncStateRaw: String = SyncState.local.rawValue
+
+        init(
+            id: String = UUID().uuidString,
+            title: String,
+            subtitle: String,
+            category: PracticeCategory,
+            targetMin: Int,
+            defaultBpm: Int = 80,
+            timeSig: String = "4/4",
+            steps: [String] = [],
+            status: TaskStatus = .active,
+            startedOn: Date? = Date(),
+            sortOrder: Int = 0,
+            isTemplate: Bool = false,
+            profileId: String = "",
+            originKey: String = "",
+            now: Date = Date()
+        ) {
+            self.id = id
+            self.title = title
+            self.subtitle = subtitle
+            self.categoryRaw = category.rawValue
+            self.targetMin = targetMin
+            self.defaultBpm = defaultBpm
+            self.timeSig = timeSig
+            self.stepsRaw = StepCoding.encode(steps)
+            self.statusRaw = status.rawValue
+            self.startedOn = startedOn
+            self.sortOrder = sortOrder
+            self.isTemplate = isTemplate
+            self.profileId = profileId
+            self.originKey = originKey
+            self.createdAt = now
+            self.updatedAt = now
+            self.syncStateRaw = SyncState.local.rawValue
+        }
+
+        var category: PracticeCategory {
+            get { PracticeCategory(rawValue: categoryRaw) ?? .chord }
+            set { categoryRaw = newValue.rawValue }
+        }
+
+        var status: TaskStatus {
+            get { TaskStatus(rawValue: statusRaw) ?? .active }
+            set { statusRaw = newValue.rawValue }
+        }
+
+        var steps: [String] {
+            get { StepCoding.decode(stepsRaw) }
+            set { stepsRaw = StepCoding.encode(newValue) }
+        }
+
+        var syncState: SyncState {
+            get { SyncState(rawValue: syncStateRaw) ?? .local }
+            set { syncStateRaw = newValue.rawValue }
+        }
+
+        var isDeleted: Bool { deletedAt != nil }
+
+        /// Call after any mutation so sync can order writes.
+        func touch(_ now: Date = Date()) {
+            updatedAt = now
+            syncState = .local
+        }
+    }
+
+    @Model
+    final class PracticeSession {
+        #Index<PracticeSession>([\.endedAt], [\.taskId])
+
+        @Attribute(.unique) var id: String
+        var taskId: String
+        var taskTitle: String
+        var categoryRaw: String
+        var startedAt: Date
+        var endedAt: Date
+        var durationSec: Int
+        var bpm: Int
+        var timeSig: String
+        var stepsSnapshotRaw: String
+        var noteText: String
+        var profileId: String = ""
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV19.RecordingRef.session)
+        var recordings: [GitaSchemaV19.RecordingRef]
+
+        var createdAt: Date = Date()
+        var updatedAt: Date = Date()
+        var deletedAt: Date?
+        var syncStateRaw: String = SyncState.local.rawValue
+
+        init(
+            id: String = UUID().uuidString,
+            taskId: String,
+            taskTitle: String,
+            category: PracticeCategory,
+            startedAt: Date,
+            endedAt: Date,
+            durationSec: Int,
+            bpm: Int,
+            timeSig: String,
+            steps: [String],
+            noteText: String = "",
+            recordings: [GitaSchemaV19.RecordingRef] = [],
+            profileId: String = "",
+            now: Date = Date()
+        ) {
+            self.id = id
+            self.taskId = taskId
+            self.taskTitle = taskTitle
+            self.categoryRaw = category.rawValue
+            self.startedAt = startedAt
+            self.endedAt = endedAt
+            self.durationSec = durationSec
+            self.bpm = bpm
+            self.timeSig = timeSig
+            self.stepsSnapshotRaw = StepCoding.encode(steps)
+            self.noteText = noteText
+            self.recordings = recordings
+            self.profileId = profileId
+            self.createdAt = now
+            self.updatedAt = now
+            self.syncStateRaw = SyncState.local.rawValue
+        }
+
+        var category: PracticeCategory {
+            PracticeCategory(rawValue: categoryRaw) ?? .chord
+        }
+
+        var steps: [String] { StepCoding.decode(stepsSnapshotRaw) }
+
+        var syncState: SyncState {
+            get { SyncState(rawValue: syncStateRaw) ?? .local }
+            set { syncStateRaw = newValue.rawValue }
+        }
+
+        var durationMinutes: Int {
+            guard durationSec > 0 else { return 0 }
+            return max(1, Int(ceil(Double(durationSec) / 60.0)))
+        }
+    }
+
+    @Model
+    final class RecordingRef {
+        @Attribute(.unique) var id: String
+        /// File name only — the sandbox container path changes between installs,
+        /// so the directory is resolved at runtime by `RecordingStore`.
+        var fileName: String
+        var bytes: Int
+        var durationSec: Int = 0
+        var createdAt: Date
+        var label: String
+        var session: PracticeSession?
+        var practiceItem: GitaSchemaV19.PracticeItem? = nil
+
+        var updatedAt: Date = Date()
+        var deletedAt: Date?
+        var syncStateRaw: String = SyncState.local.rawValue
+        var reviewStatusRaw: String = ReviewStatus.none.rawValue
+        var reviewHighlight: String = ""
+        var reviewFocus: String = ""
+        var reviewNextAction: String = ""
+        var reviewFindingsJSON: String = "[]"
+
+        init(
+            id: String = UUID().uuidString,
+            fileName: String,
+            bytes: Int,
+            durationSec: Int = 0,
+            createdAt: Date = Date(),
+            label: String = ""
+        ) {
+            self.id = id
+            self.fileName = fileName
+            self.bytes = bytes
+            self.durationSec = durationSec
+            self.createdAt = createdAt
+            self.label = label
+            self.updatedAt = createdAt
+            self.syncStateRaw = SyncState.local.rawValue
+        }
+
+        var syncState: SyncState {
+            get { SyncState(rawValue: syncStateRaw) ?? .local }
+            set { syncStateRaw = newValue.rawValue }
+        }
+
+        var reviewStatus: ReviewStatus {
+            get { ReviewStatus(rawValue: reviewStatusRaw) ?? .none }
+            set { reviewStatusRaw = newValue.rawValue }
+        }
+
+        var videoFindings: [VideoFinding] {
+            get {
+                guard let data = reviewFindingsJSON.data(using: .utf8),
+                      let value = try? JSONDecoder().decode([VideoFinding].self, from: data) else {
+                    return []
+                }
+                return value
+            }
+            set {
+                reviewFindingsJSON =
+                    (try? String(data: JSONEncoder().encode(newValue), encoding: .utf8)) ?? "[]"
+            }
+        }
+
+        var fileURL: URL { RecordingStore.url(for: fileName) }
+
+        var durationLabel: String {
+            guard durationSec > 0 else { return String(localized: "时长未知") }
+            return String(format: "%d:%02d", durationSec / 60, durationSec % 60)
+        }
+
+        var sizeLabel: String {
+            if bytes < 1024 { return "\(bytes) B" }
+            return String(format: "%.1f KB", Double(bytes) / 1024)
+        }
+    }
+
+    @Model
+    final class LocalProfile {
+        @Attribute(.unique) var id: String
+        var isActive: Bool
+        var memoryConsent: Bool
+        var memoryConsentState: String = ""
+        var createdAt: Date
+        var updatedAt: Date
+        var pinnedProjectId: UUID? = nil
+
+        init(
+            id: String = UUID().uuidString,
+            isActive: Bool = true,
+            memoryConsent: Bool = false,
+            now: Date = Date(),
+            pinnedProjectId: UUID? = nil
+        ) {
+            self.id = id
+            self.isActive = isActive
+            self.memoryConsent = memoryConsent
+            self.memoryConsentState = ""
+            self.createdAt = now
+            self.updatedAt = now
+            self.pinnedProjectId = pinnedProjectId
+        }
+
+        var consent: MemoryConsentState {
+            get { MemoryConsentState(rawValue: memoryConsentState) ?? .undecided }
+            set {
+                memoryConsentState = newValue.rawValue
+                memoryConsent = newValue == .enabled
+                updatedAt = Date()
+            }
+        }
+    }
+
+    @Model
+    final class MemoryItem {
+        @Attribute(.unique) var id: String
+        var profileId: String
+        var kindRaw: String
+        var key: String
+        var summaryText: String
+        var valueJSON: String
+        var sourceType: String
+        var sourceId: String
+        var confidence: Double
+        var importance: Double
+        var expiresAt: Date?
+        var createdAt: Date
+        var updatedAt: Date
+        var deletedAt: Date?
+        var schemaVersion: Int
+
+        init(
+            id: String = UUID().uuidString,
+            profileId: String,
+            kind: MemoryScope,
+            key: String,
+            summaryText: String,
+            valueJSON: String = "",
+            sourceType: String,
+            sourceId: String,
+            confidence: Double,
+            importance: Double,
+            expiresAt: Date? = nil,
+            now: Date = Date(),
+            schemaVersion: Int = 1
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.kindRaw = kind.rawValue
+            self.key = key
+            self.summaryText = summaryText
+            self.valueJSON = valueJSON
+            self.sourceType = sourceType
+            self.sourceId = sourceId
+            self.confidence = confidence
+            self.importance = importance
+            self.expiresAt = expiresAt
+            self.createdAt = now
+            self.updatedAt = now
+            self.schemaVersion = schemaVersion
+        }
+
+        var kind: MemoryScope? { MemoryScope(rawValue: kindRaw) }
+    }
+
+    @Model
+    final class PracticeItem {
+        @Attribute(.unique) var id: UUID
+        var profileId: UUID
+        var practiceDayKey: String
+        var title: String
+        var categoryRaw: String
+        var durationSeconds: Int
+        var bpm: Int?
+        var timeSignature: String?
+        var metronomeAccentRaw: String? = nil
+        var metronomeSubdivisionRaw: Int? = nil
+        var metronomeSoundModeRaw: String? = nil
+        var metronomeVolume: Int? = nil
+        var metronomeStrongBeatBoost: Bool? = nil
+        var note: String
+        var sourceRaw: String
+        var originId: String?
+        var projectId: UUID? = nil
+        var stepsRaw: String = "[]"
+        var subtitle: String = ""
+        var targetMin: Int = 0
+        var createdAt: Date
+        var updatedAt: Date
+        var deletedAt: Date?
+        @Relationship(deleteRule: .cascade, inverse: \GitaSchemaV19.RecordingRef.practiceItem)
+        var recordings: [GitaSchemaV19.RecordingRef]
+
+        init(
+            id: UUID = UUID(),
+            profileId: UUID,
+            practiceDayKey: String,
+            title: String,
+            categoryRaw: String,
+            durationSeconds: Int,
+            bpm: Int? = nil,
+            timeSignature: String? = nil,
+            metronomeAccentRaw: String? = nil,
+            metronomeSubdivisionRaw: Int? = nil,
+            metronomeSoundModeRaw: String? = nil,
+            metronomeVolume: Int? = nil,
+            metronomeStrongBeatBoost: Bool? = nil,
+            note: String = "",
+            sourceRaw: String = "",
+            originId: String? = nil,
+            projectId: UUID? = nil,
+            steps: [String] = [],
+            subtitle: String = "",
+            targetMin: Int = 0,
+            recordings: [GitaSchemaV19.RecordingRef] = [],
+            createdAt: Date = Date(),
+            updatedAt: Date = Date(),
+            deletedAt: Date? = nil
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.practiceDayKey = practiceDayKey
+            self.title = title
+            self.categoryRaw = categoryRaw
+            self.durationSeconds = durationSeconds
+            self.bpm = bpm
+            self.timeSignature = timeSignature
+            self.metronomeAccentRaw = metronomeAccentRaw
+            self.metronomeSubdivisionRaw = metronomeSubdivisionRaw
+            self.metronomeSoundModeRaw = metronomeSoundModeRaw
+            self.metronomeVolume = metronomeVolume
+            self.metronomeStrongBeatBoost = metronomeStrongBeatBoost
+            self.note = note
+            self.sourceRaw = sourceRaw
+            self.originId = originId
+            self.projectId = projectId
+            self.stepsRaw = StepCoding.encode(steps)
+            self.subtitle = subtitle
+            self.targetMin = targetMin
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+            self.deletedAt = deletedAt
+            self.recordings = recordings
+        }
+
+        var steps: [String] {
+            get { StepCoding.decode(stepsRaw) }
+            set { stepsRaw = StepCoding.encode(newValue) }
+        }
+    }
+
+    @Model
+    final class Project {
+        @Attribute(.unique) var id: UUID
+        var profileId: UUID
+        var name: String
+        var goal: String
+        var kindRaw: String
+        var stageRaw: String
+        var currentFocus: String
+        var statusRaw: String
+        var createdAt: Date
+        var updatedAt: Date
+        var deletedAt: Date?
+        var stageVersionItemId: UUID? = nil
+        var finalVersionItemId: UUID? = nil
+
+        init(
+            id: UUID = UUID(),
+            profileId: UUID,
+            name: String,
+            goal: String,
+            kindRaw: String = "",
+            stageRaw: String = "",
+            currentFocus: String = "",
+            statusRaw: String = ProjectStatus.active.rawValue,
+            createdAt: Date = Date(),
+            updatedAt: Date = Date(),
+            deletedAt: Date? = nil,
+            stageVersionItemId: UUID? = nil,
+            finalVersionItemId: UUID? = nil
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.name = name
+            self.goal = goal
+            self.kindRaw = kindRaw
+            self.stageRaw = stageRaw
+            self.currentFocus = currentFocus
+            self.statusRaw = statusRaw
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+            self.deletedAt = deletedAt
+            self.stageVersionItemId = stageVersionItemId
+            self.finalVersionItemId = finalVersionItemId
+        }
+
+        var status: ProjectStatus {
+            get { ProjectStatus(rawValue: statusRaw) ?? .active }
+            set { statusRaw = newValue.rawValue }
+        }
+    }
+
+    @Model
+    final class AIInvocationLog {
+        @Attribute(.unique) var id: String
+        var profileId: String
+        var sessionId: String?
+        var skillId: String
+        var skillVersion: String
+        var runtime: String?
+        var model: String
+        var executionStateRaw: String?
+        var startedAt: Date
+        var durationMs: Int
+        var statusRaw: String
+        var errorTypeRaw: String
+        var refusalTypeRaw: String?
+        var memoryIdsRaw: String
+        var staticPromptFingerprint: String?
+        var historyPrefixFingerprint: String?
+        var contextFingerprint: String?
+        var toolsetFingerprint: String?
+        var inputTokens: Int?
+        var outputTokens: Int?
+        var cacheWriteTokens: Int?
+        var cacheReadTokens: Int?
+        var imagePreparationMs: Int?
+        var preparedImageBytes: Int?
+        var preparedImageCount: Int?
+        var modelWaitMs: Int?
+        var firstResponseMs: Int?
+        var imageSourceKindRaw: String?
+        var formatRetryUsed: Bool
+        var fallbackUsed: Bool?
+        var draftOutcomeRaw: String
+        var taskId: String
+        var artifactId: String?
+        var contextSnapshotId: String?
+        var businessObjectId: String?
+        var predecessorInvocationId: String?
+        var successorInvocationId: String?
+        var businessObjectStartedAt: Date?
+        var businessObjectCompletedAt: Date?
+        var completedAt: Date?
+        var createdAt: Date
+        var updatedAt: Date
+
+        init(
+            id: String,
+            profileId: String,
+            sessionId: String? = nil,
+            skillId: String,
+            skillVersion: String,
+            runtime: String? = nil,
+            model: String,
+            executionStateRaw: String? = nil,
+            startedAt: Date,
+            durationMs: Int,
+            statusRaw: String,
+            errorTypeRaw: String = "",
+            refusalTypeRaw: String? = nil,
+            memoryIdsRaw: String = "",
+            staticPromptFingerprint: String? = nil,
+            historyPrefixFingerprint: String? = nil,
+            contextFingerprint: String? = nil,
+            toolsetFingerprint: String? = nil,
+            inputTokens: Int? = nil,
+            outputTokens: Int? = nil,
+            cacheWriteTokens: Int? = nil,
+            cacheReadTokens: Int? = nil,
+            imagePreparationMs: Int? = nil,
+            preparedImageBytes: Int? = nil,
+            preparedImageCount: Int? = nil,
+            modelWaitMs: Int? = nil,
+            firstResponseMs: Int? = nil,
+            imageSourceKindRaw: String? = nil,
+            formatRetryUsed: Bool = false,
+            fallbackUsed: Bool? = nil,
+            draftOutcomeRaw: String = "",
+            taskId: String = "",
+            artifactId: String? = nil,
+            contextSnapshotId: String? = nil,
+            businessObjectId: String? = nil,
+            predecessorInvocationId: String? = nil,
+            successorInvocationId: String? = nil,
+            businessObjectStartedAt: Date? = nil,
+            businessObjectCompletedAt: Date? = nil,
+            completedAt: Date? = nil,
+            now: Date = Date()
+        ) {
+            self.id = id
+            self.profileId = profileId
+            self.sessionId = sessionId
+            self.skillId = skillId
+            self.skillVersion = skillVersion
+            self.runtime = runtime
+            self.model = model
+            self.executionStateRaw = executionStateRaw
+            self.startedAt = startedAt
+            self.durationMs = durationMs
+            self.statusRaw = statusRaw
+            self.errorTypeRaw = errorTypeRaw
+            self.refusalTypeRaw = refusalTypeRaw
+            self.memoryIdsRaw = memoryIdsRaw
+            self.staticPromptFingerprint = staticPromptFingerprint
+            self.historyPrefixFingerprint = historyPrefixFingerprint
+            self.contextFingerprint = contextFingerprint
+            self.toolsetFingerprint = toolsetFingerprint
+            self.inputTokens = inputTokens
+            self.outputTokens = outputTokens
+            self.cacheWriteTokens = cacheWriteTokens
+            self.cacheReadTokens = cacheReadTokens
+            self.imagePreparationMs = imagePreparationMs
+            self.preparedImageBytes = preparedImageBytes
+            self.preparedImageCount = preparedImageCount
+            self.modelWaitMs = modelWaitMs
+            self.firstResponseMs = firstResponseMs
+            self.imageSourceKindRaw = imageSourceKindRaw
+            self.formatRetryUsed = formatRetryUsed
+            self.fallbackUsed = fallbackUsed
+            self.draftOutcomeRaw = draftOutcomeRaw
+            self.taskId = taskId
+            self.artifactId = artifactId
+            self.contextSnapshotId = contextSnapshotId
+            self.businessObjectId = businessObjectId
+            self.predecessorInvocationId = predecessorInvocationId
+            self.successorInvocationId = successorInvocationId
+            self.businessObjectStartedAt = businessObjectStartedAt
+            self.businessObjectCompletedAt = businessObjectCompletedAt
+            self.completedAt = completedAt
+            self.createdAt = now
+            self.updatedAt = now
+        }
+
+        var executionState: String? {
+            get { executionStateRaw }
+            set { executionStateRaw = newValue }
+        }
+    }
+}
