@@ -72,4 +72,17 @@ struct MessagesTransportRequest: Sendable {
 
 protocol MessagesTransporting: Sendable {
     func complete(_ request: MessagesTransportRequest) async throws -> AITransportResult
+    func stream(
+        _ request: MessagesTransportRequest,
+        onDelta: @escaping @Sendable (String) -> Void
+    ) async throws -> AITransportResult
+}
+
+extension MessagesTransporting {
+    func stream(
+        _ request: MessagesTransportRequest,
+        onDelta: @escaping @Sendable (String) -> Void
+    ) async throws -> AITransportResult {
+        try await complete(request)
+    }
 }

@@ -267,6 +267,68 @@ struct AITransport: Sendable {
         }
     }
 
+    func stream(
+        _ request: MessagesTransportRequest,
+        onDelta: @escaping @Sendable (String) -> Void
+    ) async throws -> AITransportResult {
+        guard let url = Self.completionsURL(from: request.baseURL) else { throw AIRuntimeError.invalidURL }
+        var urlRequest = URLRequest(url: url)
+        urlRequest.httpMethod = "POST"
+        urlRequest.timeoutInterval = request.timeout ?? 60
+        urlRequest.setValue("Bearer \(request.apiKey)", forHTTPHeaderField: "Authorization")
+        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlRequest.setValue("text/event-stream", forHTTPHeaderField: "Accept")
+        do {
+            let toolMap = try ProviderToolNameMap(schemas: request.orderedTools)
+            let body = try Self.buildBody(
+                model: request.model, systemPrompt: request.systemPrompt, userText: request.userText,
+                imageJPEGData: request.imageJPEGData, providerTools: toolMap.entries,
+                includeResponseFormat: request.includeResponseFormat
+            )
+            var json = try JSONSerialization.jsonObject(with: body) as! [String: Any]
+            json["stream"] = true
+            json["stream_options"] = ["include_usage": true]
+            urlRequest.httpBody = try JSONSerialization.data(withJSONObject: json)
+        } catch { throw AIRuntimeError.transport }
+
+        do {
+            let (bytes, response) = try await session.bytes(for: urlRequest)
+            guard let http = response as? HTTPURLResponse else { throw AIRuntimeError.transport }
+            if http.statusCode == 401 || http.statusCode == 403 { throw AIRuntimeError.unauthorized }
+            guard (200...299).contains(http.statusCode) else { throw AIRuntimeError.httpStatus(http.statusCode) }
+
+            var content = ""
+            var usage = RuntimeUsage.zero
+            for try await line in bytes.lines {
+                try Task.checkCancellation()
+                guard line.hasPrefix("data:") else { continue }
+                let payload = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
+                if payload == "[DONE]" { break }
+                guard let data = payload.data(using: .utf8),
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                else { continue }
+                if let choices = object["choices"] as? [[String: Any]],
+                   let delta = choices.first?["delta"] as? [String: Any],
+                   let text = delta["content"] as? String, !text.isEmpty {
+                    content += text
+                    onDelta(text)
+                }
+                if let rawUsage = object["usage"] as? [String: Any] {
+                    usage = RuntimeUsage(
+                        inputTokens: rawUsage["prompt_tokens"] as? Int ?? rawUsage["input_tokens"] as? Int ?? 0,
+                        outputTokens: rawUsage["completion_tokens"] as? Int ?? rawUsage["output_tokens"] as? Int ?? 0,
+                        cacheWriteTokens: rawUsage["cache_creation_input_tokens"] as? Int ?? 0,
+                        cacheReadTokens: rawUsage["cache_read_input_tokens"] as? Int ?? 0
+                    )
+                }
+            }
+            return AITransportResult(content: content, formatRetryUsed: false, usage: usage)
+        } catch is CancellationError { throw AIRuntimeError.cancelled }
+        catch let error as AIRuntimeError { throw error }
+        catch let error as URLError where error.code == .timedOut { throw AIRuntimeError.timeout }
+        catch { throw AIRuntimeError.transport }
+    }
+
     private static func mapSessionError(_ error: Error) throws -> Never {
         if (error as? URLError)?.code == .timedOut { throw VisionPracticeError.timeout }
         if (error as? URLError)?.code == .cancelled { throw CancellationError() }

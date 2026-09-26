@@ -5,8 +5,9 @@ import Foundation
 /// model call merely to discover support.
 struct ProviderCapabilities: Equatable, Sendable {
     var supportsResponseFormat: Bool
+    var supportsSSE: Bool
 
-    static let conservative = ProviderCapabilities(supportsResponseFormat: false)
+    static let conservative = ProviderCapabilities(supportsResponseFormat: false, supportsSSE: false)
 }
 
 enum ProviderCapabilityResolver {
@@ -15,11 +16,11 @@ enum ProviderCapabilityResolver {
     static func resolve(baseURL: String, model: String, defaults: UserDefaults = .standard) -> ProviderCapabilities {
         let key = "\(baseURL.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())|\(model.lowercased())"
         if let configured = (defaults.dictionary(forKey: preferenceKey)?[key] as? Bool) {
-            return ProviderCapabilities(supportsResponseFormat: configured)
+            return ProviderCapabilities(supportsResponseFormat: configured, supportsSSE: false)
         }
         let host = URL(string: baseURL)?.host?.lowercased() ?? ""
         if host == "api.openai.com" || host.hasSuffix(".openai.azure.com") {
-            return ProviderCapabilities(supportsResponseFormat: true)
+            return ProviderCapabilities(supportsResponseFormat: true, supportsSSE: true)
         }
         return .conservative
     }

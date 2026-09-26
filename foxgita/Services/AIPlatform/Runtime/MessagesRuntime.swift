@@ -20,8 +20,7 @@ struct MessagesRuntime: AgentRuntime {
                         baseURL: credentials.baseURL,
                         model: credentials.model
                     )
-                    let result = try await transport.complete(
-                        MessagesTransportRequest(
+                    let request = MessagesTransportRequest(
                             baseURL: credentials.baseURL,
                             apiKey: credentials.apiKey,
                             model: credentials.model,
@@ -34,8 +33,15 @@ struct MessagesRuntime: AgentRuntime {
                             // second paid model request.
                             allowsFormatRetry: false,
                             timeout: plan.recipe.timeoutSeconds
-                        )
                     )
+                    let result: AITransportResult
+                    if capabilities.supportsSSE {
+                        result = try await transport.stream(request) { delta in
+                            continuation.yield(.modelDelta(delta))
+                        }
+                    } else {
+                        result = try await transport.complete(request)
+                    }
                     try Task.checkCancellation()
 
                     guard !result.content.isEmpty else {
