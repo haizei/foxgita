@@ -125,24 +125,6 @@ struct PracticeView: View {
                         taskList
                     }
                     .padding(.horizontal, GitaTheme.pagePadding)
-                    .padding(.bottom, 120)
-                }
-
-                if isSelectedToday {
-                    Button {
-                        showSheet = true
-                    } label: {
-                        Text("＋")
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundStyle(GitaTheme.brandOn)
-                            .frame(width: 56, height: 56)
-                            .background(GitaTheme.brand500)
-                            .clipShape(Circle())
-                            .shadow(color: GitaTheme.shadowFab, radius: 10, y: 6)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("添加练习"))
-                    .padding(.trailing, 22)
                     .padding(.bottom, 24)
                 }
 
@@ -152,6 +134,26 @@ struct PracticeView: View {
                         ToastBanner(text: toast).padding(.bottom, 40)
                     }
                     .frame(maxWidth: .infinity)
+                }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if isSelectedToday {
+                    Button {
+                        showSheet = true
+                    } label: {
+                        Text("开始练习")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(GitaTheme.brandOn)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(GitaTheme.brand500, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("practice.start-button")
+                    .padding(.horizontal, 20)
+                    .padding(.top, 8)
+                    .padding(.bottom, 12)
+                    .background(GitaTheme.bgDefault)
                 }
             }
             .onAppear {
@@ -333,7 +335,7 @@ struct PracticeView: View {
             if isSelectedToday {
                 lockedEmpty(
                     title: String(localized: "今天还没加练习"),
-                    subtitle: String(localized: "点右下角加号，挑一项开始")
+                    subtitle: String(localized: "添加一项，开始今天的练习")
                 )
             } else {
                 lockedEmpty(

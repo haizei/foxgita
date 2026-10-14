@@ -21,6 +21,9 @@ final class PracticeFlowUITests: XCTestCase {
     func testLaunchShowsTodayPractice() {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天只练一点点"].exists)
+        let startPractice = app.buttons["practice.start-button"]
+        XCTAssertTrue(startPractice.exists)
+        XCTAssertGreaterThan(startPractice.frame.width, app.frame.width * 0.75)
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
         XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
@@ -44,7 +47,7 @@ final class PracticeFlowUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "知足前奏")
         }
-        let add = app.buttons["添加练习"]
+        let add = app.buttons["practice.start-button"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
         XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
@@ -63,8 +66,8 @@ final class PracticeFlowUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "节拍器速度测试")
         }
-        XCTAssertTrue(app.buttons["添加练习"].waitForExistence(timeout: 5))
-        app.buttons["添加练习"].tap()
+        XCTAssertTrue(app.buttons["practice.start-button"].waitForExistence(timeout: 5))
+        app.buttons["practice.start-button"].tap()
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
@@ -99,8 +102,8 @@ final class PracticeFlowUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "节拍器视觉测试")
         }
-        XCTAssertTrue(app.buttons["添加练习"].waitForExistence(timeout: 5))
-        app.buttons["添加练习"].tap()
+        XCTAssertTrue(app.buttons["practice.start-button"].waitForExistence(timeout: 5))
+        app.buttons["practice.start-button"].tap()
         let field = app.textFields.firstMatch
         XCTAssertTrue(field.waitForExistence(timeout: 3))
         field.tap()
@@ -154,7 +157,7 @@ final class PracticeFlowUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "空完成")
         }
-        let add = app.buttons["添加练习"]
+        let add = app.buttons["practice.start-button"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
         let field = app.textFields.firstMatch
@@ -170,7 +173,7 @@ final class PracticeFlowUITests: XCTestCase {
     }
 
     func testRecommendSheetCanBeOpenedAndDismissed() {
-        let add = app.buttons["添加练习"]
+        let add = app.buttons["practice.start-button"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
 
@@ -180,7 +183,7 @@ final class PracticeFlowUITests: XCTestCase {
     }
 
     func testRecommendSheetShowsImageGenerateEntry() {
-        let add = app.buttons["添加练习"]
+        let add = app.buttons["practice.start-button"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
         add.tap()
         XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
