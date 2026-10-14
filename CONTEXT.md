@@ -96,6 +96,34 @@ _Avoid_: PracticeSession、TempoRampRuntime
 从用户开始播放到明确暂停或停止之间的一次连续节拍过程；自动熄屏、手动锁屏和进入后台不会自行结束它。
 _Avoid_: Playback Session、后台任务
 
+**Practice Elapsed Time**:
+一次练习中实际发生并可保存的累计练习时长；暂停与停止期间不增加，且不因倒计时的显示或复位而减少。
+_Avoid_: 倒计时、剩余时间、目标时长
+
+**Countdown Plan**:
+用户为当前练习选择的 1–60 分钟倒计时总时长与结束提醒偏好；首次取当前练习目标时长，无目标时为 10 分钟，调整后从新总时长开始并等待用户再次启动。
+_Avoid_: 目标练习时长、Practice Elapsed Time、倒计时模板
+
+**Countdown Mode**:
+练习计时卡以 Countdown Run 的剩余时间作为主显示的临时模式；关闭该模式会暂停播放、取消提醒，并恢复显示 Practice Elapsed Time，且该模式与 Tempo Ramp Run 互斥。
+_Avoid_: 倒计时页面、倒计时 Tab、覆盖练习计时
+
+**Countdown Run**:
+Countdown Plan 启动后的当前练习内运行过程；它与 Metronome Playback Run 同步开始、暂停和继续，在主动离开练习时结束，在锁屏或后台期间保持连续，发生播放打断后必须由用户明确恢复。
+_Avoid_: Practice Session、PracticeTimer、后台任务
+
+**Countdown Completion**:
+Countdown Run 首次到达零点的单次完成事件；它停止节拍器、暂停 Practice Elapsed Time、保存并结束当前 Recording Segment，并按 Countdown Plan 触发结束提醒，但不等同于完成本次练习。
+_Avoid_: 完成本次练习、自动保存、循环倒计时
+
+**Countdown Reminder**:
+用户明确启用的 Countdown Completion 反馈，前台包含提示音与成功触感，锁屏或后台包含一次本地通知；通知权限不可用时回退为关闭，但不阻止 Countdown Run。
+_Avoid_: 每日提醒、自动完成通知、强制提醒
+
+**Countdown Reset**:
+将当前倒计时恢复到 Countdown Plan 的总时长并保持暂停；它不清零 Practice Elapsed Time，也不回滚笔记、步骤或节拍器配置。
+_Avoid_: 重置整趟练习、清空练习、重新开始练习
+
 **Playback Continuity**:
 Metronome Playback Run 在亮屏、锁屏和后台之间保持拍点与练习计时连续的产品承诺。
 _Avoid_: 后台保活、锁屏不断音
@@ -155,3 +183,16 @@ _Avoid_: UI 小节边界、Timer 边界
 **Target Hold**:
 完成目标速度的完整阶段后，节拍器继续以目标 BPM 播放的训练状态。
 _Avoid_: 训练已退出、普通播放
+
+**Current Project Card**:
+记录页「项目」Tab 顶部的当前主项目卡片，呈现项目名称、阶段标签、目标、上次有效练习证据、本次/今天聚焦意图与主操作按钮（开始今天的练习 / 继续这次练习 / 再练一次），以及累计时长与轨迹入口。
+_Avoid_: 项目卡片、当前项目、project card
+
+**Project Practice State Handoff**:
+从记录页项目入口流转到今日练习的三状态机模型：01 今天尚未开始（创建首条今日练习）、02 今日已创建（复用未完成练习）、03 今天已完成（更新上次证据并创建新条目），保障空练习不冒充上次且练习 ID 不滥建。
+_Avoid_: 项目练习状态、创建练习按钮逻辑
+
+**Project Other List**:
+记录页「项目」Tab 当前项目下方「其他进行中」的项目列表，每行 60pt 高度，展示项目名称与本次重点或最近练习上下文，点击统一导航至项目详情。
+_Avoid_: 其它项目、进行中项目列表
+

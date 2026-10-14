@@ -1885,6 +1885,7 @@ struct PracticeDetailView: View {
         if hadContent {
             Haptics.success()
             router.lastCompletedPracticeItemId = item.id
+            router.markPracticeItemCompleted(item.id)
         } else if router.practiceToast == nil {
             router.practiceToast = String(localized: "这次没有留下记录")
         }

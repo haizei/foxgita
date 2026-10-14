@@ -49,8 +49,26 @@ final class AppRouter {
     var practiceToast: String?
     /// Set only after an effective Complete. Never persist.
     var lastCompletedPracticeItemId: UUID?
+    /// Practice items the user explicitly finished. Survives relaunch so
+    /// 「再练一次」 still creates a new item after the app restarts.
+    var completedPracticeItemIds: Set<UUID> = []
     var projectCreatedToast = false
     var projectCreateSource = "projects_list"
+
+    private static let completedPracticeItemIdsKey = "foxgita.completedPracticeItemIds"
+
+    init() {
+        let stored = UserDefaults.standard.stringArray(forKey: Self.completedPracticeItemIdsKey) ?? []
+        completedPracticeItemIds = Set(stored.compactMap(UUID.init(uuidString:)))
+    }
+
+    func markPracticeItemCompleted(_ id: UUID) {
+        completedPracticeItemIds.insert(id)
+        UserDefaults.standard.set(
+            completedPracticeItemIds.map(\.uuidString),
+            forKey: Self.completedPracticeItemIdsKey
+        )
+    }
 
     func clearJustCompleted() {
         lastCompletedPracticeItemId = nil

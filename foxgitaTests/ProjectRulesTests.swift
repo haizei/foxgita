@@ -226,4 +226,136 @@ struct ProjectRulesTests {
         #expect(!ProjectRules.showsThisTimeCard(project(status: .completed, createdAt: t0, currentFocus: "")))
         #expect(!ProjectRules.showsThisTimeCard(project(status: .archived, createdAt: t0, currentFocus: "  ")))
     }
+
+    @Test func stateHandoffStageNotStartedWhenNoTodayPractice() {
+        let pid = UUID()
+        let todayKey = "2026-08-27"
+        let yesterdayKey = "2026-08-26"
+        let tYesterday = date(2026, 8, 26, 15)
+        let items = [
+            item(projectId: pid, dayKey: yesterdayKey, createdAt: tYesterday, durationSeconds: 600)
+        ]
+        let stage = ProjectRules.stateHandoffStage(
+            projectId: pid,
+            todayKey: todayKey,
+            in: items,
+            completedItemIds: []
+        )
+        #expect(stage == .notStarted)
+    }
+
+    @Test func stateHandoffStageCreatedWhenTodayItemExistsAndNotCompleted() {
+        let pid = UUID()
+        let todayKey = "2026-08-27"
+        let todayId = UUID()
+        let tToday = date(2026, 8, 27, 9)
+        let items = [
+            item(id: todayId, projectId: pid, dayKey: todayKey, createdAt: tToday, durationSeconds: 0)
+        ]
+        let stage = ProjectRules.stateHandoffStage(
+            projectId: pid,
+            todayKey: todayKey,
+            in: items,
+            completedItemIds: []
+        )
+        guard case .created(let snap) = stage else {
+            Issue.record("Expected .created"); return
+        }
+        #expect(snap.id == todayId)
+    }
+
+    @Test func stateHandoffStageCompletedWhenTodayItemCompleted() {
+        let pid = UUID()
+        let todayKey = "2026-08-27"
+        let todayId = UUID()
+        let tToday = date(2026, 8, 27, 13)
+        let items = [
+            item(id: todayId, projectId: pid, dayKey: todayKey, createdAt: tToday, durationSeconds: 600)
+        ]
+        let stage = ProjectRules.stateHandoffStage(
+            projectId: pid,
+            todayKey: todayKey,
+            in: items,
+            completedItemIds: [todayId]
+        )
+        guard case .completed(let snap) = stage else {
+            Issue.record("Expected .completed"); return
+        }
+        #expect(snap.id == todayId)
+    }
+
+    @Test func stateHandoffInfoLabelsAndEvidence() {
+        let pid = UUID()
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = date(2026, 8, 27, 18)
+        let todayKey = "2026-08-27"
+        let p = project(id: pid, name: "学会《知足》", createdAt: date(2026, 8, 20), currentFocus: "主歌进入副歌时保持节奏")
+
+        // 1. Not started: last evidence is yesterday
+        let tYesterday = date(2026, 8, 26, 15)
+        let yesterdayItem = item(projectId: pid, dayKey: "2026-08-26", createdAt: tYesterday, durationSeconds: 1080, note: "有录音", recordingCount: 1)
+        let info1 = ProjectRules.stateHandoffInfo(
+            project: p,
+            todayKey: todayKey,
+            in: [yesterdayItem],
+            completedItemIds: [],
+            now: now,
+            calendar: cal
+        )
+        #expect(info1.focusLabel == "这次")
+        #expect(info1.focusTitle == "主歌进入副歌时保持节奏")
+        #expect(info1.buttonLabel == "开始今天的练习")
+        #expect(info1.lastEvidenceText == "上次 · 昨天")
+        #expect(info1.lastEvidencePracticeTitle == "练 · 18 分钟 · 有录音")
+
+        // 2. Created today: last evidence remains yesterday, button is 继续这次练习
+        let todayId = UUID()
+        let tToday = date(2026, 8, 27, 9)
+        let todayItem = item(id: todayId, projectId: pid, dayKey: todayKey, createdAt: tToday, durationSeconds: 0)
+        let info2 = ProjectRules.stateHandoffInfo(
+            project: p,
+            todayKey: todayKey,
+            in: [todayItem, yesterdayItem],
+            completedItemIds: [],
+            now: now,
+            calendar: cal
+        )
+        #expect(info2.focusLabel == "今天已创建 · 这次")
+        #expect(info2.buttonLabel == "继续这次练习")
+        #expect(info2.lastEvidenceText == "上次 · 昨天")
+
+        // 3. Completed today: last evidence becomes today, button is 再练一次
+        let completedTodayItem = item(id: todayId, projectId: pid, dayKey: todayKey, createdAt: tToday, durationSeconds: 720, recordingCount: 1)
+        let info3 = ProjectRules.stateHandoffInfo(
+            project: p,
+            todayKey: todayKey,
+            in: [completedTodayItem, yesterdayItem],
+            completedItemIds: [todayId],
+            now: now,
+            calendar: cal
+        )
+        #expect(info3.focusLabel == "再练重点")
+        #expect(info3.buttonLabel == "再练一次")
+        #expect(info3.lastEvidenceText?.starts(with: "上次 · 今天") == true)
+        #expect(info3.lastEvidencePracticeTitle == "练 · 12 分钟 · 有录音")
+    }
+
+    @Test func otherProjectContextIncludesFocusAndEvidence() {
+        let pid = UUID()
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "Asia/Shanghai")!
+        let now = date(2026, 8, 27, 18)
+        let p = project(id: pid, name: "和弦转换", createdAt: date(2026, 8, 20), currentFocus: "C 到 G 的转换要干净")
+        let t = date(2026, 8, 26, 10)
+        let practice = item(projectId: pid, dayKey: "2026-08-26", createdAt: t, durationSeconds: 60)
+
+        let ctx = ProjectRules.otherProjectContext(
+            project: p,
+            in: [practice],
+            now: now,
+            calendar: cal
+        )
+        #expect(ctx == "这次：C 到 G 的转换要干净 · 昨天")
+    }
 }

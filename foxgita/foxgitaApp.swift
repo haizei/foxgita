@@ -2,7 +2,6 @@
 //  foxgitaApp.swift
 //  foxgita
 //
-
 import SwiftData
 import SwiftUI
 import os

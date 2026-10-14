@@ -14,6 +14,8 @@ struct PracticeView: View {
     private var practiceItems: [PracticeItem]
     @Query(filter: #Predicate<LocalProfile> { $0.isActive == true })
     private var profiles: [LocalProfile]
+    @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
+    private var projects: [Project]
 
     @State private var selectedDay = Calendar.current.startOfDay(for: Date())
     @State private var toast: String?
@@ -49,6 +51,13 @@ struct PracticeView: View {
     private var justCompletedItem: PracticeItemSnapshot? {
         guard isSelectedToday, let id = router.lastCompletedPracticeItemId else { return nil }
         return allSnapshots.first { $0.id == id }
+    }
+
+    private var profileProjects: [ProjectSnapshot] {
+        guard let profileId = currentProfileId else { return [] }
+        return projects
+            .filter { $0.profileId == profileId }
+            .map(ProjectRules.snapshot(from:))
     }
 
     private var homeState: PracticeHomeState {
@@ -350,6 +359,13 @@ struct PracticeView: View {
             targetMin: item.targetMin,
             durationSeconds: item.durationSeconds
         )
+        let displaySubtitle: String = {
+            if let pid = item.projectId,
+               let projectName = ProjectRules.projectName(id: pid, in: profileProjects) {
+                return "项目 · \(projectName)"
+            }
+            return item.subtitle
+        }()
         let card = DaySessionCard(
             title: item.title,
             minutes: minutesFromSeconds(item.durationSeconds),
@@ -357,7 +373,7 @@ struct PracticeView: View {
             actionTitle: cta,
             solidCTA: index == 0 && isSelectedToday,
             showsShadow: false,
-            subtitle: item.subtitle,
+            subtitle: displaySubtitle,
             minutesText: minutesLabel
         )
         if PracticeHomeState.allowsSwipeDelete(isSelectedToday: isSelectedToday) {
@@ -381,7 +397,7 @@ struct PracticeView: View {
                 minutes: minutesFromSeconds(item.durationSeconds),
                 category: category(for: item),
                 actionTitle: cta,
-                subtitle: item.subtitle,
+                subtitle: displaySubtitle,
                 minutesText: minutesLabel
             ) {
                 router.practicePath.append(.detail(itemId: item.id))
