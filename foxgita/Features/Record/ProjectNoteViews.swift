@@ -10,54 +10,44 @@ struct ProjectNotePreviewSection: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("我的笔记")
-                    .font(GitaFont.body(.semibold))
+                    .font(GitaFont.headline())
                     .foregroundStyle(GitaTheme.textPrimary)
                 Spacer(minLength: 8)
-                Button(action: onOpenList) {
-                    Text("查看全部 ›")
-                        .font(GitaFont.caption(.semibold))
-                        .foregroundStyle(GitaTheme.brand500)
+                Button("查看全部 ›", action: onOpenList)
+                    .font(GitaFont.caption(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+            }
+            ForEach(entries) { entry in
+                Button {
+                    onOpenItem(entry.itemId)
+                } label: {
+                    HStack(spacing: 12) {
+                        Text(ProgressFirstFormat.monthDay(entry.dayKey))
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .frame(width: 62, alignment: .leading)
+                        Rectangle()
+                            .fill(GitaTheme.borderSubtle)
+                            .frame(width: 1, height: 22)
+                        Text(entry.body)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(GitaTheme.textTertiary)
+                    }
+                    .frame(minHeight: 28)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-            }
-            VStack(spacing: 0) {
-                ForEach(entries) { entry in
-                    Button {
-                        onOpenItem(entry.itemId)
-                    } label: {
-                        HStack(spacing: 10) {
-                            Text(ProgressFirstFormat.monthDay(entry.dayKey))
-                                .font(GitaFont.caption())
-                                .foregroundStyle(GitaTheme.textSecondary)
-                                .frame(minWidth: 64, alignment: .leading)
-                            Rectangle()
-                                .fill(GitaTheme.brand500)
-                                .frame(width: 3, height: 28)
-                                .clipShape(Capsule())
-                            Text(entry.body)
-                                .font(GitaFont.callout())
-                                .foregroundStyle(GitaTheme.textPrimary)
-                                .lineLimit(1)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundStyle(GitaTheme.textTertiary)
-                        }
-                        .padding(.vertical, 10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    if entry.id != entries.last?.id {
-                        Divider().overlay(GitaTheme.borderSubtle)
-                    }
+                if entry.id != entries.last?.id {
+                    Divider().overlay(GitaTheme.borderSubtle)
                 }
             }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
     }
 }
 
@@ -90,25 +80,37 @@ struct ProjectNotesListView: View {
             PageBackground()
             VStack(spacing: 0) {
                 header
+                if let project {
+                    Text(project.name)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                    Text("共 \(entries.count) 条练习笔记")
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .padding(.top, 4)
+                }
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        if let project {
-                            Text(project.name)
-                                .font(GitaFont.title())
-                                .foregroundStyle(GitaTheme.textPrimary)
-                            Text("共 \(entries.count) 条练习笔记")
-                                .font(GitaFont.caption())
+                    VStack(alignment: .leading, spacing: 0) {
+                        if entries.isEmpty {
+                            Text("还没有练习笔记")
+                                .font(GitaFont.callout())
                                 .foregroundStyle(GitaTheme.textSecondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.top, 48)
                         }
                         ForEach(entries) { entry in
                             noteRow(entry)
+                            Divider().overlay(GitaTheme.borderSubtle)
                         }
-                        Text(ProjectNoteProjection.footer)
-                            .font(GitaFont.caption())
-                            .foregroundStyle(GitaTheme.textSecondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if !entries.isEmpty {
+                            Label(ProjectNoteProjection.footer.replacingOccurrences(of: "ⓘ ", with: ""), systemImage: "info.circle")
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
+                                .padding(.top, 24)
+                        }
                     }
                     .padding(.horizontal, GitaTheme.pagePadding)
+                    .padding(.top, 20)
                     .padding(.bottom, 32)
                 }
             }
@@ -119,12 +121,15 @@ struct ProjectNotesListView: View {
 
     private var header: some View {
         HStack {
-            Button("返回") {
+            Button {
                 if !router.recordPath.isEmpty { router.recordPath.removeLast() }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(GitaFont.headline())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(minWidth: 44, alignment: .leading)
             }
-            .font(GitaFont.callout())
-            .foregroundStyle(GitaTheme.textSecondary)
-            .frame(minWidth: 44, alignment: .leading)
+            .accessibilityLabel("返回")
             Spacer(minLength: 0)
             Text("我的笔记")
                 .font(GitaFont.headline())
@@ -137,35 +142,42 @@ struct ProjectNotesListView: View {
     }
 
     private func noteRow(_ entry: ProjectNoteEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .top, spacing: 16) {
             Text(ProgressFirstFormat.monthDay(entry.dayKey))
                 .font(GitaFont.caption())
                 .foregroundStyle(GitaTheme.textSecondary)
-            Text(entry.title)
-                .font(GitaFont.body(.bold))
-                .foregroundStyle(GitaTheme.textPrimary)
-            Text(entry.body)
-                .font(GitaFont.body())
-                .foregroundStyle(GitaTheme.textPrimary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if entry.hasRecording {
-                Text("▶ 有录音")
-                    .font(GitaFont.caption(.medium))
+                .frame(width: 62, alignment: .leading)
+            Rectangle()
+                .fill(GitaTheme.borderSubtle)
+                .frame(width: 1)
+            VStack(alignment: .leading, spacing: 12) {
+                Text(entry.title)
+                    .font(GitaFont.body(.semibold))
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Text(entry.body)
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                HStack {
+                    if entry.hasRecording {
+                        Text("▶ 有录音")
+                            .font(GitaFont.caption(.medium))
+                            .foregroundStyle(GitaTheme.brand500)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(GitaTheme.brand50)
+                            .clipShape(Capsule())
+                    }
+                    Spacer(minLength: 0)
+                    Button("查看练习记录 ›") {
+                        router.recordPath.append(.practiceDetail(itemId: entry.itemId))
+                    }
+                    .font(GitaFont.caption(.semibold))
                     .foregroundStyle(GitaTheme.brand500)
+                }
+                .frame(minHeight: 30)
             }
-            Button {
-                router.recordPath.append(.practiceDetail(itemId: entry.itemId))
-            } label: {
-                Text("查看练习记录 ›")
-                    .font(GitaFont.callout(.semibold))
-                    .foregroundStyle(GitaTheme.brand500)
-            }
-            .buttonStyle(.plain)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
+        .padding(.vertical, 18)
     }
 }

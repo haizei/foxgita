@@ -9,6 +9,7 @@ struct LastPracticeEvidence: Equatable {
     let content: String
     let reflection: String
     let recording: PracticeRecordingClip?
+    let hadRecording: Bool
 
     var dateAndDuration: String {
         let minutes = ProgressFirstFormat.minutes(fromSeconds: durationSeconds)
@@ -20,7 +21,13 @@ struct LastPracticeEvidence: Equatable {
         return ProgressFirstFormat.recordingLabel(durationSec: recording.durationSec)
     }
 
-    static func latest(projectId: UUID, items: [PracticeItemSnapshot]) -> LastPracticeEvidence? {
+    static func latest(
+        projectId: UUID,
+        items: [PracticeItemSnapshot],
+        isAvailable: (PracticeRecordingClip) -> Bool = { clip in
+            RecordingStore.fileExists(fileName: clip.fileName)
+        }
+    ) -> LastPracticeEvidence? {
         let match = items
             .filter { $0.projectId == projectId && PracticeItemRules.isEffective($0) }
             .sorted { lhs, rhs in
@@ -37,7 +44,10 @@ struct LastPracticeEvidence: Equatable {
             title: match.title,
             content: match.subtitle.trimmingCharacters(in: .whitespacesAndNewlines),
             reflection: match.note.trimmingCharacters(in: .whitespacesAndNewlines),
-            recording: match.recordings.first { !$0.fileName.isEmpty }
+            recording: match.recordings
+                .filter { !$0.fileName.isEmpty && isAvailable($0) }
+                .max { $0.createdAt < $1.createdAt },
+            hadRecording: match.recordingCount > 0 || !match.recordings.isEmpty
         )
     }
 }

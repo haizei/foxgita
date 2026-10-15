@@ -7,12 +7,18 @@ struct WaveformBars: View {
 
     var body: some View {
         let lit = WaveformProgress.highlightCount(progress: progress, barCount: peaks.count)
-        HStack(alignment: .center, spacing: 2) {
-            ForEach(Array(peaks.enumerated()), id: \.offset) { index, peak in
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(index < lit ? GitaTheme.brand500 : GitaTheme.borderInactive)
-                    .frame(width: 3, height: max(4, CGFloat(peak) * 28))
+        GeometryReader { geometry in
+            let spacing: CGFloat = 1
+            let available = max(0, geometry.size.width - CGFloat(max(0, peaks.count - 1)) * spacing)
+            let barWidth = peaks.isEmpty ? 0 : available / CGFloat(peaks.count)
+            HStack(alignment: .center, spacing: spacing) {
+                ForEach(Array(peaks.enumerated()), id: \.offset) { index, peak in
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(index < lit ? GitaTheme.brand500 : GitaTheme.borderInactive)
+                        .frame(width: barWidth, height: max(4, CGFloat(peak) * 28))
+                }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(height: 28)
         .accessibilityLabel("波形")

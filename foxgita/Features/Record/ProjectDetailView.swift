@@ -24,7 +24,6 @@ struct ProjectDetailView: View {
     @State private var showCompleteConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showFocusEditor = false
-    @State private var showAnotherConfirm = false
     @State private var focusDraft = ""
 
     private var calendar: Calendar { .current }
@@ -74,12 +73,7 @@ struct ProjectDetailView: View {
     }
 
     private func decision(for snapshot: ProjectSnapshot) -> ProjectPracticeStateHandoff.Decision {
-        ProjectPracticeStateHandoff.decide(
-            project: snapshot,
-            todayKey: PracticeDayKey.make(from: Date(), calendar: calendar),
-            items: allSnapshots,
-            completedItemIds: router.completedPracticeItemIds
-        )
+        ProjectPracticeStateHandoff.startDecision(project: snapshot)
     }
 
     var body: some View {
@@ -91,7 +85,19 @@ struct ProjectDetailView: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 20) {
                             identity(snapshot)
-                            ProjectProgressStoryView(story: story)
+                            if snapshot.status != .active {
+                                endedProjectCard(snapshot)
+                            }
+                            if let story {
+                                ProjectProgressStoryView(story: story) { itemId in
+                                    player.stop()
+                                    router.recordPath.append(.practiceDetail(itemId: itemId))
+                                }
+                            } else {
+                                Text("完成第一次练习后，这里会留下练习轨迹")
+                                    .font(GitaFont.callout())
+                                    .foregroundStyle(GitaTheme.textSecondary)
+                            }
                             if let evidence {
                                 LastPracticeEvidenceCard(
                                     evidence: evidence,
@@ -107,15 +113,16 @@ struct ProjectDetailView: View {
                                     onPlaybackFailed: { showToast(String(localized: "无法播放")) }
                                 )
                             }
-                            NextPracticeFocusCard(
-                                decision: decision(for: snapshot),
-                                showsAction: snapshot.status == .active,
-                                onHandoff: { runHandoff(snapshot) },
-                                onEditFocus: {
-                                    focusDraft = snapshot.currentFocus
-                                    showFocusEditor = true
-                                }
-                            )
+                            if snapshot.status == .active {
+                                NextPracticeFocusCard(
+                                    decision: decision(for: snapshot),
+                                    onHandoff: performHandoff,
+                                    onEditFocus: {
+                                        focusDraft = snapshot.currentFocus
+                                        showFocusEditor = true
+                                    }
+                                )
+                            }
                             if !notePreview.isEmpty {
                                 ProjectNotePreviewSection(
                                     entries: notePreview,
@@ -128,6 +135,15 @@ struct ProjectDetailView: View {
                                         router.recordPath.append(.practiceDetail(itemId: itemId))
                                     }
                                 )
+                            } else if evidence != nil {
+                                VStack(alignment: .leading, spacing: 6) {
+                                    Text("我的笔记")
+                                        .font(GitaFont.headline())
+                                        .foregroundStyle(GitaTheme.textPrimary)
+                                    Text("还没有练习笔记")
+                                        .font(GitaFont.callout())
+                                        .foregroundStyle(GitaTheme.textSecondary)
+                                }
                             }
                         }
                         .padding(.horizontal, GitaTheme.pagePadding)
@@ -151,8 +167,8 @@ struct ProjectDetailView: View {
             }
         }
         .navigationBarHidden(true)
-        .toolbar(.hidden, for: .tabBar)
         .onAppear {
+            creatingTodayLock = false
             RecordAnalytics.projectViewOpened(
                 projectId: projectId.uuidString,
                 hasEvidence: evidence != nil
@@ -197,17 +213,6 @@ struct ProjectDetailView: View {
         .sheet(isPresented: $showFocusEditor) {
             focusEditorSheet
         }
-        .confirmationDialog(
-            "今天这条已经完成，再练会另开一条",
-            isPresented: $showAnotherConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("再练一次") {
-                guard let snapshot else { return }
-                performHandoff(for: snapshot)
-            }
-            Button("取消", role: .cancel) {}
-        }
     }
 
     private func identity(_ project: ProjectSnapshot) -> some View {
@@ -225,16 +230,50 @@ struct ProjectDetailView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
+    private func endedProjectCard(_ project: ProjectSnapshot) -> some View {
+        let final = ProjectRules.versionSlot(
+            itemId: project.finalVersionItemId,
+            projectId: projectId,
+            in: allSnapshots
+        )
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(project.status == .completed ? "项目已完成" : "项目已归档")
+                .font(GitaFont.headline())
+                .foregroundStyle(GitaTheme.textPrimary)
+            if case .resolved(let item) = final, project.status == .completed {
+                Button("回看最终版本 · \(item.title)") {
+                    router.recordPath.append(.practiceDetail(itemId: item.id))
+                }
+                .font(GitaFont.callout(.semibold))
+                .foregroundStyle(GitaTheme.brand500)
+            } else {
+                Text("可以回看已有的练习记录")
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textSecondary)
+            }
+            Button("重新开启项目") { setStatus(.active) }
+                .font(GitaFont.callout(.semibold))
+                .foregroundStyle(GitaTheme.brand500)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(GitaTheme.categoryOrangeSoft)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
+    }
+
     private var header: some View {
         HStack {
-            Button("返回") {
+            Button {
                 if !router.recordPath.isEmpty {
                     router.recordPath.removeLast()
                 }
+            } label: {
+                Image(systemName: "chevron.left")
+                    .font(GitaFont.headline())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(minWidth: 44, alignment: .leading)
             }
-            .font(GitaFont.callout())
-            .foregroundStyle(GitaTheme.textSecondary)
-            .frame(minWidth: 44, alignment: .leading)
+            .accessibilityLabel("返回")
 
             Spacer(minLength: 0)
 
@@ -323,30 +362,20 @@ struct ProjectDetailView: View {
         .presentationDetents([.medium])
     }
 
-    private func runHandoff(_ snapshot: ProjectSnapshot) {
-        let next = decision(for: snapshot)
-        if case .createAnother = next.action {
-            showAnotherConfirm = true
-            return
-        }
-        performHandoff(for: snapshot)
-    }
-
-    private func performHandoff(for snapshot: ProjectSnapshot) {
+    private func performHandoff() {
         guard !creatingTodayLock else { return }
         creatingTodayLock = true
-        defer { creatingTodayLock = false }
         player.stop()
         do {
             try ProjectPracticeHandoffAction.perform(
                 projectId: projectId,
-                decision: decision(for: snapshot),
                 store: store,
                 router: router,
                 now: Date(),
                 calendar: calendar
             )
         } catch {
+            creatingTodayLock = false
             showToast(String(localized: "创建失败，请重试"))
         }
     }

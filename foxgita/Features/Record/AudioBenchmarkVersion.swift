@@ -7,25 +7,31 @@ struct AudioBenchmarkTrack: Equatable, Identifiable {
     let createdAt: Date
     let clip: PracticeRecordingClip
 
-    var id: UUID { itemId }
+    var id: String { clip.id }
 }
 
 enum AudioBenchmarkReadiness: Equatable {
     case ready(stage: AudioBenchmarkTrack, recent: AudioBenchmarkTrack)
     case needsAnotherRecording
+    case selectionUnavailable
     case unavailable
 }
 
 enum AudioBenchmarkVersion {
-    static let compareLink = String(localized: "与阶段版对照 ›")
+    static let compareLink = String(localized: "录音对比 ›")
     static let needsAnotherCopy = String(localized: "再记录一次即可开启对照")
-    static let sameFragmentNote = String(localized: "ⓘ 两次均为用户确认的同一片段")
 
-    static func tracks(projectId: UUID, items: [PracticeItemSnapshot]) -> [AudioBenchmarkTrack] {
+    static func tracks(
+        projectId: UUID,
+        items: [PracticeItemSnapshot],
+        isPlayable: (PracticeRecordingClip) -> Bool = { clip in
+            RecordingStore.fileExists(fileName: clip.fileName)
+        }
+    ) -> [AudioBenchmarkTrack] {
         items.flatMap { item -> [AudioBenchmarkTrack] in
             guard item.projectId == projectId, !item.isDeleted else { return [] }
             return item.recordings
-                .filter { !$0.fileName.isEmpty }
+                .filter { !$0.fileName.isEmpty && !MediaReviewMedia.isVideo(fileName: $0.fileName) && isPlayable($0) }
                 .map { clip in
                     AudioBenchmarkTrack(
                         itemId: item.id,
@@ -43,14 +49,23 @@ enum AudioBenchmarkVersion {
         stageVersionItemId: UUID?,
         projectId: UUID,
         items: [PracticeItemSnapshot],
-        overrideStageItemId: UUID? = nil,
-        overrideRecentItemId: UUID? = nil
+        overrideStageClipId: String? = nil,
+        overrideRecentClipId: String? = nil,
+        isPlayable: (PracticeRecordingClip) -> Bool = { clip in
+            RecordingStore.fileExists(fileName: clip.fileName)
+        }
     ) -> AudioBenchmarkReadiness {
-        let ordered = tracks(projectId: projectId, items: items)
+        let ordered = tracks(projectId: projectId, items: items, isPlayable: isPlayable)
+        if let overrideStageClipId, !ordered.contains(where: { $0.clip.id == overrideStageClipId }) {
+            return .selectionUnavailable
+        }
+        if let overrideRecentClipId, !ordered.contains(where: { $0.clip.id == overrideRecentClipId }) {
+            return .selectionUnavailable
+        }
         guard !ordered.isEmpty else { return .unavailable }
 
         let stage: AudioBenchmarkTrack
-        if let overrideStageItemId, let picked = ordered.first(where: { $0.itemId == overrideStageItemId }) {
+        if let overrideStageClipId, let picked = ordered.first(where: { $0.clip.id == overrideStageClipId }) {
             stage = picked
         } else if let stageVersionItemId, let picked = ordered.first(where: { $0.itemId == stageVersionItemId }) {
             stage = picked
@@ -58,9 +73,10 @@ enum AudioBenchmarkVersion {
             stage = ordered[0]
         }
 
+        if overrideRecentClipId == stage.clip.id { return .selectionUnavailable }
         let others = ordered.filter { $0.clip.id != stage.clip.id }
         let recent: AudioBenchmarkTrack
-        if let overrideRecentItemId, let picked = others.first(where: { $0.itemId == overrideRecentItemId }) {
+        if let overrideRecentClipId, let picked = others.first(where: { $0.clip.id == overrideRecentClipId }) {
             recent = picked
         } else if let newest = others.max(by: { $0.clip.createdAt < $1.clip.createdAt }) {
             recent = newest
@@ -70,19 +86,4 @@ enum AudioBenchmarkVersion {
         return .ready(stage: stage, recent: recent)
     }
 
-    static func listenHeadline(focus: String) -> String {
-        focus.contains("副歌")
-            ? String(localized: "听听这段副歌的变化")
-            : String(localized: "听听这段的变化")
-    }
-
-    static func subtitle(projectName: String, focus: String) -> String {
-        let trimmed = focus.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty { return projectName }
-        return "\(projectName) · \(trimmed)"
-    }
-
-    static func spanLine(stageDayKey: String, recentDayKey: String) -> String {
-        String(localized: "\(ProgressFirstFormat.monthDay(stageDayKey)) 阶段版 → \(ProgressFirstFormat.monthDay(recentDayKey)) 最近录音")
-    }
 }

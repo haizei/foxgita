@@ -206,6 +206,36 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertTrue(app.buttons["项目"].exists)
     }
 
+    func testNewProjectDetailShowsHonestEmptyStateAndStartsNewPractice() {
+        let projectName = "界面验收项目\(UUID().uuidString.prefix(6))"
+        app.tabBars.buttons["记录"].tap()
+        app.buttons["项目"].tap()
+        XCTAssertTrue(app.buttons["新建项目"].firstMatch.waitForExistence(timeout: 5))
+        app.buttons["新建项目"].firstMatch.tap()
+        let nameField = app.textFields.firstMatch
+        XCTAssertTrue(nameField.waitForExistence(timeout: 5))
+        nameField.tap()
+        nameField.typeText(projectName)
+        app.buttons["创建项目"].tap()
+
+        XCTAssertTrue(app.staticTexts["项目详情"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts[projectName].exists)
+        XCTAssertTrue(app.tabBars.buttons["记录"].exists)
+        XCTAssertTrue(app.staticTexts["完成第一次练习后，这里会留下练习轨迹"].exists)
+        XCTAssertTrue(app.staticTexts["尚未设置当前重点"].exists)
+        XCTAssertFalse(app.staticTexts["两次均为用户确认的同一片段"].exists)
+        XCTContext.runActivity(named: "Project Detail Empty — Figma 1983:3") { activity in
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
+
+        app.buttons["开始这项练习"].tap()
+        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
+        app.buttons["返回"].tap()
+        XCTAssertTrue(app.staticTexts["项目详情"].waitForExistence(timeout: 5))
+    }
+
     private func deleteCreatedTask(named name: String) {
         if app.buttons["返回"].waitForExistence(timeout: 1) {
             app.buttons["返回"].tap()

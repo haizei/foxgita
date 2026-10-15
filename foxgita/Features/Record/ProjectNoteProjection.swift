@@ -15,12 +15,20 @@ enum ProjectNoteProjection {
     static let previewLimit = 3
     static let footer = String(localized: "ⓘ 笔记来自每次练习，可在原练习记录中修改")
 
-    static func entries(projectId: UUID, items: [PracticeItemSnapshot]) -> [ProjectNoteEntry] {
+    static func entries(
+        projectId: UUID,
+        items: [PracticeItemSnapshot],
+        isPlayable: (PracticeRecordingClip) -> Bool = { clip in
+            RecordingStore.fileExists(fileName: clip.fileName)
+        }
+    ) -> [ProjectNoteEntry] {
         items.compactMap { item in
             guard item.projectId == projectId, !item.isDeleted else { return nil }
             let body = item.note.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !body.isEmpty else { return nil }
-            let hasRecording = item.recordingCount > 0 || item.recordings.contains { !$0.fileName.isEmpty }
+            let hasRecording = item.recordings.contains {
+                !$0.fileName.isEmpty && !MediaReviewMedia.isVideo(fileName: $0.fileName) && isPlayable($0)
+            }
             return ProjectNoteEntry(
                 itemId: item.id,
                 createdAt: item.createdAt,
@@ -33,8 +41,14 @@ enum ProjectNoteProjection {
         .sorted { $0.createdAt > $1.createdAt }
     }
 
-    static func preview(projectId: UUID, items: [PracticeItemSnapshot]) -> [ProjectNoteEntry] {
-        Array(entries(projectId: projectId, items: items).prefix(previewLimit))
+    static func preview(
+        projectId: UUID,
+        items: [PracticeItemSnapshot],
+        isPlayable: (PracticeRecordingClip) -> Bool = { clip in
+            RecordingStore.fileExists(fileName: clip.fileName)
+        }
+    ) -> [ProjectNoteEntry] {
+        Array(entries(projectId: projectId, items: items, isPlayable: isPlayable).prefix(previewLimit))
     }
 
     static func comparisonCitation(cited: Int, total: Int) -> String {

@@ -9,74 +9,74 @@ struct LastPracticeEvidenceCard: View {
     let onPlaybackFailed: () -> Void
 
     @State private var peaks: [Double] = []
+    @State private var recordingBecameUnavailable = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                HStack(spacing: 6) {
-                    Text("♫")
-                        .font(GitaFont.body())
-                        .foregroundStyle(GitaTheme.brand500)
-                    Text("上次练习")
-                        .font(GitaFont.body(.semibold))
-                        .foregroundStyle(GitaTheme.textPrimary)
-                }
+            HStack {
+                Text("上次练习")
+                    .font(GitaFont.headline())
+                    .foregroundStyle(GitaTheme.textPrimary)
                 Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 6) {
-                    Text(evidence.dateAndDuration)
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                        .multilineTextAlignment(.trailing)
-                    if evidence.recording != nil {
-                        switch benchmark {
-                        case .ready:
-                            Button(action: onCompare) {
-                                Text(AudioBenchmarkVersion.compareLink)
-                                    .font(GitaFont.caption(.semibold))
-                                    .foregroundStyle(GitaTheme.brand500)
-                                    .multilineTextAlignment(.trailing)
-                            }
-                            .buttonStyle(.plain)
-                        case .needsAnotherRecording:
-                            Text(AudioBenchmarkVersion.needsAnotherCopy)
+                Text(evidence.dateAndDuration)
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "music.note")
+                        .font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .frame(width: 44, height: 44)
+                        .background(GitaTheme.brand50)
+                        .clipShape(Circle())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(evidence.title)
+                            .font(GitaFont.body(.semibold))
+                            .foregroundStyle(GitaTheme.textPrimary)
+                        if !evidence.content.isEmpty, evidence.content != evidence.title {
+                            Text(evidence.content)
                                 .font(GitaFont.caption())
                                 .foregroundStyle(GitaTheme.textSecondary)
-                                .multilineTextAlignment(.trailing)
-                        case .unavailable:
-                            EmptyView()
+                        }
+                        if !evidence.reflection.isEmpty {
+                            Text(evidence.reflection)
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
                         }
                     }
                 }
+                if let recording = evidence.recording, !recordingBecameUnavailable {
+                    playerBlock(recording)
+                    if case .needsAnotherRecording = benchmark,
+                       !MediaReviewMedia.isVideo(fileName: recording.fileName) {
+                        Text(AudioBenchmarkVersion.needsAnotherCopy)
+                            .font(GitaFont.caption())
+                            .foregroundStyle(GitaTheme.textSecondary)
+                    }
+                } else if recordingBecameUnavailable || evidence.hadRecording {
+                    Text("录音文件不可用，可在原练习记录中检查")
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
             }
-            Text(evidence.title)
-                .font(GitaFont.body(.bold))
-                .foregroundStyle(GitaTheme.textPrimary)
-            if !evidence.content.isEmpty, evidence.content != evidence.title {
-                Text(evidence.content)
-                    .font(GitaFont.body())
-                    .foregroundStyle(GitaTheme.textPrimary)
-            }
-            if !evidence.reflection.isEmpty {
-                Text(evidence.reflection)
-                    .font(GitaFont.body())
-                    .foregroundStyle(GitaTheme.textSecondary)
-            }
-            if let recording = evidence.recording {
-                playerBlock(recording)
-            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(GitaTheme.bgSurface)
+            .overlay(RoundedRectangle(cornerRadius: GitaTheme.radius12).stroke(GitaTheme.brand500.opacity(0.3), lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
         .task(id: evidence.recording?.id) {
+            recordingBecameUnavailable = false
             guard let recording = evidence.recording, !MediaReviewMedia.isVideo(fileName: recording.fileName) else {
                 peaks = []
                 return
             }
-            let url = RecordingStore.url(for: recording.fileName)
-            peaks = WaveformSampler.peaks(fileURL: url, barCount: WaveformProgress.evidenceBarCount)
+            peaks = WaveformSampler.peaks(
+                fileURL: RecordingStore.url(for: recording.fileName),
+                barCount: WaveformProgress.evidenceBarCount
+            )
         }
         .task(id: player.playingId) {
             while player.playingId == evidence.recording?.id, !Task.isCancelled {
@@ -86,41 +86,62 @@ struct LastPracticeEvidenceCard: View {
         }
     }
 
-    @ViewBuilder
     private func playerBlock(_ recording: PracticeRecordingClip) -> some View {
         let playing = player.playingId == recording.id
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Button {
-                    toggle(recording)
-                } label: {
-                    Image(systemName: playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(GitaTheme.brand500)
-                        .frame(width: 28, height: 28)
-                        .background(GitaTheme.brand50)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(playing ? "暂停" : "播放")
-                if let label = evidence.recordingLabel {
-                    Text(label)
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                }
+        let canCompare: Bool = {
+            guard !MediaReviewMedia.isVideo(fileName: recording.fileName) else { return false }
+            if case .ready = benchmark { return true }
+            return false
+        }()
+        return HStack(spacing: 8) {
+            Button {
+                toggle(recording)
+            } label: {
+                Image(systemName: playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(width: 36, height: 36)
+                    .background(GitaTheme.brand500)
+                    .clipShape(Circle())
             }
-            if !MediaReviewMedia.isVideo(fileName: recording.fileName), !peaks.isEmpty {
+            .buttonStyle(.plain)
+            .accessibilityLabel(playing ? "暂停上次录音" : "播放上次录音")
+            if !peaks.isEmpty {
                 TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-                    WaveformBars(
-                        peaks: peaks,
-                        progress: playing ? player.playbackFraction : 0
-                    )
+                    WaveformBars(peaks: peaks, progress: playing ? player.playbackFraction : 0)
                 }
+                .frame(maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 0)
+            }
+            if let label = evidence.recordingLabel {
+                Text(label)
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .fixedSize()
+            }
+            if canCompare {
+                Button(AudioBenchmarkVersion.compareLink, action: onCompare)
+                    .font(GitaFont.caption(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .padding(.horizontal, 8)
+                    .frame(minHeight: 32)
+                    .overlay(Capsule().stroke(GitaTheme.brand500, lineWidth: 1))
+                    .buttonStyle(.plain)
             }
         }
+        .padding(6)
+        .background(GitaTheme.bgDefault)
+        .clipShape(Capsule())
     }
 
     private func toggle(_ recording: PracticeRecordingClip) {
+        guard RecordingStore.fileExists(fileName: recording.fileName) else {
+            player.stop()
+            recordingBecameUnavailable = true
+            onPlaybackFailed()
+            return
+        }
         let url = RecordingStore.url(for: recording.fileName)
         if MediaReviewMedia.isVideo(fileName: recording.fileName) {
             player.stop()

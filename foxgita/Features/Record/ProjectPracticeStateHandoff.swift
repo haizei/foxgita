@@ -21,6 +21,19 @@ enum ProjectPracticeStateHandoff {
         let action: Action
     }
 
+    static func startDecision(project: ProjectSnapshot) -> Decision {
+        let focus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Decision(
+            buttonLabel: String(localized: "开始这项练习"),
+            focusTitle: focus.isEmpty ? String(localized: "尚未设置当前重点") : focus,
+            instruction: focus.isEmpty
+                ? String(localized: "可先设置项目当前重点")
+                : String(localized: "创建一条新的今日练习"),
+            stage: .notStarted,
+            action: .createNew(title: project.practiceTitle)
+        )
+    }
+
     static func stage(
         projectId: UUID,
         todayKey: String,

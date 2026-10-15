@@ -12,10 +12,13 @@ struct AudioComparisonView: View {
 
     @State private var player = AudioPlayerService()
     @State private var playback = AudioComparisonPlayback()
-    @State private var overrideStageId: UUID?
-    @State private var overrideRecentId: UUID?
+    @State private var overrideStageId: String?
+    @State private var overrideRecentId: String?
     @State private var showReplaceSheet = false
-    @State private var showAnotherConfirm = false
+    @State private var showFragmentSheet = false
+    @State private var fragmentDraft = ""
+    @State private var confirmation: AudioComparisonConfirmation?
+    @State private var invalidClipIds: Set<String> = []
     @State private var toast: String?
     @State private var creatingTodayLock = false
     @State private var peaksA: [Double] = []
@@ -45,19 +48,26 @@ struct AudioComparisonView: View {
             stageVersionItemId: snapshot?.stageVersionItemId,
             projectId: projectId,
             items: allSnapshots,
-            overrideStageItemId: overrideStageId,
-            overrideRecentItemId: overrideRecentId
+            overrideStageClipId: overrideStageId,
+            overrideRecentClipId: overrideRecentId,
+            isPlayable: { clip in
+                !invalidClipIds.contains(clip.id) && RecordingStore.fileExists(fileName: clip.fileName)
+            }
         )
+    }
+
+    private var confirmedFragment: String? {
+        guard let confirmation,
+              case .ready(let stage, let recent) = readiness,
+              confirmation.matches(projectId: projectId, stage: stage, recent: recent) else {
+            return nil
+        }
+        return confirmation.fragment
     }
 
     private var decision: ProjectPracticeStateHandoff.Decision? {
         guard let snapshot else { return nil }
-        return ProjectPracticeStateHandoff.decide(
-            project: snapshot,
-            todayKey: PracticeDayKey.make(from: Date(), calendar: calendar),
-            items: allSnapshots,
-            completedItemIds: router.completedPracticeItemIds
-        )
+        return ProjectPracticeStateHandoff.startDecision(project: snapshot)
     }
 
     var body: some View {
@@ -68,9 +78,10 @@ struct AudioComparisonView: View {
                 if let snapshot {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
-                            Text(AudioBenchmarkVersion.subtitle(projectName: snapshot.name, focus: snapshot.currentFocus))
+                            Text(snapshot.name)
                                 .font(GitaFont.callout())
                                 .foregroundStyle(GitaTheme.textSecondary)
+                                .frame(maxWidth: .infinity)
                             comparisonBody
                         }
                         .padding(.horizontal, GitaTheme.pagePadding)
@@ -89,6 +100,19 @@ struct AudioComparisonView: View {
         }
         .navigationBarHidden(true)
         .toolbar(.hidden, for: .tabBar)
+        .onAppear {
+            creatingTodayLock = false
+            restoreConfirmation()
+        }
+        .onChange(of: readiness) { _, value in
+            guard let confirmation else { return }
+            guard snapshot != nil else { return }
+            guard case .ready(let stage, let recent) = value,
+                  confirmation.matches(projectId: projectId, stage: stage, recent: recent) else {
+                clearConfirmation()
+                return
+            }
+        }
         .onDisappear { player.stop() }
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.stop() }
@@ -96,21 +120,13 @@ struct AudioComparisonView: View {
         .sheet(isPresented: $showReplaceSheet) {
             replaceSheet
         }
-        .confirmationDialog(
-            "今天这条已经完成，再练会另开一条",
-            isPresented: $showAnotherConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("再练一次") {
-                guard let decision else { return }
-                performHandoff(decision)
-            }
-            Button("取消", role: .cancel) {}
+        .sheet(isPresented: $showFragmentSheet) {
+            fragmentSheet
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let decision, snapshot?.status == .active {
                 Button {
-                    runHandoff(decision)
+                    performHandoff()
                 } label: {
                     Text(decision.buttonLabel)
                         .font(GitaFont.body(.bold))
@@ -138,6 +154,14 @@ struct AudioComparisonView: View {
             Text(AudioBenchmarkVersion.needsAnotherCopy)
                 .font(GitaFont.body())
                 .foregroundStyle(GitaTheme.textSecondary)
+        case .selectionUnavailable:
+            VStack(alignment: .leading, spacing: 12) {
+                Text("所选录音不可用，请更换录音")
+                    .font(GitaFont.body())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Button("更换录音") { showReplaceSheet = true }
+                    .foregroundStyle(GitaTheme.brand500)
+            }
         case .unavailable:
             Text("还没有可以对照的录音")
                 .font(GitaFont.body())
@@ -148,50 +172,36 @@ struct AudioComparisonView: View {
     private func readyBody(stage: AudioBenchmarkTrack, recent: AudioBenchmarkTrack) -> some View {
         let stageItem = allSnapshots.first { $0.id == stage.itemId }
         let recentItem = allSnapshots.first { $0.id == recent.itemId }
-        let audioReady = stage.clip.durationSec > 0 && recent.clip.durationSec > 0
-            && RecordingStore.fileExists(fileName: stage.clip.fileName)
-            && RecordingStore.fileExists(fileName: recent.clip.fileName)
-        let observation = AIAudioObservationRules.observe(
-            stageNote: stageItem?.note ?? "",
-            recentNote: recentItem?.note ?? "",
-            stageDuration: TimeInterval(stage.clip.durationSec),
-            recentDuration: TimeInterval(recent.clip.durationSec),
-            audioAvailable: audioReady
-        )
         let notes = ProjectNoteProjection.entries(projectId: projectId, items: allSnapshots)
         return VStack(alignment: .leading, spacing: 16) {
-            Text(AudioBenchmarkVersion.listenHeadline(focus: snapshot?.currentFocus ?? ""))
+            Text("听听这两次录音")
                 .font(GitaFont.headline())
                 .foregroundStyle(GitaTheme.textPrimary)
-            Text(AudioBenchmarkVersion.spanLine(stageDayKey: stage.dayKey, recentDayKey: recent.dayKey))
+            Text("\(ProgressFirstFormat.monthDay(stage.dayKey)) → \(ProgressFirstFormat.monthDay(recent.dayKey))")
                 .font(GitaFont.callout())
                 .foregroundStyle(GitaTheme.textSecondary)
-            Text(AudioBenchmarkVersion.sameFragmentNote)
-                .font(GitaFont.caption())
-                .foregroundStyle(GitaTheme.textSecondary)
-            trackBlock(side: .a, title: "阶段版", track: stage, peaks: peaksA)
-            trackBlock(side: .b, title: "最近录音", track: recent, peaks: peaksB)
+            fragmentStatus(stage: stage, recent: recent)
+            trackBlock(
+                side: .a,
+                title: snapshot?.stageVersionItemId == stage.itemId ? "阶段版" : "录音 A",
+                track: stage,
+                peaks: peaksA
+            )
             Button {
                 alternate(stage: stage, recent: recent)
             } label: {
                 Text("⇄ 交替听 A / B")
                     .font(GitaFont.callout(.bold))
                     .foregroundStyle(GitaTheme.brand500)
-                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 16)
                     .frame(minHeight: 44)
-                    .background(GitaTheme.brand50)
+                    .overlay(Capsule().stroke(GitaTheme.brand500, lineWidth: 1))
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            AIAudioObservationCard(
-                observation: observation,
-                stagePeaks: peaksA,
-                recentPeaks: peaksB
-            ) { cue in
-                let track = cue.side == .a ? stage : recent
-                seek(cue, track: track)
-            }
-            notesBlock(stageNote: stageItem?.note ?? "", recentNote: recentItem?.note ?? "", total: notes.count)
+            .frame(maxWidth: .infinity)
+            trackBlock(side: .b, title: overrideRecentId == nil ? "最近录音" : "录音 B", track: recent, peaks: peaksB)
+            notesBlock(stage: stage, recent: recent, stageNote: stageItem?.note ?? "", recentNote: recentItem?.note ?? "", total: notes.count)
         }
         .task(id: stage.clip.id) {
             peaksA = loadPeaks(stage.clip)
@@ -207,10 +217,81 @@ struct AudioComparisonView: View {
         }
     }
 
-    private func notesBlock(stageNote: String, recentNote: String, total: Int) -> some View {
+    private func fragmentStatus(stage: AudioBenchmarkTrack, recent: AudioBenchmarkTrack) -> some View {
+        let confirmed = confirmation?.matches(projectId: projectId, stage: stage, recent: recent) == true
+        return HStack(spacing: 8) {
+            Image(systemName: "info.circle")
+            Text(confirmed ? "两次均为用户确认的同一片段 · \(confirmation?.fragment ?? "")" : "片段未确认 · 可先交替听")
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if !confirmed {
+                Button("确认片段") {
+                    fragmentDraft = ""
+                    showFragmentSheet = true
+                }
+                .font(GitaFont.caption(.semibold))
+                .foregroundStyle(GitaTheme.brand500)
+            }
+        }
+        .font(GitaFont.caption())
+        .foregroundStyle(GitaTheme.textSecondary)
+        .padding(12)
+        .background(GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+    }
+
+    private var fragmentSheet: some View {
+        NavigationStack {
+            Form {
+                Text("请确认 A、B 两条录音都来自同一片段，并写下片段名称。")
+                    .font(GitaFont.callout())
+                TextField("例如：副歌片段", text: $fragmentDraft)
+            }
+            .navigationTitle("确认比较片段")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { showFragmentSheet = false }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("确认") { confirmFragment() }
+                        .disabled(fragmentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+        .presentationDetents([.medium])
+    }
+
+    private func restoreConfirmation() {
+        guard let saved = AudioComparisonConfirmationStore.load(projectId: projectId) else { return }
+        overrideStageId = saved.stageClipId
+        overrideRecentId = saved.recentClipId
+        confirmation = saved
+    }
+
+    private func confirmFragment() {
+        guard case .ready(let stage, let recent) = readiness else { return }
+        let value = AudioComparisonConfirmation(projectId: projectId, stage: stage, recent: recent, fragment: fragmentDraft)
+        guard !value.fragment.isEmpty else { return }
+        AudioComparisonConfirmationStore.save(value)
+        confirmation = value
+        showFragmentSheet = false
+    }
+
+    private func clearConfirmation() {
+        AudioComparisonConfirmationStore.clear(projectId: projectId)
+        confirmation = nil
+    }
+
+    private func notesBlock(
+        stage: AudioBenchmarkTrack,
+        recent: AudioBenchmarkTrack,
+        stageNote: String,
+        recentNote: String,
+        total: Int
+    ) -> some View {
         let stageBody = stageNote.trimmingCharacters(in: .whitespacesAndNewlines)
         let recentBody = recentNote.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cited = [stageBody, recentBody].filter { !$0.isEmpty }.count
+        let cited = (stageBody.isEmpty ? 0 : 1) + (recentBody.isEmpty || recent.itemId == stage.itemId ? 0 : 1)
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("▣ 我的笔记")
@@ -226,16 +307,15 @@ struct AudioComparisonView: View {
                 .buttonStyle(.plain)
             }
             if !stageBody.isEmpty {
-                Text(stageBody)
-                    .font(GitaFont.body())
-                    .foregroundStyle(GitaTheme.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                noteCitation(stageBody, itemId: stage.itemId, dayKey: stage.dayKey)
             }
-            if !recentBody.isEmpty {
-                Text(recentBody)
-                    .font(GitaFont.body())
-                    .foregroundStyle(GitaTheme.textPrimary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            if !recentBody.isEmpty && recent.itemId != stage.itemId {
+                noteCitation(recentBody, itemId: recent.itemId, dayKey: recent.dayKey)
+            }
+            if cited == 0 {
+                Text("这两次练习没有笔记")
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textSecondary)
             }
             Text(ProjectNoteProjection.comparisonCitation(cited: cited, total: total))
                 .font(GitaFont.caption())
@@ -247,6 +327,30 @@ struct AudioComparisonView: View {
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
     }
 
+    private func noteCitation(_ body: String, itemId: UUID, dayKey: String) -> some View {
+        Button {
+            player.stop()
+            router.recordPath.append(.practiceDetail(itemId: itemId))
+        } label: {
+            HStack(alignment: .top, spacing: 12) {
+                Text(ProgressFirstFormat.monthDay(dayKey))
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+                Text(body)
+                    .font(GitaFont.callout())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Image(systemName: "chevron.right")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.brand500)
+            }
+            .padding(10)
+            .background(GitaTheme.bgSubtle)
+            .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
+        }
+        .buttonStyle(.plain)
+    }
+
     private func trackBlock(
         side: AudioComparisonPlayback.Side,
         title: String,
@@ -255,46 +359,50 @@ struct AudioComparisonView: View {
     ) -> some View {
         let playing = playback.playing == side && player.playingId == side.rawValue
         let duration = TimeInterval(max(track.clip.durationSec, 0))
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack {
+        return HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(title)
                     .font(GitaFont.body(.semibold))
                     .foregroundStyle(GitaTheme.textPrimary)
-                Spacer(minLength: 8)
-                Text(ProgressFirstFormat.monthDay(track.dayKey))
+                Text("\(ProgressFirstFormat.monthDay(track.dayKey)) · \(track.createdAt.formatted(date: .omitted, time: .shortened))")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
-            }
-            Text(track.title)
-                .font(GitaFont.callout())
-                .foregroundStyle(GitaTheme.textPrimary)
-            HStack(spacing: 10) {
-                Button {
-                    toggle(side, track: track)
-                } label: {
-                    Image(systemName: playing ? "pause.fill" : "play.fill")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(GitaTheme.brand500)
-                        .frame(width: 28, height: 28)
-                        .background(GitaTheme.brand50)
-                        .clipShape(Circle())
-                }
-                .buttonStyle(.plain)
-                Text(ProgressFirstFormat.recordingLabel(durationSec: track.clip.durationSec))
+                Text(confirmedFragment ?? "片段未确认")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
+                    .lineLimit(1)
             }
+            .frame(width: 100, alignment: .leading)
+            Button {
+                toggle(side, track: track)
+            } label: {
+                Image(systemName: playing ? "pause.fill" : "play.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(width: 40, height: 40)
+                    .background(GitaTheme.brand50)
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(playing ? "暂停\(title)" : "播放\(title)")
             if !peaks.isEmpty {
                 TimelineView(.periodic(from: .now, by: 0.1)) { _ in
                     WaveformBars(peaks: peaks, progress: progress(for: side, duration: duration, playing: playing))
                 }
+                .frame(maxWidth: .infinity)
+            } else {
+                Spacer(minLength: 0)
             }
+            Text(ProgressFirstFormat.clock(duration))
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textPrimary)
+                .fixedSize()
         }
-        .padding(16)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(GitaTheme.bgSurface)
+        .overlay(RoundedRectangle(cornerRadius: GitaTheme.radius16).stroke(GitaTheme.borderSubtle, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-        .shadow(color: GitaTheme.shadowCard, radius: 6, y: 3)
     }
 
     private func progress(for side: AudioComparisonPlayback.Side, duration: TimeInterval, playing: Bool) -> Double {
@@ -304,8 +412,7 @@ struct AudioComparisonView: View {
     }
 
     private var canReplaceRecording: Bool {
-        if case .ready = readiness { return true }
-        return false
+        !AudioBenchmarkVersion.tracks(projectId: projectId, items: allSnapshots).isEmpty
     }
 
     private func header(showsReplace: Bool) -> some View {
@@ -318,7 +425,7 @@ struct AudioComparisonView: View {
             .foregroundStyle(GitaTheme.textSecondary)
             .frame(minWidth: 44, alignment: .leading)
             Spacer(minLength: 0)
-            Text("对照")
+            Text("录音对比")
                 .font(GitaFont.headline())
                 .foregroundStyle(GitaTheme.textPrimary)
             Spacer(minLength: 0)
@@ -346,12 +453,12 @@ struct AudioComparisonView: View {
         let options = Array(AudioBenchmarkVersion.tracks(projectId: projectId, items: allSnapshots).reversed())
         return NavigationStack {
             List {
-                Section("阶段版") {
+                Section("录音 A") {
                     ForEach(options) { track in
                         replaceRow(track, side: .a)
                     }
                 }
-                Section("最近录音") {
+                Section("录音 B") {
                     ForEach(options) { track in
                         replaceRow(track, side: .b)
                     }
@@ -370,32 +477,35 @@ struct AudioComparisonView: View {
 
     private func replaceRow(_ track: AudioBenchmarkTrack, side: AudioComparisonPlayback.Side) -> some View {
         Button {
-            applyReplacement(side, itemId: track.itemId)
+            applyReplacement(side, clipId: track.clip.id)
         } label: {
             VStack(alignment: .leading, spacing: 4) {
                 Text(track.title)
                     .font(GitaFont.body())
                     .foregroundStyle(GitaTheme.textPrimary)
-                Text("\(ProgressFirstFormat.monthDay(track.dayKey)) · \(ProgressFirstFormat.recordingLabel(durationSec: track.clip.durationSec))")
+                Text("\(ProgressFirstFormat.monthDay(track.dayKey)) \(track.createdAt.formatted(date: .omitted, time: .shortened)) · \(ProgressFirstFormat.recordingLabel(durationSec: track.clip.durationSec))")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
             }
         }
     }
 
-    private func applyReplacement(_ side: AudioComparisonPlayback.Side, itemId: UUID) {
+    private func applyReplacement(_ side: AudioComparisonPlayback.Side, clipId: String) {
         switch side {
         case .a:
-            guard itemId != overrideRecentId else { return }
-            if case .ready(_, let recent) = readiness, itemId == recent.itemId { return }
-            overrideStageId = itemId
+            guard clipId != overrideRecentId else { return }
+            if case .ready(_, let recent) = readiness, clipId == recent.clip.id { return }
+            overrideStageId = clipId
+            playback.positionA = 0
         case .b:
-            guard itemId != overrideStageId else { return }
-            if case .ready(let stage, _) = readiness, itemId == stage.itemId { return }
-            overrideRecentId = itemId
+            guard clipId != overrideStageId else { return }
+            if case .ready(let stage, _) = readiness, clipId == stage.clip.id { return }
+            overrideRecentId = clipId
+            playback.positionB = 0
         }
         player.stop()
         playback.pause()
+        clearConfirmation()
         showReplaceSheet = false
     }
 
@@ -417,6 +527,7 @@ struct AudioComparisonView: View {
     }
 
     private func toggle(_ side: AudioComparisonPlayback.Side, track: AudioBenchmarkTrack) {
+        guard recordingAvailable(track) else { return }
         if playback.playing == side, player.playingId == side.rawValue {
             remember(side)
             playback.pause()
@@ -432,6 +543,7 @@ struct AudioComparisonView: View {
     }
 
     private func alternate(stage: AudioBenchmarkTrack, recent: AudioBenchmarkTrack) {
+        guard recordingAvailable(stage), recordingAvailable(recent) else { return }
         if let playing = playback.playing {
             remember(playing)
         }
@@ -448,39 +560,31 @@ struct AudioComparisonView: View {
         )
     }
 
-    private func seek(_ cue: AIAudioCue, track: AudioBenchmarkTrack) {
-        guard let seconds = cue.seconds else { return }
-        playback.seekAndPlay(cue.side, seconds: seconds, duration: TimeInterval(track.clip.durationSec))
-        player.play(
-            url: RecordingStore.url(for: track.clip.fileName),
-            id: cue.side.rawValue,
-            from: playback.position(for: cue.side)
-        )
-    }
-
-    private func runHandoff(_ decision: ProjectPracticeStateHandoff.Decision) {
-        if case .createAnother = decision.action {
-            showAnotherConfirm = true
-            return
+    private func recordingAvailable(_ track: AudioBenchmarkTrack) -> Bool {
+        guard RecordingStore.fileExists(fileName: track.clip.fileName) else {
+            player.stop()
+            playback.pause()
+            invalidClipIds.insert(track.clip.id)
+            showToast(String(localized: "录音文件不可用，请更换录音"))
+            return false
         }
-        performHandoff(decision)
+        return true
     }
 
-    private func performHandoff(_ decision: ProjectPracticeStateHandoff.Decision) {
+    private func performHandoff() {
         guard !creatingTodayLock else { return }
         creatingTodayLock = true
-        defer { creatingTodayLock = false }
         player.stop()
         do {
             try ProjectPracticeHandoffAction.perform(
                 projectId: projectId,
-                decision: decision,
                 store: store,
                 router: router,
                 now: Date(),
                 calendar: calendar
             )
         } catch {
+            creatingTodayLock = false
             showToast(String(localized: "创建失败，请重试"))
         }
     }

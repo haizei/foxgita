@@ -10,7 +10,8 @@ Project detail adopts the "Progress First" architecture featuring a qualitative 
 
 ## Consequences
 
-- Milestones in Project Progress Story are extracted from actual practice scopes (e.g., segment practice → fluent playback → full take) rather than calculated completion percentages.
-- Audio Comparison uses the user-confirmed milestone version (falling back to the earliest recorded take) as Audio Benchmark Version A, enabling A/B alternation and timestamped evidence observations.
-- Tapping Next Practice Focus strictly routes through Project Practice State Handoff to start or resume today's practice.
+- Project Progress Story links to effective practice records. Without an explicitly recorded scope, it shows a neutral practice timeline; titles, notes, duration, and recordings do not prove a change in playing ability.
+- Audio Comparison can suggest a playable milestone recording or the earliest playable take for A, and a later playable take for B. These are candidates until the user confirms the exact two recordings and the shared fragment. Replacing or losing a recording invalidates that confirmation.
+- Manual A/B listening and citations to original notes work without AI analysis. Audio observations require a separate, real analysis workflow and are omitted until one exists.
+- Tapping “开始这项练习” from project detail or comparison creates a new practice item for the local day. The record page's separate “继续这次练习” action retains its resume semantics.
 - Project notes display as a chronological projection linking directly to original practice records for editing.
