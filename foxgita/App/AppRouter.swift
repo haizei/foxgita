@@ -30,6 +30,8 @@ enum RecordRoute: Hashable {
     case projectDetail(projectId: UUID)
     case projectEdit(projectId: UUID)
     case projectTrajectory(projectId: UUID)
+    case projectNotes(projectId: UUID)
+    case audioComparison(projectId: UUID)
 }
 
 @Observable
@@ -83,6 +85,19 @@ final class AppRouter {
             recordPath = [.projectDetail(projectId: projectId)]
         } else {
             replaceLastRecordRoute(.projectDetail(projectId: projectId))
+        }
+    }
+
+    func showProjectDetail(_ projectId: UUID, fromPracticeTab: Bool) {
+        recordSegment = .project
+        if fromPracticeTab {
+            selectedTab = .record
+            practicePath.removeAll()
+            recordPath = [.projectDetail(projectId: projectId)]
+        } else if recordPath.last == .projectDetail(projectId: projectId) {
+            return
+        } else {
+            recordPath.append(.projectDetail(projectId: projectId))
         }
     }
 

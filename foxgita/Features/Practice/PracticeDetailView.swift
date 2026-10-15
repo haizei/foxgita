@@ -593,6 +593,7 @@ struct PracticeDetailView: View {
                 )
             }
 
+            projectCapsule(item)
             practiceProjectAssociation(item)
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
@@ -1899,6 +1900,31 @@ struct PracticeDetailView: View {
         projects
             .filter { $0.profileId == item.profileId && $0.status == .active }
             .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    @ViewBuilder
+    private func projectCapsule(_ item: PracticeItem) -> some View {
+        if let projectId = item.projectId,
+           let name = projects.first(where: { $0.id == projectId })?.name {
+            HStack {
+                Text("项目 · \(name)")
+                    .font(GitaFont.caption(.medium))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(GitaTheme.brand50)
+                    .clipShape(Capsule())
+                    .contentShape(Capsule())
+                    .highPriorityGesture(TapGesture().onEnded { _ in
+                        router.showProjectDetail(projectId, fromPracticeTab: !openedFromRecord)
+                    })
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityLabel("项目 · \(name)")
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+        }
     }
 
     @ViewBuilder

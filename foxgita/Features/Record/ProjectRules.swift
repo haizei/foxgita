@@ -1,36 +1,5 @@
 import Foundation
 
-enum ProjectStatus: String, Equatable {
-    case active, completed, archived
-}
-
-struct ProjectSnapshot: Equatable, Identifiable {
-    let id: UUID
-    let profileId: UUID
-    let name: String
-    let goal: String
-    let kindRaw: String
-    let stageRaw: String
-    let currentFocus: String
-    let status: ProjectStatus
-    let createdAt: Date
-    let isDeleted: Bool
-    let stageVersionItemId: UUID?
-    let finalVersionItemId: UUID?
-}
-
-struct ProjectListState: Equatable {
-    var current: ProjectSnapshot?
-    var others: [ProjectSnapshot]
-    var ended: [ProjectSnapshot]
-}
-
-enum ProjectVersionSlot: Equatable {
-    case empty
-    case resolved(PracticeItemSnapshot)
-    case stale
-}
-
 enum ProjectRules {
     static func snapshot(from project: Project) -> ProjectSnapshot {
         ProjectSnapshot(
@@ -82,8 +51,7 @@ enum ProjectRules {
     }
 
     static func titleForNewPracticeItem(_ project: ProjectSnapshot) -> String {
-        let focus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
-        return focus.isEmpty ? project.name : focus
+        project.practiceTitle
     }
 
     static func associatedEffectiveItems(projectId: UUID, in items: [PracticeItemSnapshot]) -> [PracticeItemSnapshot] {
@@ -168,18 +136,18 @@ enum ProjectRules {
         in items: [PracticeItemSnapshot],
         completedItemIds: Set<UUID>
     ) -> StateHandoffStage {
-        let todayItems = items.filter {
-            !$0.isDeleted && $0.projectId == projectId && $0.practiceDayKey == todayKey
-        }.sorted { $0.createdAt > $1.createdAt }
-
-        guard let latestToday = todayItems.first else {
+        switch ProjectPracticeStateHandoff.stage(
+            projectId: projectId,
+            todayKey: todayKey,
+            in: items,
+            completedItemIds: completedItemIds
+        ) {
+        case .notStarted:
             return .notStarted
-        }
-
-        if completedItemIds.contains(latestToday.id) {
-            return .completed(latestToday)
-        } else {
-            return .created(latestToday)
+        case .resume(let item):
+            return .created(item)
+        case .createAnother(let item):
+            return .completed(item)
         }
     }
 

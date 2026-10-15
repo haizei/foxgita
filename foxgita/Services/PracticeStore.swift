@@ -101,7 +101,18 @@ final class PracticeStore {
             recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
             categoryRaw: item.categoryRaw,
             subtitle: item.subtitle,
-            targetMin: item.targetMin
+            targetMin: item.targetMin,
+            recordings: item.recordings
+                .filter { $0.deletedAt == nil }
+                .sorted { $0.createdAt > $1.createdAt }
+                .map {
+                    PracticeRecordingClip(
+                        id: $0.id,
+                        fileName: $0.fileName,
+                        durationSec: $0.durationSec,
+                        createdAt: $0.createdAt
+                    )
+                }
         )
     }
 
@@ -186,6 +197,18 @@ final class PracticeStore {
         let project = try requireLiveProject(id: id)
         project.name = prepared.name
         project.goal = prepared.goal
+        project.updatedAt = now
+        try persistPracticeItemChanges()
+    }
+
+    func updateProjectFocus(id: UUID, currentFocus: String, now: Date) throws {
+        let trimmed = ProjectSetupRules.trimmed(currentFocus)
+        if trimmed.count > ProjectSetupRules.focusMax {
+            lastError = .invalidInput
+            throw StoreError.invalidInput
+        }
+        let project = try requireLiveProject(id: id)
+        project.currentFocus = trimmed
         project.updatedAt = now
         try persistPracticeItemChanges()
     }
@@ -324,6 +347,40 @@ final class PracticeStore {
             repository.rollback()
             lastError = StoreError.from(error)
             throw lastError ?? .saveFailed
+        }
+    }
+
+    struct TodayPracticeOpen {
+        let item: PracticeItem
+        let created: Bool
+    }
+
+    /// Resumes today's unfinished project practice, or creates one when none exists
+    /// or the latest one was explicitly completed.
+    func openTodayPractice(
+        projectId: UUID,
+        now: Date,
+        calendar: Calendar,
+        completedItemIds: Set<UUID>
+    ) throws -> TodayPracticeOpen {
+        let profileId = try requireProfileUUID()
+        guard let project = try repository.project(id: projectId, profileId: profileId),
+              project.status == .active else {
+            lastError = .notFound
+            throw StoreError.notFound
+        }
+        let decision = ProjectPracticeStateHandoff.decide(
+            project: Self.snapshot(from: project),
+            todayKey: PracticeDayKey.make(from: now, calendar: calendar),
+            items: try practiceItemSnapshots(profileId: profileId),
+            completedItemIds: completedItemIds
+        )
+        switch decision.action {
+        case .resume(let id):
+            return TodayPracticeOpen(item: try requireLivePracticeItem(id: id), created: false)
+        case .createNew, .createAnother:
+            let item = try createTodayPracticeItem(projectId: projectId, now: now, calendar: calendar)
+            return TodayPracticeOpen(item: item, created: true)
         }
     }
 

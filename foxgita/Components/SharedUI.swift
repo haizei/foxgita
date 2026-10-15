@@ -458,6 +458,8 @@ struct DaySessionCard: View {
     var showsShadow: Bool = true
     var subtitle: String = ""
     let minutesText: String
+    var projectCapsule: String? = nil
+    var onProjectCapsule: (() -> Void)? = nil
     var action: (() -> Void)?
 
     init(
@@ -469,6 +471,8 @@ struct DaySessionCard: View {
         showsShadow: Bool = true,
         subtitle: String = "",
         minutesText: String? = nil,
+        projectCapsule: String? = nil,
+        onProjectCapsule: (() -> Void)? = nil,
         action: (() -> Void)? = nil
     ) {
         self.title = title
@@ -479,6 +483,8 @@ struct DaySessionCard: View {
         self.showsShadow = showsShadow
         self.subtitle = subtitle
         self.minutesText = minutesText ?? String(localized: "已练 \(minutes) 分钟")
+        self.projectCapsule = projectCapsule
+        self.onProjectCapsule = onProjectCapsule
         self.action = action
     }
 
@@ -503,7 +509,18 @@ struct DaySessionCard: View {
                     .font(GitaFont.body(.bold))
                     .foregroundStyle(GitaTheme.textPrimary)
                     .lineLimit(2)
-                if !subtitle.isEmpty {
+                if let projectCapsule, let onProjectCapsule {
+                    Text(projectCapsule)
+                        .font(GitaFont.caption(.medium))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(GitaTheme.brand50)
+                        .clipShape(Capsule())
+                        .contentShape(Capsule())
+                        .highPriorityGesture(TapGesture().onEnded { _ in onProjectCapsule() })
+                        .accessibilityAddTraits(.isButton)
+                } else if !subtitle.isEmpty {
                     Text(subtitle)
                         .font(GitaFont.caption())
                         .foregroundStyle(GitaTheme.textSecondary)
@@ -548,7 +565,7 @@ struct DaySessionCard: View {
     }
 
     private var accessibilityLabelText: String {
-        [title, subtitle, minutesText, actionTitle]
+        [title, projectCapsule ?? subtitle, minutesText, actionTitle]
             .filter { !$0.isEmpty }
             .joined(separator: "，")
     }
