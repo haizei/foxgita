@@ -8,28 +8,25 @@ struct AudioComparisonView: View {
     @Environment(PracticeStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @Query private var projects: [Project]
-    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
-    private var practiceItems: [PracticeItem]
+    @Query private var practiceItems: [PracticeItem]
 
     @State private var player = AudioPlayerService()
     @State private var playback = AudioComparisonPlayback()
     @State private var overrideStageId: UUID?
     @State private var overrideRecentId: UUID?
-    @State private var replacing: ReplaceSide?
+    @State private var showReplaceSheet = false
+    @State private var showAnotherConfirm = false
     @State private var toast: String?
     @State private var creatingTodayLock = false
     @State private var peaksA: [Double] = []
     @State private var peaksB: [Double] = []
 
-    private enum ReplaceSide: String, Identifiable {
-        case stage
-        case recent
-        var id: String { rawValue }
-    }
-
     init(projectId: UUID) {
         self.projectId = projectId
         _projects = Query(filter: #Predicate<Project> { $0.id == projectId && $0.deletedAt == nil })
+        _practiceItems = Query(
+            filter: #Predicate<PracticeItem> { $0.deletedAt == nil && $0.projectId == projectId }
+        )
     }
 
     private var calendar: Calendar { .current }
@@ -40,13 +37,7 @@ struct AudioComparisonView: View {
     }
 
     private var allSnapshots: [PracticeItemSnapshot] {
-        let items: [PracticeItem]
-        if let profileId = project?.profileId {
-            items = practiceItems.filter { $0.profileId == profileId }
-        } else {
-            items = practiceItems
-        }
-        return items.map(PracticeStore.snapshot(from:))
+        practiceItems.map(PracticeStore.snapshot(from:))
     }
 
     private var readiness: AudioBenchmarkReadiness {
@@ -73,7 +64,7 @@ struct AudioComparisonView: View {
         ZStack {
             PageBackground()
             VStack(spacing: 0) {
-                header
+                header(showsReplace: canReplaceRecording)
                 if let snapshot {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 16) {
@@ -102,8 +93,19 @@ struct AudioComparisonView: View {
         .onChange(of: scenePhase) { _, phase in
             if phase != .active { player.stop() }
         }
-        .sheet(item: $replacing) { side in
-            replaceSheet(side)
+        .sheet(isPresented: $showReplaceSheet) {
+            replaceSheet
+        }
+        .confirmationDialog(
+            "今天这条已经完成，再练会另开一条",
+            isPresented: $showAnotherConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("再练一次") {
+                guard let decision else { return }
+                performHandoff(decision)
+            }
+            Button("取消", role: .cancel) {}
         }
         .safeAreaInset(edge: .bottom, spacing: 0) {
             if let decision, snapshot?.status == .active {
@@ -114,7 +116,7 @@ struct AudioComparisonView: View {
                         .font(GitaFont.body(.bold))
                         .foregroundStyle(GitaTheme.brandOn)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 52)
+                        .frame(minHeight: 52)
                         .background(GitaTheme.brand500)
                         .clipShape(Capsule())
                 }
@@ -157,9 +159,6 @@ struct AudioComparisonView: View {
             audioAvailable: audioReady
         )
         let notes = ProjectNoteProjection.entries(projectId: projectId, items: allSnapshots)
-        let cited = [stageItem?.note ?? "", recentItem?.note ?? ""]
-            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .count
         return VStack(alignment: .leading, spacing: 16) {
             Text(AudioBenchmarkVersion.listenHeadline(focus: snapshot?.currentFocus ?? ""))
                 .font(GitaFont.headline())
@@ -179,23 +178,20 @@ struct AudioComparisonView: View {
                     .font(GitaFont.callout(.bold))
                     .foregroundStyle(GitaTheme.brand500)
                     .frame(maxWidth: .infinity)
-                    .frame(height: 44)
+                    .frame(minHeight: 44)
                     .background(GitaTheme.brand50)
                     .clipShape(Capsule())
             }
             .buttonStyle(.plain)
-            HStack(spacing: 16) {
-                Button("更换录音") { replacing = .stage }
-                Button("更换最近") { replacing = .recent }
-            }
-            .font(GitaFont.callout(.semibold))
-            .foregroundStyle(GitaTheme.brand500)
-            .buttonStyle(.plain)
-            AIAudioObservationCard(observation: observation) { cue in
+            AIAudioObservationCard(
+                observation: observation,
+                stagePeaks: peaksA,
+                recentPeaks: peaksB
+            ) { cue in
                 let track = cue.side == .a ? stage : recent
                 seek(cue, track: track)
             }
-            notesBlock(cited: cited, total: notes.count)
+            notesBlock(stageNote: stageItem?.note ?? "", recentNote: recentItem?.note ?? "", total: notes.count)
         }
         .task(id: stage.clip.id) {
             peaksA = loadPeaks(stage.clip)
@@ -211,8 +207,11 @@ struct AudioComparisonView: View {
         }
     }
 
-    private func notesBlock(cited: Int, total: Int) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private func notesBlock(stageNote: String, recentNote: String, total: Int) -> some View {
+        let stageBody = stageNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let recentBody = recentNote.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cited = [stageBody, recentBody].filter { !$0.isEmpty }.count
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("▣ 我的笔记")
                     .font(GitaFont.body(.semibold))
@@ -225,6 +224,18 @@ struct AudioComparisonView: View {
                 .font(GitaFont.caption(.semibold))
                 .foregroundStyle(GitaTheme.brand500)
                 .buttonStyle(.plain)
+            }
+            if !stageBody.isEmpty {
+                Text(stageBody)
+                    .font(GitaFont.body())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if !recentBody.isEmpty {
+                Text(recentBody)
+                    .font(GitaFont.body())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             Text(ProjectNoteProjection.comparisonCitation(cited: cited, total: total))
                 .font(GitaFont.caption())
@@ -292,7 +303,12 @@ struct AudioComparisonView: View {
         return min(1, playback.position(for: side) / duration)
     }
 
-    private var header: some View {
+    private var canReplaceRecording: Bool {
+        if case .ready = readiness { return true }
+        return false
+    }
+
+    private func header(showsReplace: Bool) -> some View {
         HStack {
             Button("返回") {
                 player.stop()
@@ -306,7 +322,14 @@ struct AudioComparisonView: View {
                 .font(GitaFont.headline())
                 .foregroundStyle(GitaTheme.textPrimary)
             Spacer(minLength: 0)
-            Color.clear.frame(minWidth: 44)
+            if showsReplace {
+                Button("更换录音") { showReplaceSheet = true }
+                    .font(GitaFont.caption(.semibold))
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(minWidth: 44, alignment: .trailing)
+            } else {
+                Color.clear.frame(minWidth: 44)
+            }
         }
         .frame(minHeight: 56)
         .padding(.horizontal, GitaTheme.pagePadding)
@@ -319,20 +342,18 @@ struct AudioComparisonView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func replaceSheet(_ side: ReplaceSide) -> some View {
+    private var replaceSheet: some View {
         let options = Array(AudioBenchmarkVersion.tracks(projectId: projectId, items: allSnapshots).reversed())
         return NavigationStack {
-            List(options) { track in
-                Button {
-                    applyReplacement(side, itemId: track.itemId)
-                } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(track.title)
-                            .font(GitaFont.body())
-                            .foregroundStyle(GitaTheme.textPrimary)
-                        Text("\(ProgressFirstFormat.monthDay(track.dayKey)) · \(ProgressFirstFormat.recordingLabel(durationSec: track.clip.durationSec))")
-                            .font(GitaFont.caption())
-                            .foregroundStyle(GitaTheme.textSecondary)
+            List {
+                Section("阶段版") {
+                    ForEach(options) { track in
+                        replaceRow(track, side: .a)
+                    }
+                }
+                Section("最近录音") {
+                    ForEach(options) { track in
+                        replaceRow(track, side: .b)
                     }
                 }
             }
@@ -340,27 +361,42 @@ struct AudioComparisonView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("关闭") { replacing = nil }
+                    Button("关闭") { showReplaceSheet = false }
                 }
             }
         }
         .presentationDetents([.medium])
     }
 
-    private func applyReplacement(_ side: ReplaceSide, itemId: UUID) {
+    private func replaceRow(_ track: AudioBenchmarkTrack, side: AudioComparisonPlayback.Side) -> some View {
+        Button {
+            applyReplacement(side, itemId: track.itemId)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(track.title)
+                    .font(GitaFont.body())
+                    .foregroundStyle(GitaTheme.textPrimary)
+                Text("\(ProgressFirstFormat.monthDay(track.dayKey)) · \(ProgressFirstFormat.recordingLabel(durationSec: track.clip.durationSec))")
+                    .font(GitaFont.caption())
+                    .foregroundStyle(GitaTheme.textSecondary)
+            }
+        }
+    }
+
+    private func applyReplacement(_ side: AudioComparisonPlayback.Side, itemId: UUID) {
         switch side {
-        case .stage:
+        case .a:
             guard itemId != overrideRecentId else { return }
             if case .ready(_, let recent) = readiness, itemId == recent.itemId { return }
             overrideStageId = itemId
-        case .recent:
+        case .b:
             guard itemId != overrideStageId else { return }
             if case .ready(let stage, _) = readiness, itemId == stage.itemId { return }
             overrideRecentId = itemId
         }
         player.stop()
         playback.pause()
-        replacing = nil
+        showReplaceSheet = false
     }
 
     private func loadPeaks(_ clip: PracticeRecordingClip) -> [Double] {
@@ -423,6 +459,14 @@ struct AudioComparisonView: View {
     }
 
     private func runHandoff(_ decision: ProjectPracticeStateHandoff.Decision) {
+        if case .createAnother = decision.action {
+            showAnotherConfirm = true
+            return
+        }
+        performHandoff(decision)
+    }
+
+    private func performHandoff(_ decision: ProjectPracticeStateHandoff.Decision) {
         guard !creatingTodayLock else { return }
         creatingTodayLock = true
         defer { creatingTodayLock = false }
@@ -437,7 +481,7 @@ struct AudioComparisonView: View {
                 calendar: calendar
             )
         } catch {
-            showToast("创建失败，请重试")
+            showToast(String(localized: "创建失败，请重试"))
         }
     }
 

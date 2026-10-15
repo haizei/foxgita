@@ -21,20 +21,19 @@ struct WaveformBars: View {
 
 enum WaveformSampler {
     static func peaks(fileURL: URL, barCount: Int) -> [Double] {
-        let fallback = Array(repeating: 0.4, count: max(0, barCount))
-        guard barCount > 0, let file = try? AVAudioFile(forReading: fileURL) else { return fallback }
+        guard barCount > 0, let file = try? AVAudioFile(forReading: fileURL) else { return [] }
         let frameCount = AVAudioFrameCount(file.length)
         guard frameCount > 0,
               let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount)
-        else { return fallback }
+        else { return [] }
         do {
             try file.read(into: buffer)
         } catch {
-            return fallback
+            return []
         }
-        guard let channel = buffer.floatChannelData?[0] else { return fallback }
+        guard let channel = buffer.floatChannelData?[0] else { return [] }
         let frames = Int(buffer.frameLength)
-        guard frames > 0 else { return fallback }
+        guard frames > 0 else { return [] }
         var samples = [Double](repeating: 0, count: barCount)
         let chunk = max(1, frames / barCount)
         for bar in 0..<barCount {
@@ -51,7 +50,7 @@ enum WaveformSampler {
             samples[bar] = Double(peak)
         }
         let maxPeak = samples.max() ?? 0
-        guard maxPeak > 0 else { return Array(repeating: 0.2, count: barCount) }
+        guard maxPeak > 0 else { return [] }
         return samples.map { max(0.12, $0 / maxPeak) }
     }
 }

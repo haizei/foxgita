@@ -56,25 +56,25 @@ enum ProjectPracticeStateHandoff {
         switch stage {
         case .notStarted:
             return Decision(
-                buttonLabel: "开始今天的练习",
+                buttonLabel: String(localized: "开始今天的练习"),
                 focusTitle: focusTitle,
-                instruction: "用当前重点开始今天的练习",
+                instruction: String(localized: "用当前重点开始今天的练习"),
                 stage: stage,
                 action: .createNew(title: focusTitle)
             )
         case .resume(let item):
             return Decision(
-                buttonLabel: "继续这次练习",
+                buttonLabel: String(localized: "继续这次练习"),
                 focusTitle: focusTitle,
-                instruction: "今天这条还没完成，接着练，不会新建空白练习",
+                instruction: String(localized: "今天这条还没完成，接着练，不会新建空白练习"),
                 stage: stage,
                 action: .resume(item.id)
             )
         case .createAnother(let item):
             return Decision(
-                buttonLabel: "再练一次",
+                buttonLabel: String(localized: "再练一次"),
                 focusTitle: focusTitle,
-                instruction: "今天这条已经完成，再练会另开一条",
+                instruction: String(localized: "今天这条已经完成，再练会另开一条"),
                 stage: stage,
                 action: .createAnother(title: focusTitle, completedItemId: item.id)
             )

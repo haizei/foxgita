@@ -2,6 +2,8 @@ import SwiftUI
 
 struct AIAudioObservationCard: View {
     let observation: AIAudioObservation
+    var stagePeaks: [Double] = []
+    var recentPeaks: [Double] = []
     let onSeek: (AIAudioCue) -> Void
 
     var body: some View {
@@ -19,14 +21,16 @@ struct AIAudioObservationCard: View {
                     cueButton(observation.recentCue)
                 }
             } else {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text("分段预览")
                         .font(GitaFont.caption())
                         .foregroundStyle(GitaTheme.textSecondary)
-                    WaveformBars(
-                        peaks: Array(repeating: 0.45, count: 12),
-                        progress: 0.34
-                    )
+                    if !stagePeaks.isEmpty {
+                        WaveformBars(peaks: stagePeaks, progress: 0)
+                    }
+                    if !recentPeaks.isEmpty {
+                        WaveformBars(peaks: recentPeaks, progress: 0)
+                    }
                 }
             }
         }

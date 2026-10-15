@@ -13,7 +13,7 @@ struct ProjectNoteEntry: Equatable, Identifiable {
 
 enum ProjectNoteProjection {
     static let previewLimit = 3
-    static let footer = "ⓘ 笔记来自每次练习，可在原练习记录中修改"
+    static let footer = String(localized: "ⓘ 笔记来自每次练习，可在原练习记录中修改")
 
     static func entries(projectId: UUID, items: [PracticeItemSnapshot]) -> [ProjectNoteEntry] {
         items.compactMap { item in
@@ -38,6 +38,6 @@ enum ProjectNoteProjection {
     }
 
     static func comparisonCitation(cited: Int, total: Int) -> String {
-        "本次对比引用 \(cited) 条 · 项目共 \(total) 条"
+        String(localized: "本次对比引用 \(cited) 条 · 项目共 \(total) 条")
     }
 }

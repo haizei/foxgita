@@ -169,24 +169,26 @@ enum ProjectRules {
         let trimmedFocus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
         let focusTitle = trimmedFocus.isEmpty ? project.name : trimmedFocus
 
+        let handoff = ProjectPracticeStateHandoff.decide(
+            project: project,
+            todayKey: todayKey,
+            items: items,
+            completedItemIds: completedItemIds
+        )
         let focusLabel: String
-        let buttonLabel: String
         let evidenceItem: PracticeItemSnapshot?
 
         switch stage {
         case .notStarted:
             focusLabel = String(localized: "这次")
-            buttonLabel = String(localized: "开始今天的练习")
             evidenceItem = lastEvidence(projectId: project.id, in: items)
         case .created:
             focusLabel = String(localized: "今天已创建 · 这次")
-            buttonLabel = String(localized: "继续这次练习")
             let pastEffective = associatedEffectiveItems(projectId: project.id, in: items)
                 .filter { $0.practiceDayKey != todayKey }
             evidenceItem = pastEffective.first
         case .completed:
             focusLabel = String(localized: "再练重点")
-            buttonLabel = String(localized: "再练一次")
             evidenceItem = lastEvidence(projectId: project.id, in: items)
         }
 
@@ -208,7 +210,7 @@ enum ProjectRules {
             stage: stage,
             focusLabel: focusLabel,
             focusTitle: focusTitle,
-            buttonLabel: buttonLabel,
+            buttonLabel: handoff.buttonLabel,
             lastEvidenceText: lastEvidenceText,
             lastEvidencePracticeTitle: lastEvidencePracticeTitle
         )

@@ -12,17 +12,42 @@ struct LastPracticeEvidenceCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Text("♫")
-                    .font(GitaFont.body())
-                    .foregroundStyle(GitaTheme.brand500)
-                Text("上次练习")
-                    .font(GitaFont.body(.semibold))
-                    .foregroundStyle(GitaTheme.textPrimary)
+            HStack(alignment: .top, spacing: 8) {
+                HStack(spacing: 6) {
+                    Text("♫")
+                        .font(GitaFont.body())
+                        .foregroundStyle(GitaTheme.brand500)
+                    Text("上次练习")
+                        .font(GitaFont.body(.semibold))
+                        .foregroundStyle(GitaTheme.textPrimary)
+                }
+                Spacer(minLength: 8)
+                VStack(alignment: .trailing, spacing: 6) {
+                    Text(evidence.dateAndDuration)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .multilineTextAlignment(.trailing)
+                    if evidence.recording != nil {
+                        switch benchmark {
+                        case .ready:
+                            Button(action: onCompare) {
+                                Text(AudioBenchmarkVersion.compareLink)
+                                    .font(GitaFont.caption(.semibold))
+                                    .foregroundStyle(GitaTheme.brand500)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                            .buttonStyle(.plain)
+                        case .needsAnotherRecording:
+                            Text(AudioBenchmarkVersion.needsAnotherCopy)
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
+                                .multilineTextAlignment(.trailing)
+                        case .unavailable:
+                            EmptyView()
+                        }
+                    }
+                }
             }
-            Text(evidence.dateAndDuration)
-                .font(GitaFont.caption())
-                .foregroundStyle(GitaTheme.textSecondary)
             Text(evidence.title)
                 .font(GitaFont.body(.bold))
                 .foregroundStyle(GitaTheme.textPrimary)
@@ -38,21 +63,6 @@ struct LastPracticeEvidenceCard: View {
             }
             if let recording = evidence.recording {
                 playerBlock(recording)
-                switch benchmark {
-                case .ready:
-                    Button(action: onCompare) {
-                        Text(AudioBenchmarkVersion.compareLink)
-                            .font(GitaFont.callout(.semibold))
-                            .foregroundStyle(GitaTheme.brand500)
-                    }
-                    .buttonStyle(.plain)
-                case .needsAnotherRecording:
-                    Text(AudioBenchmarkVersion.needsAnotherCopy)
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                case .unavailable:
-                    EmptyView()
-                }
             }
         }
         .padding(16)

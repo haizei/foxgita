@@ -9,25 +9,31 @@ struct NextPracticeFocusCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top, spacing: 12) {
-                targetBadge
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(decision.focusTitle)
-                        .font(GitaFont.body(.bold))
-                        .foregroundStyle(GitaTheme.textPrimary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    Text(decision.instruction)
-                        .font(GitaFont.caption())
-                        .foregroundStyle(GitaTheme.textSecondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                Button(action: onHandoff) {
+                    HStack(alignment: .top, spacing: 12) {
+                        targetBadge
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(decision.focusTitle)
+                                .font(GitaFont.body(.bold))
+                                .foregroundStyle(GitaTheme.textPrimary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Text(decision.instruction)
+                                .font(GitaFont.caption())
+                                .foregroundStyle(GitaTheme.textSecondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
+                .disabled(!showsAction)
                 Button(action: onEditFocus) {
                     Text("项目当前重点 · 可修改")
                         .font(GitaFont.caption())
                         .foregroundStyle(GitaTheme.brand500)
                         .multilineTextAlignment(.trailing)
-                        .frame(width: 84, alignment: .trailing)
                 }
                 .buttonStyle(.plain)
+                .fixedSize(horizontal: true, vertical: true)
             }
             if showsAction {
                 Button(action: onHandoff) {
@@ -35,7 +41,7 @@ struct NextPracticeFocusCard: View {
                         .font(GitaFont.callout(.bold))
                         .foregroundStyle(GitaTheme.brandOn)
                         .frame(maxWidth: .infinity)
-                        .frame(height: 44)
+                        .frame(minHeight: 44)
                         .background(GitaTheme.brand500)
                         .clipShape(Capsule())
                 }

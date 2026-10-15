@@ -449,6 +449,14 @@ struct ProjectRulesTests {
         let rendered = [story?.headline ?? ""] + (story?.milestones.map(\.label) ?? [])
         #expect(rendered.allSatisfy { !$0.contains("%") && !$0.contains("评分") })
         #expect(ProjectProgressStory.disclaimer == "根据已记录的练习范围 · 非完成度评分")
+
+        let sung = ProjectProgressStory.make(projectId: pid, items: [
+            item(projectId: pid, dayKey: "2026-10-03", createdAt: date(2026, 10, 3), durationSeconds: 600, title: "分段"),
+            item(projectId: pid, dayKey: "2026-10-08", createdAt: date(2026, 10, 8), durationSeconds: 600, title: "连贯弹唱"),
+            item(projectId: pid, dayKey: "2026-10-13", createdAt: date(2026, 10, 13), durationSeconds: 600, title: "完整弹唱一遍"),
+        ])
+        #expect(sung?.milestones.compactMap(\.scope) == [.segmented, .connected, .complete])
+        #expect(sung?.headline == "从分段练，到完整弹一遍")
     }
 
     @Test func lastEvidenceSkipsInvalidItemsAndHidesMissingRecording() {

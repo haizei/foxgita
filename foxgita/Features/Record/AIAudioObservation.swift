@@ -7,7 +7,7 @@ struct AIAudioCue: Equatable {
 }
 
 struct AIAudioObservation: Equatable {
-    static let header = "✦ AI 观察 · 基于这两段录音"
+    static let header = String(localized: "✦ AI 观察 · 基于这两段录音")
 
     let conclusion: String
     let stageCue: AIAudioCue
@@ -31,19 +31,19 @@ enum AIAudioObservationRules {
             audioAvailable: audioAvailable
         )
         if audioAvailable {
-            let stageMark = firstClock(in: stageNote) ?? fallbackMark(duration: stageDuration, prefersKeyword: stageNote.contains("停顿"))
-            let recentMark = firstClock(in: recentNote) ?? fallbackMark(duration: recentDuration, prefersKeyword: recentNote.contains("连贯"))
+            let stageMark = firstClock(in: stageNote)
+            let recentMark = firstClock(in: recentNote)
             return AIAudioObservation(
                 conclusion: conclusion,
-                stageCue: AIAudioCue(side: .a, seconds: stageMark, caption: caption("阶段版", stageMark)),
-                recentCue: AIAudioCue(side: .b, seconds: recentMark, caption: caption("最近", recentMark)),
+                stageCue: AIAudioCue(side: .a, seconds: stageMark, caption: caption(String(localized: "阶段版"), stageMark)),
+                recentCue: AIAudioCue(side: .b, seconds: recentMark, caption: caption(String(localized: "最近"), recentMark)),
                 usesAudioTimestamps: stageMark != nil && recentMark != nil
             )
         }
         return AIAudioObservation(
             conclusion: conclusion,
-            stageCue: AIAudioCue(side: .a, seconds: nil, caption: "阶段版"),
-            recentCue: AIAudioCue(side: .b, seconds: nil, caption: "最近"),
+            stageCue: AIAudioCue(side: .a, seconds: nil, caption: String(localized: "阶段版")),
+            recentCue: AIAudioCue(side: .b, seconds: nil, caption: String(localized: "最近")),
             usesAudioTimestamps: false
         )
     }
@@ -75,12 +75,6 @@ enum AIAudioObservationRules {
         return nil
     }
 
-    private static func fallbackMark(duration: TimeInterval, prefersKeyword: Bool) -> TimeInterval? {
-        guard duration > 0 else { return nil }
-        let ratio = prefersKeyword ? 0.4 : 0.5
-        return (duration * ratio).rounded(.down)
-    }
-
     private static func caption(_ name: String, _ seconds: TimeInterval?) -> String {
         guard let seconds else { return name }
         return "\(name) \(ProgressFirstFormat.clock(seconds))"
@@ -96,17 +90,17 @@ enum AIAudioObservationRules {
         let stagePaused = stageNote.contains("停顿")
         let recentFlowing = recentNote.contains("连贯")
         if stagePaused && recentFlowing {
-            return "最近这一次更连贯，阶段版里还有明显停顿。"
+            return String(localized: "最近这一次更连贯，阶段版里还有明显停顿。")
         }
         if stagePaused {
-            return "阶段版里有一处停顿，可以对照最近这次听。"
+            return String(localized: "阶段版里有一处停顿，可以对照最近这次听。")
         }
         if recentFlowing {
-            return "最近这一次更连贯。"
+            return String(localized: "最近这一次更连贯。")
         }
         if audioAvailable, stageDuration > 0, recentDuration + 5 < stageDuration {
-            return "最近这段更紧凑。"
+            return String(localized: "最近这段更紧凑。")
         }
-        return "两段都留了下来，可以对照着听哪里更顺。"
+        return String(localized: "两段都留了下来，可以对照着听哪里更顺。")
     }
 }

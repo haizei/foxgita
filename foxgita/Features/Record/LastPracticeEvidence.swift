@@ -12,7 +12,7 @@ struct LastPracticeEvidence: Equatable {
 
     var dateAndDuration: String {
         let minutes = ProgressFirstFormat.minutes(fromSeconds: durationSeconds)
-        return "\(ProgressFirstFormat.monthDay(dayKey)) · \(minutes)分钟"
+        return String(localized: "\(ProgressFirstFormat.monthDay(dayKey)) · \(minutes)分钟")
     }
 
     var recordingLabel: String? {

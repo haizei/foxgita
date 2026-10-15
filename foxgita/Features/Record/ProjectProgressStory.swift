@@ -7,18 +7,19 @@ enum ProjectPracticeScope: Equatable {
 
     var phrase: String {
         switch self {
-        case .segmented: return "分段练"
-        case .connected: return "连贯弹"
-        case .complete: return "完整弹一遍"
+        case .segmented: return String(localized: "分段练")
+        case .connected: return String(localized: "连贯弹")
+        case .complete: return String(localized: "完整弹一遍")
         }
     }
 
     static func classify(_ text: String) -> ProjectPracticeScope? {
-        let complete = ["完整", "整首", "跟唱摸底", "录音对比", "弹唱"]
+        let complete = ["完整", "整首", "跟唱摸底", "录音对比"]
         let connected = ["串联", "连贯", "提速", "爬格子"]
         let segmented = ["分段", "小节", "副歌专项", "慢练", "和弦转换"]
         if complete.contains(where: { text.contains($0) }) { return .complete }
         if connected.contains(where: { text.contains($0) }) { return .connected }
+        if text.contains("弹唱") { return .complete }
         if segmented.contains(where: { text.contains($0) }) { return .segmented }
         return nil
     }
@@ -32,8 +33,8 @@ struct ProjectProgressMilestone: Equatable, Identifiable {
 }
 
 struct ProjectProgressStory: Equatable {
-    static let disclaimer = "根据已记录的练习范围 · 非完成度评分"
-    static let emptyMessage = "完成第一次练习以生成轨迹"
+    static let disclaimer = String(localized: "根据已记录的练习范围 · 非完成度评分")
+    static let emptyMessage = String(localized: "完成第一次练习以生成轨迹")
 
     let headline: String
     let milestones: [ProjectProgressMilestone]
@@ -97,6 +98,6 @@ struct ProjectProgressStory: Equatable {
         guard let last = milestones.last?.scope, milestones.count > 1, first != last else {
             return first.phrase
         }
-        return "从\(first.phrase)，到\(last.phrase)"
+        return String(localized: "从\(first.phrase)，到\(last.phrase)")
     }
 }

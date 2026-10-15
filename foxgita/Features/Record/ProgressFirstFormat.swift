@@ -6,7 +6,7 @@ enum ProgressFirstFormat {
         guard parts.count == 3, let month = Int(parts[1]), let day = Int(parts[2]) else {
             return dayKey
         }
-        return "\(month)月\(day)日"
+        return String(localized: "\(month)月\(day)日")
     }
 
     static func clock(_ seconds: TimeInterval) -> String {
@@ -20,6 +20,6 @@ enum ProgressFirstFormat {
     }
 
     static func recordingLabel(durationSec: Int) -> String {
-        "录音 \(clock(TimeInterval(durationSec)))"
+        String(localized: "录音 \(clock(TimeInterval(durationSec)))")
     }
 }

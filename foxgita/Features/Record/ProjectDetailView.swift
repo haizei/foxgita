@@ -13,8 +13,7 @@ struct ProjectDetailView: View {
     @Environment(PracticeStore.self) private var store
     @Environment(\.scenePhase) private var scenePhase
     @Query private var projects: [Project]
-    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
-    private var practiceItems: [PracticeItem]
+    @Query private var practiceItems: [PracticeItem]
     @Query(filter: #Predicate<LocalProfile> { $0.isActive == true })
     private var profiles: [LocalProfile]
 
@@ -25,6 +24,7 @@ struct ProjectDetailView: View {
     @State private var showCompleteConfirm = false
     @State private var showDeleteConfirm = false
     @State private var showFocusEditor = false
+    @State private var showAnotherConfirm = false
     @State private var focusDraft = ""
 
     private var calendar: Calendar { .current }
@@ -33,6 +33,9 @@ struct ProjectDetailView: View {
         self.projectId = projectId
         _projects = Query(
             filter: #Predicate<Project> { $0.id == projectId && $0.deletedAt == nil }
+        )
+        _practiceItems = Query(
+            filter: #Predicate<PracticeItem> { $0.deletedAt == nil && $0.projectId == projectId }
         )
     }
 
@@ -43,13 +46,7 @@ struct ProjectDetailView: View {
     }
 
     private var allSnapshots: [PracticeItemSnapshot] {
-        let items: [PracticeItem]
-        if let profileId = project?.profileId {
-            items = practiceItems.filter { $0.profileId == profileId }
-        } else {
-            items = practiceItems
-        }
-        return items.map(PracticeStore.snapshot(from:))
+        practiceItems.map(PracticeStore.snapshot(from:))
     }
 
     private var evidence: LastPracticeEvidence? {
@@ -107,7 +104,7 @@ struct ProjectDetailView: View {
                                     onPlayVideo: { url in
                                         videoPlayURL = url
                                     },
-                                    onPlaybackFailed: { showToast("无法播放") }
+                                    onPlaybackFailed: { showToast(String(localized: "无法播放")) }
                                 )
                             }
                             NextPracticeFocusCard(
@@ -161,7 +158,7 @@ struct ProjectDetailView: View {
                 hasEvidence: evidence != nil
             )
             if router.projectCreatedToast {
-                showToast("项目已创建")
+                showToast(String(localized: "项目已创建"))
                 router.projectCreatedToast = false
             }
         }
@@ -199,6 +196,17 @@ struct ProjectDetailView: View {
         }
         .sheet(isPresented: $showFocusEditor) {
             focusEditorSheet
+        }
+        .confirmationDialog(
+            "今天这条已经完成，再练会另开一条",
+            isPresented: $showAnotherConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("再练一次") {
+                guard let snapshot else { return }
+                performHandoff(for: snapshot)
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 
@@ -316,6 +324,15 @@ struct ProjectDetailView: View {
     }
 
     private func runHandoff(_ snapshot: ProjectSnapshot) {
+        let next = decision(for: snapshot)
+        if case .createAnother = next.action {
+            showAnotherConfirm = true
+            return
+        }
+        performHandoff(for: snapshot)
+    }
+
+    private func performHandoff(for snapshot: ProjectSnapshot) {
         guard !creatingTodayLock else { return }
         creatingTodayLock = true
         defer { creatingTodayLock = false }
@@ -330,7 +347,7 @@ struct ProjectDetailView: View {
                 calendar: calendar
             )
         } catch {
-            showToast("创建失败，请重试")
+            showToast(String(localized: "创建失败，请重试"))
         }
     }
 
@@ -339,7 +356,7 @@ struct ProjectDetailView: View {
             try store.updateProjectFocus(id: projectId, currentFocus: focusDraft, now: Date())
             showFocusEditor = false
         } catch {
-            showToast("操作失败，请重试")
+            showToast(String(localized: "操作失败，请重试"))
         }
     }
 
@@ -347,7 +364,7 @@ struct ProjectDetailView: View {
         do {
             try store.setPinnedProjectId(id)
         } catch {
-            showToast("操作失败，请重试")
+            showToast(String(localized: "操作失败，请重试"))
         }
     }
 
@@ -355,7 +372,7 @@ struct ProjectDetailView: View {
         do {
             try store.setProjectStatus(id: projectId, status: status, now: Date())
         } catch {
-            showToast("操作失败，请重试")
+            showToast(String(localized: "操作失败，请重试"))
         }
     }
 
@@ -366,7 +383,7 @@ struct ProjectDetailView: View {
                 router.recordPath.removeLast()
             }
         } catch {
-            showToast("删除失败，请重试")
+            showToast(String(localized: "删除失败，请重试"))
         }
     }
 

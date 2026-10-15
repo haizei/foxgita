@@ -29,7 +29,7 @@ struct ProjectNotePreviewSection: View {
                             Text(ProgressFirstFormat.monthDay(entry.dayKey))
                                 .font(GitaFont.caption())
                                 .foregroundStyle(GitaTheme.textSecondary)
-                                .frame(width: 64, alignment: .leading)
+                                .frame(minWidth: 64, alignment: .leading)
                             Rectangle()
                                 .fill(GitaTheme.brand500)
                                 .frame(width: 3, height: 28)
@@ -66,26 +66,22 @@ struct ProjectNotesListView: View {
 
     @Environment(AppRouter.self) private var router
     @Query private var projects: [Project]
-    @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
-    private var practiceItems: [PracticeItem]
+    @Query private var practiceItems: [PracticeItem]
 
     init(projectId: UUID) {
         self.projectId = projectId
         _projects = Query(filter: #Predicate<Project> { $0.id == projectId && $0.deletedAt == nil })
+        _practiceItems = Query(
+            filter: #Predicate<PracticeItem> { $0.deletedAt == nil && $0.projectId == projectId }
+        )
     }
 
     private var project: Project? { projects.first }
 
     private var entries: [ProjectNoteEntry] {
-        let items: [PracticeItem]
-        if let profileId = project?.profileId {
-            items = practiceItems.filter { $0.profileId == profileId }
-        } else {
-            items = practiceItems
-        }
-        return ProjectNoteProjection.entries(
+        ProjectNoteProjection.entries(
             projectId: projectId,
-            items: items.map(PracticeStore.snapshot(from:))
+            items: practiceItems.map(PracticeStore.snapshot(from:))
         )
     }
 
