@@ -158,6 +158,10 @@ struct RecordView: View {
                     ProjectEditorView(mode: .edit(id))
                 case .projectTrajectory(let id):
                     ProjectTrajectoryView(projectId: id)
+                case .projectNotes(let id):
+                    ProjectNotesListView(projectId: id)
+                case .audioComparison(let id):
+                    AudioComparisonView(projectId: id)
                 }
             }
             .onAppear {

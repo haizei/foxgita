@@ -361,13 +361,16 @@ struct PracticeView: View {
             targetMin: item.targetMin,
             durationSeconds: item.durationSeconds
         )
-        let displaySubtitle: String = {
-            if let pid = item.projectId,
-               let projectName = ProjectRules.projectName(id: pid, in: profileProjects) {
-                return "项目 · \(projectName)"
-            }
-            return item.subtitle
+        let projectCapsule: String? = {
+            guard let pid = item.projectId,
+                  let projectName = ProjectRules.projectName(id: pid, in: profileProjects) else { return nil }
+            return "项目 · \(projectName)"
         }()
+        let openProject = {
+            if let pid = item.projectId {
+                router.showProjectDetail(pid, fromPracticeTab: true)
+            }
+        }
         let card = DaySessionCard(
             title: item.title,
             minutes: minutesFromSeconds(item.durationSeconds),
@@ -375,8 +378,10 @@ struct PracticeView: View {
             actionTitle: cta,
             solidCTA: index == 0 && isSelectedToday,
             showsShadow: false,
-            subtitle: displaySubtitle,
-            minutesText: minutesLabel
+            subtitle: projectCapsule == nil ? item.subtitle : "",
+            minutesText: minutesLabel,
+            projectCapsule: projectCapsule,
+            onProjectCapsule: projectCapsule == nil ? nil : openProject
         )
         if PracticeHomeState.allowsSwipeDelete(isSelectedToday: isSelectedToday) {
             SwipeRevealRow(
@@ -399,8 +404,10 @@ struct PracticeView: View {
                 minutes: minutesFromSeconds(item.durationSeconds),
                 category: category(for: item),
                 actionTitle: cta,
-                subtitle: displaySubtitle,
-                minutesText: minutesLabel
+                subtitle: projectCapsule == nil ? item.subtitle : "",
+                minutesText: minutesLabel,
+                projectCapsule: projectCapsule,
+                onProjectCapsule: projectCapsule == nil ? nil : openProject
             ) {
                 router.practicePath.append(.detail(itemId: item.id))
             }

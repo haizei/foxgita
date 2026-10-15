@@ -1,36 +1,5 @@
 import Foundation
 
-enum ProjectStatus: String, Equatable {
-    case active, completed, archived
-}
-
-struct ProjectSnapshot: Equatable, Identifiable {
-    let id: UUID
-    let profileId: UUID
-    let name: String
-    let goal: String
-    let kindRaw: String
-    let stageRaw: String
-    let currentFocus: String
-    let status: ProjectStatus
-    let createdAt: Date
-    let isDeleted: Bool
-    let stageVersionItemId: UUID?
-    let finalVersionItemId: UUID?
-}
-
-struct ProjectListState: Equatable {
-    var current: ProjectSnapshot?
-    var others: [ProjectSnapshot]
-    var ended: [ProjectSnapshot]
-}
-
-enum ProjectVersionSlot: Equatable {
-    case empty
-    case resolved(PracticeItemSnapshot)
-    case stale
-}
-
 enum ProjectRules {
     static func snapshot(from project: Project) -> ProjectSnapshot {
         ProjectSnapshot(
@@ -82,8 +51,7 @@ enum ProjectRules {
     }
 
     static func titleForNewPracticeItem(_ project: ProjectSnapshot) -> String {
-        let focus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
-        return focus.isEmpty ? project.name : focus
+        project.practiceTitle
     }
 
     static func associatedEffectiveItems(projectId: UUID, in items: [PracticeItemSnapshot]) -> [PracticeItemSnapshot] {
@@ -168,18 +136,18 @@ enum ProjectRules {
         in items: [PracticeItemSnapshot],
         completedItemIds: Set<UUID>
     ) -> StateHandoffStage {
-        let todayItems = items.filter {
-            !$0.isDeleted && $0.projectId == projectId && $0.practiceDayKey == todayKey
-        }.sorted { $0.createdAt > $1.createdAt }
-
-        guard let latestToday = todayItems.first else {
+        switch ProjectPracticeStateHandoff.stage(
+            projectId: projectId,
+            todayKey: todayKey,
+            in: items,
+            completedItemIds: completedItemIds
+        ) {
+        case .notStarted:
             return .notStarted
-        }
-
-        if completedItemIds.contains(latestToday.id) {
-            return .completed(latestToday)
-        } else {
-            return .created(latestToday)
+        case .resume(let item):
+            return .created(item)
+        case .createAnother(let item):
+            return .completed(item)
         }
     }
 
@@ -201,24 +169,26 @@ enum ProjectRules {
         let trimmedFocus = project.currentFocus.trimmingCharacters(in: .whitespacesAndNewlines)
         let focusTitle = trimmedFocus.isEmpty ? project.name : trimmedFocus
 
+        let handoff = ProjectPracticeStateHandoff.decide(
+            project: project,
+            todayKey: todayKey,
+            items: items,
+            completedItemIds: completedItemIds
+        )
         let focusLabel: String
-        let buttonLabel: String
         let evidenceItem: PracticeItemSnapshot?
 
         switch stage {
         case .notStarted:
             focusLabel = String(localized: "这次")
-            buttonLabel = String(localized: "开始今天的练习")
             evidenceItem = lastEvidence(projectId: project.id, in: items)
         case .created:
             focusLabel = String(localized: "今天已创建 · 这次")
-            buttonLabel = String(localized: "继续这次练习")
             let pastEffective = associatedEffectiveItems(projectId: project.id, in: items)
                 .filter { $0.practiceDayKey != todayKey }
             evidenceItem = pastEffective.first
         case .completed:
             focusLabel = String(localized: "再练重点")
-            buttonLabel = String(localized: "再练一次")
             evidenceItem = lastEvidence(projectId: project.id, in: items)
         }
 
@@ -240,7 +210,7 @@ enum ProjectRules {
             stage: stage,
             focusLabel: focusLabel,
             focusTitle: focusTitle,
-            buttonLabel: buttonLabel,
+            buttonLabel: handoff.buttonLabel,
             lastEvidenceText: lastEvidenceText,
             lastEvidencePracticeTitle: lastEvidencePracticeTitle
         )

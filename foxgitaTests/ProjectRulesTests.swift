@@ -43,18 +43,36 @@ struct ProjectRulesTests {
         durationSeconds: Int,
         isDeleted: Bool = false,
         note: String = "",
-        recordingCount: Int = 0
+        recordingCount: Int = 0,
+        title: String = "练",
+        subtitle: String = "",
+        recordings: [PracticeRecordingClip] = []
     ) -> PracticeItemSnapshot {
         PracticeItemSnapshot(
             id: id,
             practiceDayKey: dayKey,
             createdAt: createdAt,
-            title: "练",
+            title: title,
             durationSeconds: durationSeconds,
             isDeleted: isDeleted,
             projectId: projectId,
             note: note,
-            recordingCount: recordingCount
+            recordingCount: recordingCount,
+            subtitle: subtitle,
+            recordings: recordings
+        )
+    }
+
+    private func clip(
+        fileName: String,
+        duration: Int,
+        createdAt: Date
+    ) -> PracticeRecordingClip {
+        PracticeRecordingClip(
+            id: UUID().uuidString,
+            fileName: fileName,
+            durationSec: duration,
+            createdAt: createdAt
         )
     }
 
@@ -357,5 +375,261 @@ struct ProjectRulesTests {
             calendar: cal
         )
         #expect(ctx == "这次：C 到 G 的转换要干净 · 昨天")
+    }
+
+    @Test func handoffCreatesWithFocusResumesBlankItemAndOpensAnotherAfterComplete() {
+        let pid = UUID()
+        let today = "2026-10-15"
+        let blankId = UUID()
+        let projectWithFocus = project(id: pid, name: "知足", createdAt: date(2026, 10, 1), currentFocus: "副歌节奏")
+        let notStarted = ProjectPracticeStateHandoff.decide(
+            project: projectWithFocus,
+            todayKey: today,
+            items: [],
+            completedItemIds: []
+        )
+        #expect(notStarted.buttonLabel == "开始今天的练习")
+        #expect(notStarted.action == .createNew(title: "副歌节奏"))
+
+        let unnamed = project(id: pid, name: "知足", createdAt: date(2026, 10, 1), currentFocus: "  ")
+        let fallback = ProjectPracticeStateHandoff.decide(
+            project: unnamed,
+            todayKey: today,
+            items: [],
+            completedItemIds: []
+        )
+        #expect(fallback.action == .createNew(title: "知足"))
+
+        let blank = item(id: blankId, projectId: pid, dayKey: today, createdAt: date(2026, 10, 15, 9), durationSeconds: 0)
+        let resume = ProjectPracticeStateHandoff.decide(
+            project: projectWithFocus,
+            todayKey: today,
+            items: [blank],
+            completedItemIds: []
+        )
+        #expect(resume.buttonLabel == "继续这次练习")
+        #expect(resume.action == .resume(blankId))
+
+        let again = ProjectPracticeStateHandoff.decide(
+            project: projectWithFocus,
+            todayKey: today,
+            items: [blank],
+            completedItemIds: [blankId]
+        )
+        #expect(again.buttonLabel == "再练一次")
+        #expect(again.action == .createAnother(title: "副歌节奏", completedItemId: blankId))
+    }
+
+    @Test func progressStoryIsEmptyForNoPracticeAndQualitativeForScopedItems() {
+        let pid = UUID()
+        #expect(ProjectProgressStory.make(projectId: pid, items: []) == nil)
+
+        let only = item(
+            projectId: pid,
+            dayKey: "2026-10-03",
+            createdAt: date(2026, 10, 3),
+            durationSeconds: 600,
+            title: "小节慢练"
+        )
+        let single = ProjectProgressStory.make(projectId: pid, items: [only])
+        #expect(single?.headline == "分段练")
+        #expect(single?.milestones.count == 1)
+        #expect(single?.milestones.first?.label == "小节慢练")
+        #expect(single?.milestones.first?.dayKey == "2026-10-03")
+
+        let items = [
+            item(projectId: pid, dayKey: "2026-10-03", createdAt: date(2026, 10, 3), durationSeconds: 600, title: "副歌分段"),
+            item(projectId: pid, dayKey: "2026-10-04", createdAt: date(2026, 10, 4), durationSeconds: 600, title: "还是分段"),
+            item(projectId: pid, dayKey: "2026-10-08", createdAt: date(2026, 10, 8), durationSeconds: 600, note: "开始连贯", title: "串联"),
+            item(projectId: pid, dayKey: "2026-10-13", createdAt: date(2026, 10, 13), durationSeconds: 600, title: "完整弹一遍"),
+        ]
+        let story = ProjectProgressStory.make(projectId: pid, items: items)
+        #expect(story?.headline == "从分段练，到完整弹一遍")
+        #expect(story?.milestones.map(\.label) == ["副歌分段", "串联", "完整弹一遍"])
+        let rendered = [story?.headline ?? ""] + (story?.milestones.map(\.label) ?? [])
+        #expect(rendered.allSatisfy { !$0.contains("%") && !$0.contains("评分") })
+        #expect(ProjectProgressStory.disclaimer == "根据已记录的练习范围 · 非完成度评分")
+
+        let sung = ProjectProgressStory.make(projectId: pid, items: [
+            item(projectId: pid, dayKey: "2026-10-03", createdAt: date(2026, 10, 3), durationSeconds: 600, title: "分段"),
+            item(projectId: pid, dayKey: "2026-10-08", createdAt: date(2026, 10, 8), durationSeconds: 600, title: "连贯弹唱"),
+            item(projectId: pid, dayKey: "2026-10-13", createdAt: date(2026, 10, 13), durationSeconds: 600, title: "完整弹唱一遍"),
+        ])
+        #expect(sung?.milestones.compactMap(\.scope) == [.segmented, .connected, .complete])
+        #expect(sung?.headline == "从分段练，到完整弹一遍")
+    }
+
+    @Test func lastEvidenceSkipsInvalidItemsAndHidesMissingRecording() {
+        let pid = UUID()
+        let early = date(2026, 10, 3, 11)
+        let latest = date(2026, 10, 13, 18)
+        let take = clip(fileName: "chorus.m4a", duration: 124, createdAt: latest)
+        let items = [
+            item(projectId: pid, dayKey: "2026-10-13", createdAt: date(2026, 10, 13, 19), durationSeconds: 0, title: "空的"),
+            item(
+                projectId: pid,
+                dayKey: "2026-10-13",
+                createdAt: latest,
+                durationSeconds: 18 * 60,
+                note: "副歌顺了一点",
+                recordingCount: 1,
+                title: "副歌",
+                subtitle: "只练副歌",
+                recordings: [take]
+            ),
+            item(projectId: pid, dayKey: "2026-10-03", createdAt: early, durationSeconds: 600, title: "更早"),
+            item(projectId: pid, dayKey: "2026-10-14", createdAt: date(2026, 10, 14), durationSeconds: 600, isDeleted: true, title: "删了"),
+        ]
+        let evidence = LastPracticeEvidence.latest(projectId: pid, items: items)
+        #expect(evidence?.title == "副歌")
+        #expect(evidence?.content == "只练副歌")
+        #expect(evidence?.reflection == "副歌顺了一点")
+        #expect(evidence?.dateAndDuration == "10月13日 · 18分钟")
+        #expect(evidence?.recording?.fileName == "chorus.m4a")
+        #expect(evidence?.recordingLabel == "录音 02:04")
+
+        let quiet = item(projectId: pid, dayKey: "2026-10-02", createdAt: date(2026, 10, 2), durationSeconds: 300, note: "只有字", title: "无录音")
+        let textOnly = LastPracticeEvidence.latest(projectId: pid, items: [quiet])
+        #expect(textOnly?.recording == nil)
+        #expect(textOnly?.recordingLabel == nil)
+        #expect(textOnly?.reflection == "只有字")
+    }
+
+    @Test func noteProjectionIsReverseChronologicalAndDropsEmptyNotes() {
+        let pid = UUID()
+        let other = UUID()
+        let items = [
+            item(projectId: pid, dayKey: "2026-10-01", createdAt: date(2026, 10, 1, 9), durationSeconds: 60, note: "最早"),
+            item(projectId: pid, dayKey: "2026-10-12", createdAt: date(2026, 10, 12, 8), durationSeconds: 0, note: "   "),
+            item(projectId: pid, dayKey: "2026-10-03", createdAt: date(2026, 10, 3, 9), durationSeconds: 60, note: "中间", recordingCount: 1),
+            item(projectId: pid, dayKey: "2026-10-13", createdAt: date(2026, 10, 13, 9), durationSeconds: 60, note: "最新"),
+            item(projectId: pid, dayKey: "2026-10-11", createdAt: date(2026, 10, 11, 9), durationSeconds: 60, isDeleted: true, note: "删掉"),
+            item(projectId: other, dayKey: "2026-10-14", createdAt: date(2026, 10, 14, 9), durationSeconds: 60, note: "别人的"),
+            item(projectId: pid, dayKey: "2026-10-02", createdAt: date(2026, 10, 2, 9), durationSeconds: 60, note: "第二条"),
+        ]
+        let notes = ProjectNoteProjection.entries(projectId: pid, items: items)
+        #expect(notes.map(\.body) == ["最新", "中间", "第二条", "最早"])
+        #expect(notes.first { $0.body == "中间" }?.hasRecording == true)
+        #expect(notes.first { $0.body == "最新" }?.hasRecording == false)
+        #expect(ProjectNoteProjection.preview(projectId: pid, items: items).map(\.body) == ["最新", "中间", "第二条"])
+        #expect(ProjectNoteProjection.footer == "ⓘ 笔记来自每次练习，可在原练习记录中修改")
+    }
+
+    @Test func benchmarkUsesStageVersionThenEarliestAndRefusesASingleRecording() {
+        let pid = UUID()
+        let firstId = UUID()
+        let stageId = UUID()
+        let newestId = UUID()
+        let firstAt = date(2026, 10, 3, 10)
+        let stageAt = date(2026, 10, 8, 10)
+        let newestAt = date(2026, 10, 13, 10)
+        let items = [
+            item(
+                id: newestId, projectId: pid, dayKey: "2026-10-13", createdAt: newestAt, durationSeconds: 60,
+                recordingCount: 1, title: "最近",
+                recordings: [clip(fileName: "new.m4a", duration: 90, createdAt: newestAt)]
+            ),
+            item(
+                id: stageId, projectId: pid, dayKey: "2026-10-08", createdAt: stageAt, durationSeconds: 60,
+                recordingCount: 1, title: "阶段",
+                recordings: [clip(fileName: "stage.m4a", duration: 80, createdAt: stageAt)]
+            ),
+            item(
+                id: firstId, projectId: pid, dayKey: "2026-10-03", createdAt: firstAt, durationSeconds: 60,
+                recordingCount: 1, title: "最初",
+                recordings: [clip(fileName: "first.m4a", duration: 70, createdAt: firstAt)]
+            ),
+        ]
+        guard case .ready(let explicitStage, let explicitRecent) = AudioBenchmarkVersion.resolve(
+            stageVersionItemId: stageId, projectId: pid, items: items
+        ) else {
+            Issue.record("Expected explicit stage pair")
+            return
+        }
+        #expect(explicitStage.itemId == stageId)
+        #expect(explicitRecent.itemId == newestId)
+
+        guard case .ready(let fallbackStage, let fallbackRecent) = AudioBenchmarkVersion.resolve(
+            stageVersionItemId: nil, projectId: pid, items: items
+        ) else {
+            Issue.record("Expected earliest fallback")
+            return
+        }
+        #expect(fallbackStage.itemId == firstId)
+        #expect(fallbackRecent.itemId == newestId)
+        #expect(AudioBenchmarkVersion.spanLine(stageDayKey: "2026-10-03", recentDayKey: "2026-10-13") == "10月3日 阶段版 → 10月13日 最近录音")
+
+        let alone = [items[0]]
+        #expect(AudioBenchmarkVersion.resolve(stageVersionItemId: nil, projectId: pid, items: alone) == .needsAnotherRecording)
+        #expect(AudioBenchmarkVersion.resolve(stageVersionItemId: nil, projectId: pid, items: []) == .unavailable)
+
+        let missingStage = AudioBenchmarkVersion.resolve(stageVersionItemId: UUID(), projectId: pid, items: items)
+        guard case .ready(let fellBack, _) = missingStage else {
+            Issue.record("Missing stage id should fall back to the earliest recording")
+            return
+        }
+        #expect(fellBack.itemId == firstId)
+
+        guard case .ready(let overridden, let other) = AudioBenchmarkVersion.resolve(
+            stageVersionItemId: nil,
+            projectId: pid,
+            items: items,
+            overrideStageItemId: newestId,
+            overrideRecentItemId: stageId
+        ) else {
+            Issue.record("Override should stay in memory")
+            return
+        }
+        #expect(overridden.itemId == newestId)
+        #expect(other.itemId == stageId)
+        #expect(AudioBenchmarkVersion.needsAnotherCopy == "再记录一次即可开启对照")
+    }
+
+    @Test func observationParsesClocksDegradesOfflineAndSeekFeedsTheHandoff() {
+        let online = AIAudioObservationRules.observe(
+            stageNote: "副歌在 00:42 停顿",
+            recentNote: "00:38 就连贯了",
+            stageDuration: 124,
+            recentDuration: 90,
+            audioAvailable: true
+        )
+        #expect(online.conclusion == "最近这一次更连贯，阶段版里还有明显停顿。")
+        #expect(online.usesAudioTimestamps)
+        #expect(online.stageCue.seconds == 42)
+        #expect(online.recentCue.seconds == 38)
+        #expect(online.stageCue.caption == "阶段版 00:42")
+        #expect(online.recentCue.caption == "最近 00:38")
+        #expect(!online.conclusion.contains("%"))
+
+        let offline = AIAudioObservationRules.observe(
+            stageNote: "这里有停顿",
+            recentNote: "后面连贯了一些",
+            stageDuration: 0,
+            recentDuration: 0,
+            audioAvailable: false
+        )
+        #expect(!offline.usesAudioTimestamps)
+        #expect(offline.stageCue.seconds == nil)
+        #expect(offline.recentCue.seconds == nil)
+        #expect(!offline.conclusion.isEmpty)
+        #expect(offline.conclusion.contains("停顿"))
+        #expect(offline.conclusion.contains("连贯"))
+
+        var playback = AudioComparisonPlayback()
+        playback.seekAndPlay(.a, seconds: online.stageCue.seconds ?? -1, duration: 124)
+        #expect(playback.playing == .a)
+        #expect(playback.positionA == 42)
+
+        let pid = UUID()
+        let todayId = UUID()
+        let decision = ProjectPracticeStateHandoff.decide(
+            project: project(id: pid, createdAt: date(2026, 10, 1), currentFocus: "副歌"),
+            todayKey: "2026-10-15",
+            items: [item(id: todayId, projectId: pid, dayKey: "2026-10-15", createdAt: date(2026, 10, 15, 9), durationSeconds: 0)],
+            completedItemIds: []
+        )
+        #expect(decision.buttonLabel == "继续这次练习")
+        #expect(decision.action == .resume(todayId))
+        #expect(ProjectNoteProjection.comparisonCitation(cited: 2, total: 5) == "本次对比引用 2 条 · 项目共 5 条")
     }
 }

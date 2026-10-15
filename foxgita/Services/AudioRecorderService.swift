@@ -192,6 +192,57 @@ final class AudioPlayerService {
         }
     }
 
+    var playbackFraction: Double {
+        guard let audioPlayer, audioPlayer.duration > 0, playingId != nil else { return 0 }
+        return min(1, audioPlayer.currentTime / audioPlayer.duration)
+    }
+
+    var playbackSeconds: TimeInterval {
+        guard playingId != nil else { return 0 }
+        return audioPlayer?.currentTime ?? 0
+    }
+
+    /// Starts `id` and stops whatever else was playing. Pass `from` to seek first.
+    func play(url: URL, id: String, from seconds: TimeInterval?) {
+        if playingId == id, let audioPlayer {
+            if let seconds {
+                let upper = audioPlayer.duration > 0 ? audioPlayer.duration : max(0, seconds)
+                audioPlayer.currentTime = min(max(0, seconds), upper)
+            }
+            if !audioPlayer.isPlaying {
+                audioPlayer.play()
+            }
+            return
+        }
+        stop()
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        let ext = url.pathExtension.lowercased()
+        if ext == "mov" || ext == "mp4" || ext == "m4v" {
+            return
+        }
+        do {
+            try AudioSessionCoordinator.shared.acquire(.playback)
+            let player = try AVAudioPlayer(contentsOf: url)
+            if let seconds {
+                let upper = player.duration > 0 ? player.duration : max(0, seconds)
+                player.currentTime = min(max(0, seconds), upper)
+            }
+            player.play()
+            audioPlayer = player
+            playingId = id
+        } catch {
+            playingId = nil
+            AudioSessionCoordinator.shared.release(.playback)
+        }
+    }
+
+    func finishIfNeeded() {
+        guard let audioPlayer, playingId != nil, audioPlayer.duration > 0 else { return }
+        if !audioPlayer.isPlaying, audioPlayer.currentTime >= audioPlayer.duration - 0.05 {
+            stop()
+        }
+    }
+
     func stop() {
         audioPlayer?.stop()
         audioPlayer = nil

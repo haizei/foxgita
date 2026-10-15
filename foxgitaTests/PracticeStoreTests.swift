@@ -2170,4 +2170,61 @@ struct PracticeStoreTests {
         #expect(tombstone.stageVersionItemId == item.id)
         #expect(try repo.practiceItem(id: item.id, profileId: item.profileId)?.projectId == nil)
     }
+
+    @Test func unfinishedTodayItemIsResumedAndNoteEditsShowInTheProjection() throws {
+        let (store, repo, _) = makeStore()
+        store.prepare()
+        let profileId = UUID(uuidString: try #require(repo.activeProfile()?.id))!
+        let cal = shanghai()
+        let now = date(2026, 10, 15, calendar: cal)
+        let project = Project(profileId: profileId, name: "知足", goal: "完整弹唱", currentFocus: "副歌节奏")
+        try repo.insertProject(project)
+        try repo.save()
+        let created = try store.createTodayPracticeItem(projectId: project.id, now: now, calendar: cal)
+        let snapshots = try store.practiceItemSnapshots(profileId: profileId)
+        let decision = ProjectPracticeStateHandoff.decide(
+            project: ProjectRules.snapshot(from: project),
+            todayKey: "2026-10-15",
+            items: snapshots,
+            completedItemIds: []
+        )
+        #expect(created.projectId == project.id)
+        #expect(created.title == "副歌节奏")
+        #expect(created.durationSeconds == 0)
+        #expect(decision.action == .resume(created.id))
+
+        let resumed = try store.openTodayPractice(
+            projectId: project.id,
+            now: now,
+            calendar: cal,
+            completedItemIds: []
+        )
+        #expect(resumed.created == false)
+        #expect(resumed.item.id == created.id)
+        let projectItems = try repo.practiceItems(profileId: profileId).filter { $0.projectId == project.id }
+        #expect(projectItems.count == 1)
+
+        let another = try store.openTodayPractice(
+            projectId: project.id,
+            now: now,
+            calendar: cal,
+            completedItemIds: [created.id]
+        )
+        #expect(another.created == true)
+        #expect(another.item.id != created.id)
+
+        try store.savePracticeItem(id: created.id, durationSeconds: 60, note: "副歌还是会停", now: now)
+        let noted = ProjectNoteProjection.entries(
+            projectId: project.id,
+            items: try store.practiceItemSnapshots(profileId: profileId)
+        )
+        #expect(noted.map(\.body) == ["副歌还是会停"])
+
+        try store.savePracticeItem(id: created.id, durationSeconds: 60, note: "  ", now: now)
+        let cleared = ProjectNoteProjection.entries(
+            projectId: project.id,
+            items: try store.practiceItemSnapshots(profileId: profileId)
+        )
+        #expect(cleared.isEmpty)
+    }
 }
