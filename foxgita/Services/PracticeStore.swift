@@ -112,7 +112,8 @@ final class PracticeStore {
                         durationSec: $0.durationSec,
                         createdAt: $0.createdAt
                     )
-                }
+                },
+            originId: item.originId
         )
     }
 

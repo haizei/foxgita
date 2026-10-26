@@ -9,6 +9,7 @@ import SwiftUI
 struct PracticeView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
+    @Environment(PracticePrograms.self) private var programs
     @Environment(\.scenePhase) private var scenePhase
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var practiceItems: [PracticeItem]
@@ -63,7 +64,7 @@ struct PracticeView: View {
     private var homeState: PracticeHomeState {
         PracticeHomeState.make(
             selectedDayKey: PracticeDayKey.make(from: selectedDay, calendar: calendar),
-            allItems: allSnapshots
+            allItems: allSnapshots.filter { !($0.originId?.hasPrefix("program.routine.") ?? false) }
         )
     }
 
@@ -77,7 +78,7 @@ struct PracticeView: View {
         if isSelectedFuture {
             return String(localized: "先练今天")
         }
-        let minutes = minutesFromSeconds(homeState.totalDurationSeconds)
+        let minutes = isSelectedToday ? homeState.items.reduce(0) { $0 + $1.targetMin } : minutesFromSeconds(homeState.totalDurationSeconds)
         return String(localized: "\(homeState.items.count) 项 · \(minutes) 分钟")
     }
 
@@ -93,6 +94,7 @@ struct PracticeView: View {
         NavigationStack(path: $router.practicePath) {
             ZStack(alignment: .bottomTrailing) {
                 PageBackground()
+                ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         VStack(alignment: .leading, spacing: 2) {
@@ -105,11 +107,15 @@ struct PracticeView: View {
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
 
+                        if isSelectedToday {
+                            ProgramHero(checkedDays: Set(allSnapshots.filter(PracticeItemRules.isEffective).map(\.practiceDayKey)))
+                        } else {
                         StreakCard(
                             checkedInDayKeys: homeState.checkedInDayKeys,
                             selectedDay: $selectedDay,
                             weekAnchor: $weekAnchor
                         )
+                        }
 
                         justCompletedCard
 
@@ -120,12 +126,26 @@ struct PracticeView: View {
                             Text(sectionMeta)
                                 .font(.system(size: 12))
                                 .foregroundStyle(GitaTheme.textSecondary)
+                            if isSelectedToday {
+                                Button { showSheet = true } label: { Image(systemName: "plus.circle.fill") }
+                                    .accessibilityLabel("添加练习")
+                                    .accessibilityIdentifier("practice.start-button")
+                            }
                         }
 
                         taskList
+                        if isSelectedToday { ProgramRecommendationsView(snapshots: homeState.items) }
                     }
                     .padding(.horizontal, GitaTheme.pagePadding)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, isSelectedToday ? 112 : 24)
+                }
+                .task(id: programs.focusedChecklistItemID) {
+                    guard let id = programs.focusedChecklistItemID else { return }
+                    await Task.yield()
+                    guard !Task.isCancelled else { return }
+                    proxy.scrollTo(id, anchor: .center)
+                    programs.focusedChecklistItemID = nil
+                }
                 }
 
                 if let toast {
@@ -138,18 +158,7 @@ struct PracticeView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelectedToday {
-                    Button {
-                        showSheet = true
-                    } label: {
-                        Text("开始练习")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(GitaTheme.brandOn)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 54)
-                            .background(GitaTheme.brand500, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityIdentifier("practice.start-button")
+                    ProgramChecklistButton(snapshots: homeState.items)
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
                     .padding(.bottom, 12)
@@ -159,6 +168,9 @@ struct PracticeView: View {
             .onAppear {
                 applyTodaySnap()
                 clearStaleJustCompletedIfNeeded()
+            }
+            .task(id: currentProfileId) {
+                if let id = currentProfileId { programs.load(profileID: id) }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active { applyTodaySnap() }
@@ -346,13 +358,14 @@ struct PracticeView: View {
         } else {
             ForEach(Array(homeState.items.enumerated()), id: \.element.id) { index, item in
                 todayOrPastRow(item, index: index)
+                    .id(item.id)
             }
         }
     }
 
     @ViewBuilder
     private func todayOrPastRow(_ item: PracticeItemSnapshot, index: Int) -> some View {
-        let cta = PracticeHomeState.ctaTitle(
+        let cta = isSelectedToday && programs.isChecklistCompleted(item.id) ? "已完成" : PracticeHomeState.ctaTitle(
             isSelectedToday: isSelectedToday,
             durationSeconds: item.durationSeconds
         )

@@ -20,6 +20,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
     let categoryRaw: String
     let subtitle: String
     let targetMin: Int
+    let originId: String?
     let recordings: [PracticeRecordingClip]
 
     init(
@@ -35,7 +36,8 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         categoryRaw: String = "chord",
         subtitle: String = "",
         targetMin: Int = 0,
-        recordings: [PracticeRecordingClip] = []
+        recordings: [PracticeRecordingClip] = [],
+        originId: String? = nil
     ) {
         self.id = id
         self.practiceDayKey = practiceDayKey
@@ -50,6 +52,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         self.subtitle = subtitle
         self.targetMin = targetMin
         self.recordings = recordings
+        self.originId = originId
     }
 }
 

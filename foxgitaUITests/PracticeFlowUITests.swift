@@ -21,12 +21,13 @@ final class PracticeFlowUITests: XCTestCase {
     func testLaunchShowsTodayPractice() {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天只练一点点"].exists)
-        let startPractice = app.buttons["practice.start-button"]
+        let startPractice = app.buttons["program.start-checklist"]
         XCTAssertTrue(startPractice.exists)
         XCTAssertGreaterThan(startPractice.frame.width, app.frame.width * 0.75)
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
         XCTAssertFalse(app.staticTexts["和弦转换"].exists)
-        XCTAssertTrue(app.descendants(matching: .any)["week-pager"].exists)
+        XCTAssertTrue(app.staticTexts["通用方案"].exists)
+        XCTAssertTrue(app.buttons["practice.start-button"].exists)
         let emptyToday = app.staticTexts["今天还没加练习"].exists
         // Today's cards read "N 分钟" (target); "已练 N 分钟" only appears on past days.
         let hasPracticedRow = app.descendants(matching: .any).matching(
@@ -58,7 +59,7 @@ final class PracticeFlowUITests: XCTestCase {
         field.typeText("知足前奏")
 
         app.buttons["创建练习"].tap()
-        XCTAssertTrue(app.staticTexts["节拍器"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.descendants(matching: .any)["metronome.display-card"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["完成"].exists || app.staticTexts["完成本次练习"].exists)
     }
 

@@ -23,7 +23,12 @@ struct foxgitaApp: App {
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV19.self)
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+        #if DEBUG
+        let isDNAProgramsUITest = ProcessInfo.processInfo.arguments.contains("-DNAProgramsUITesting")
+        #else
+        let isDNAProgramsUITest = false
+        #endif
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isDNAProgramsUITest)
         do {
             let container = try ModelContainer(
                 for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]

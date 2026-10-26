@@ -33,6 +33,7 @@ enum RecordPlayback {
 struct RecordView: View {
     @Environment(AppRouter.self) private var router
     @Environment(PracticeStore.self) private var store
+    @Environment(PracticePrograms.self) private var programs
     @Query(filter: #Predicate<PracticeItem> { $0.deletedAt == nil })
     private var practiceItems: [PracticeItem]
     @Query(filter: #Predicate<LocalProfile> { $0.isActive == true })
@@ -210,6 +211,7 @@ struct RecordView: View {
 
     @ViewBuilder
     private var practicePane: some View {
+        ProgramRecordSection(snapshots: allSnapshots)
         weekNavigator
         if !timeline.hasAnyEffectiveItem {
             emptyState(
@@ -650,6 +652,11 @@ struct RecordView: View {
                 }
                 .buttonStyle(.plain)
 
+                if let entry = programs.entryLabel(for: item.id) {
+                    Text("来源：" + entry)
+                        .font(GitaFont.caption())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
                 if let projectId = item.projectId, let projectName {
                     Button {
                         openProjectDetail(projectId)
