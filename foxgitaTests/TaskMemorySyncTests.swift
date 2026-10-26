@@ -7,7 +7,7 @@ import Testing
 @MainActor
 struct TaskMemorySyncTests {
     private func make() throws -> (TaskMemorySync, SwiftDataMemoryRepository, ModelContext, LocalProfile) {
-        let schema = Schema(versionedSchema: GitaSchemaV14.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -120,7 +120,7 @@ struct TaskMemorySyncTests {
     }
 
     @Test func backfillContinuesAfterNonInputUpsertError() throws {
-        let schema = Schema(versionedSchema: GitaSchemaV14.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]
@@ -178,7 +178,7 @@ struct TaskMemorySyncTests {
     private func makeWired(consent: MemoryConsentState = .enabled) throws -> (
         PracticeStore, MemoryStore, SwiftDataMemoryRepository, LocalProfile
     ) {
-        let schema = Schema(versionedSchema: GitaSchemaV14.self)
+        let schema = Schema(versionedSchema: GitaSchemaV19.self)
         let container = try ModelContainer(
             for: schema,
             configurations: [ModelConfiguration(schema: schema, isStoredInMemoryOnly: true)]

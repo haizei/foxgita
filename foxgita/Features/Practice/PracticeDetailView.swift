@@ -594,23 +594,17 @@ struct PracticeDetailView: View {
             }
 
             projectCapsule(item)
-            practiceProjectAssociation(item)
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    timerCard
+
                     let subtitle = isHistoricalPractice ? draftSubtitle : item.subtitle
                     if isHistoricalPractice,
                        !subtitle.isEmpty,
                        !AIPracticePresentation.isAIGenerated(subtitle: subtitle) {
                         TextField("练习说明", text: $draftSubtitle, axis: .vertical)
                             .lineLimit(1...3)
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textSecondary)
-                    } else if !subtitle.isEmpty,
-                              !AIPracticePresentation.isAIGenerated(subtitle: subtitle) {
-                        Text(subtitle)
                             .font(.system(size: 12))
                             .foregroundStyle(GitaTheme.textSecondary)
                     }
@@ -652,7 +646,6 @@ struct PracticeDetailView: View {
                     if tempoController.isRampActive || tempoController.rampState == .interrupted {
                         rampStatusBanner
                     }
-                    timerCard
                     if PracticeDetailState.shouldAllowContentEditing(mode: mode) || !steps.isEmpty {
                         stepsCard
                     }

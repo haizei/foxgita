@@ -2,6 +2,48 @@ import Foundation
 import Testing
 @testable import foxgita
 
+// This suite runs alongside VisionPracticeClientTests; keep response handlers isolated.
+private final class NextSessionMockURLProtocol: URLProtocol, @unchecked Sendable {
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var _handler: (@Sendable (URLRequest) throws -> (Int, Data))?
+
+    static var handler: (@Sendable (URLRequest) throws -> (Int, Data))? {
+        get {
+            lock.lock(); defer { lock.unlock() }
+            return _handler
+        }
+        set {
+            lock.lock(); defer { lock.unlock() }
+            _handler = newValue
+        }
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+
+    override func startLoading() {
+        let handler = Self.handler
+        guard let handler else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        do {
+            let (status, data) = try handler(request)
+            let response = HTTPURLResponse(
+                url: request.url!, statusCode: status,
+                httpVersion: nil, headerFields: ["Content-Type": "application/json"]
+            )!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: data)
+            client?.urlProtocolDidFinishLoading(self)
+        } catch {
+            client?.urlProtocol(self, didFailWithError: error)
+        }
+    }
+
+    override func stopLoading() {}
+}
+
 final class InvocationLogSpy: AIInvocationRecording, @unchecked Sendable {
     private let lock = NSLock()
     private(set) var inputs: [AIInvocationRecordInput] = []
@@ -17,7 +59,7 @@ struct NextSessionClientTests {
         memory: any MemoryContextProviding = EmptyMemoryContext()
     ) -> NextSessionClient {
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
+        config.protocolClasses = [NextSessionMockURLProtocol.self]
         return NextSessionClient(
             session: URLSession(configuration: config),
             registry: registry,
@@ -92,12 +134,12 @@ struct NextSessionClientTests {
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         var bodyJSON: [String: Any] = [:]
-        MockURLProtocol.handler = { req in
+        NextSessionMockURLProtocol.handler = { req in
             let text = Self.requestBodyString(req)
             bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
             return (200, data)
         }
-        defer { MockURLProtocol.handler = nil }
+        defer { NextSessionMockURLProtocol.handler = nil }
 
         let draft = try await makeClient().generateDraft(
             baseURL: "https://api.openai.com/v1",
@@ -130,12 +172,12 @@ struct NextSessionClientTests {
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
         var bodyJSON: [String: Any] = [:]
-        MockURLProtocol.handler = { req in
+        NextSessionMockURLProtocol.handler = { req in
             let text = Self.requestBodyString(req)
             bodyJSON = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
             return (200, data)
         }
-        defer { MockURLProtocol.handler = nil }
+        defer { NextSessionMockURLProtocol.handler = nil }
 
         let client = makeClient(
             memory: StubMemoryContext(text: "<<<BACKGROUND_MEMORY>>>\n- [goal] 当前目标：《晴天》前奏\n<<<END_BACKGROUND_MEMORY>>>")
@@ -159,11 +201,11 @@ struct NextSessionClientTests {
 
     @Test func generateDraftUnregisteredSkillSendsNoRequest() async {
         var calls = 0
-        MockURLProtocol.handler = { _ in
+        NextSessionMockURLProtocol.handler = { _ in
             calls += 1
             return (200, Data())
         }
-        defer { MockURLProtocol.handler = nil }
+        defer { NextSessionMockURLProtocol.handler = nil }
         let client = makeClient(registry: SkillRegistry(skills: []))
         await #expect(throws: VisionPracticeError.unregisteredSkill) {
             try await client.generateDraft(
@@ -188,10 +230,10 @@ struct NextSessionClientTests {
             ]]
         ]
         let data = try JSONSerialization.data(withJSONObject: payload)
-        MockURLProtocol.handler = { _ in (200, data) }
-        defer { MockURLProtocol.handler = nil }
+        NextSessionMockURLProtocol.handler = { _ in (200, data) }
+        defer { NextSessionMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
+        config.protocolClasses = [NextSessionMockURLProtocol.self]
         let client = NextSessionClient(
             session: URLSession(configuration: config),
             log: spy
@@ -214,10 +256,10 @@ struct NextSessionClientTests {
     @Test func unregisteredSkillRecordsFailureAndSendsNoRequest() async {
         let spy = InvocationLogSpy()
         var calls = 0
-        MockURLProtocol.handler = { _ in calls += 1; return (200, Data()) }
-        defer { MockURLProtocol.handler = nil }
+        NextSessionMockURLProtocol.handler = { _ in calls += 1; return (200, Data()) }
+        defer { NextSessionMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
+        config.protocolClasses = [NextSessionMockURLProtocol.self]
         let client = NextSessionClient(
             session: URLSession(configuration: config),
             registry: SkillRegistry(skills: []),
@@ -239,10 +281,10 @@ struct NextSessionClientTests {
 
     @Test func generateDraftRecordsCancelledAsCancelledNotTransport() async {
         let spy = InvocationLogSpy()
-        MockURLProtocol.handler = { _ in throw URLError(.cancelled) }
-        defer { MockURLProtocol.handler = nil }
+        NextSessionMockURLProtocol.handler = { _ in throw URLError(.cancelled) }
+        defer { NextSessionMockURLProtocol.handler = nil }
         let config = URLSessionConfiguration.ephemeral
-        config.protocolClasses = [MockURLProtocol.self]
+        config.protocolClasses = [NextSessionMockURLProtocol.self]
         let client = NextSessionClient(
             session: URLSession(configuration: config),
             log: spy
