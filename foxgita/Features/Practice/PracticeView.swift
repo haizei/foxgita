@@ -123,9 +123,11 @@ struct PracticeView: View {
                             Text(sectionTitle)
                                 .font(.system(size: 18, weight: .bold))
                             Spacer()
-                            Text(sectionMeta)
-                                .font(.system(size: 12))
-                                .foregroundStyle(GitaTheme.textSecondary)
+                            if !isSelectedToday {
+                                Text(sectionMeta)
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(GitaTheme.textSecondary)
+                            }
                             if isSelectedToday {
                                 Button { showSheet = true } label: { Image(systemName: "plus.circle.fill") }
                                     .accessibilityLabel("添加练习")
