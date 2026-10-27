@@ -135,35 +135,6 @@ struct ProgramRecommendationsView: View {
     }
 }
 
-struct ProgramChecklistButton: View {
-    @Environment(PracticePrograms.self) private var programs
-    @Environment(PracticeStore.self) private var store
-    let snapshots: [PracticeItemSnapshot]
-    @State private var showingTraining = false
-
-    var body: some View {
-        VStack(spacing: 6) {
-            if let budget = programs.preferences?.minutes {
-                let total = snapshots.reduce(0) { $0 + $1.targetMin }
-                if total > budget {
-                    Text("超出建议预算 \(total - budget) 分钟，仍可开始").font(.caption).foregroundStyle(GitaTheme.brand500)
-                }
-            }
-            Button {
-                showingTraining = programs.beginChecklist(snapshots, store: store)
-            } label: {
-                Text("开始今日练习").font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(GitaTheme.brandOn).frame(maxWidth: .infinity).frame(height: 54)
-                    .background(GitaTheme.brand500, in: Capsule())
-            }
-            .accessibilityIdentifier("program.start-checklist")
-        }
-        .sheet(isPresented: $showingTraining) {
-            NavigationStack { ProgramTrainingView(onClose: { showingTraining = false }) }
-        }
-    }
-}
-
 private struct ProgramSheet: View {
     @Environment(PracticePrograms.self) private var programs
     @Environment(PracticeStore.self) private var store

@@ -39,24 +39,20 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["已保存方案"].waitForExistence(timeout: 5))
     }
 
-    func testCandidatesDeduplicateAndChecklistKeepsActualPartialProgress() {
+    func testCandidatesDeduplicateAndFooterOpensCreationWithExistingPractice() {
         launchWithPreferences()
         tap("program.add.dna.improv")
-        XCTAssertTrue(app.staticTexts["1 项 · 9 分钟"].exists)
+        XCTAssertEqual(app.buttons["program.add.dna.improv"].label, "已添加")
         tap("program.add.dna.improv")
-        XCTAssertTrue(app.staticTexts["1 项 · 9 分钟"].exists)
+        let rows = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH '即兴演奏，'"))
+        XCTAssertEqual(rows.count, 1)
         tap("program.add.dna.expression")
-        tap("program.start-checklist")
-        XCTAssertTrue(app.staticTexts["今日清单"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["第 1 / 2 段"].exists)
-        tap("program.test-minute")
-        tap("program.complete-stage")
-        tap("program.skip-stage")
-        XCTAssertTrue(app.staticTexts["部分完成"].exists)
-        XCTAssertEqual(app.staticTexts["program.summary-completed"].label, "完成 1 / 2 段")
-        XCTAssertTrue(app.staticTexts["program.summary-seconds"].label.contains("60 秒"))
-        tap("program.records")
-        XCTAssertTrue(app.staticTexts["方案与清单训练"].waitForExistence(timeout: 5))
+        tap("practice.create-button")
+        XCTAssertTrue(app.textFields["practice.create-name"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["确认并创建练习"].exists)
+        XCTAssertFalse(app.buttons["program.complete-stage"].exists)
+        tap("关闭")
+        XCTAssertTrue(app.buttons["practice.create-button"].waitForExistence(timeout: 5))
     }
 
     func testRoutineAggregatesFourFactsWithoutDuplicatingDuration() {
@@ -86,17 +82,9 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         tap("program.test-five-minutes")
         XCTAssertEqual(app.staticTexts["program.elapsed"].label, "01:00")
         tap("program.training-home")
-        tap("program.start-checklist")
-        XCTAssertTrue(app.staticTexts["第 1 / 1 段"].exists)
-        tap("program.test-half-minute")
-        tap("program.end")
-        XCTAssertTrue(app.staticTexts["program.summary-seconds"].label.contains("30 秒"))
-        tap("program.training-home")
-        tap("program.start-checklist")
-        tap("program.test-minute")
-        tap("program.end")
-        XCTAssertTrue(app.staticTexts["program.summary-seconds"].label.contains("60 秒"))
-        tap("program.training-home")
+        tap("practice.create-button")
+        XCTAssertTrue(app.textFields["practice.create-name"].waitForExistence(timeout: 5))
+        tap("关闭")
         tap("program.start-routine")
         XCTAssertEqual(app.staticTexts["program.elapsed"].label, "01:00")
         tap("program.pause-resume")
@@ -111,8 +99,6 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         XCTAssertEqual(Set(details.allElementsBoundByIndex.map(\.label)).count, 2)
         tap("program.records")
         XCTAssertTrue(app.staticTexts["方案与清单训练"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["部分完成 · 30 秒"].exists)
-        XCTAssertTrue(app.staticTexts["部分完成 · 60 秒"].exists)
         XCTAssertTrue(app.staticTexts["部分完成 · 120 秒"].exists)
     }
 
@@ -154,14 +140,14 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         tap("dna.submit")
         tap("program.close")
         XCTAssertTrue(app.buttons["program.details"].label.contains("我的保存方案"))
-        XCTAssertTrue(app.staticTexts["2 项 · 16 分钟"].exists)
+        XCTAssertFalse(app.staticTexts["2 项 · 16 分钟"].exists)
         tap("program.add.dna.vocabulary")
-        XCTAssertTrue(app.staticTexts["3 项 · 23 分钟"].exists)
+        XCTAssertEqual(app.buttons["program.add.dna.vocabulary"].label, "已添加")
         tap("program.add.dna.vocabulary")
-        XCTAssertTrue(app.staticTexts["3 项 · 23 分钟"].exists)
+        XCTAssertEqual(app.buttons["program.add.dna.vocabulary"].label, "已添加")
         tap("program.add.dna.chord")
-        XCTAssertTrue(app.staticTexts["4 项 · 32 分钟"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.staticTexts["超出建议预算 2 分钟，仍可开始"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["program.add.dna.chord"].label, "已添加")
+        XCTAssertTrue(app.buttons["practice.create-button"].exists)
         tap("program.start-routine")
         XCTAssertTrue(app.staticTexts["即兴演奏"].exists)
         XCTAssertEqual(app.staticTexts["program.elapsed"].label, "01:00")
@@ -178,7 +164,7 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         let element = app.descendants(matching: .any)[identifier].firstMatch
         let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : (app.scrollViews.allElementsBoundByIndex.last ?? app.scrollViews.firstMatch)
         for _ in 0..<7 {
-            let footer = app.buttons["program.start-checklist"]
+            let footer = app.buttons["practice.create-button"]
             let homeControl = identifier.hasPrefix("program.add.") || ["program.preferences", "program.draft", "program.details", "program.start-routine"].contains(identifier)
             let coveredByFooter = homeControl && footer.exists && element.exists && element.frame.maxY >= footer.frame.minY - 16
             if element.exists && element.isHittable && !coveredByFooter { break }

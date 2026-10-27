@@ -160,7 +160,15 @@ struct PracticeView: View {
             }
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if isSelectedToday {
-                    ProgramChecklistButton(snapshots: homeState.items)
+                    Button { showSheet = true } label: {
+                        Text("创建练习")
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(GitaTheme.brandOn)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(GitaTheme.brand500, in: Capsule())
+                    }
+                    .accessibilityIdentifier("practice.create-button")
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
                     .padding(.bottom, 12)

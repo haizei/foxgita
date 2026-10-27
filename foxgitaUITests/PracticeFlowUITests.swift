@@ -21,7 +21,7 @@ final class PracticeFlowUITests: XCTestCase {
     func testLaunchShowsTodayPractice() {
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天只练一点点"].exists)
-        let startPractice = app.buttons["program.start-checklist"]
+        let startPractice = app.buttons["practice.create-button"]
         XCTAssertTrue(startPractice.exists)
         XCTAssertGreaterThan(startPractice.frame.width, app.frame.width * 0.75)
         XCTAssertFalse(app.staticTexts["指尖热身"].exists)
@@ -48,8 +48,9 @@ final class PracticeFlowUITests: XCTestCase {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "知足前奏")
         }
-        let add = app.buttons["practice.start-button"]
+        let add = app.buttons["practice.create-button"]
         XCTAssertTrue(add.waitForExistence(timeout: 5))
+        XCTAssertEqual(add.label, "创建练习")
         add.tap()
         XCTAssertTrue(app.staticTexts["推荐练习"].waitForExistence(timeout: 5))
 
