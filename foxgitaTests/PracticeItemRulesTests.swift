@@ -87,6 +87,15 @@ struct PracticeItemRulesTests {
         #expect(PracticeItemRules.totalDuration(for: "2026-08-16", in: items) == 90)
     }
 
+    @Test func imageOnlyPracticeItemIsEffective() {
+        let record = PracticeItemSnapshot(
+            id: UUID(), practiceDayKey: "2026-10-18", createdAt: Date(),
+            title: "图片笔记", durationSeconds: 0, isDeleted: false,
+            imageCount: 1
+        )
+        #expect(PracticeItemRules.isEffective(record))
+    }
+
     @Test func checkedInKeysKeepZeroDurationAndDropDeleted() {
         let t0 = date(year: 2026, month: 8, day: 16, hour: 8)
         let items = [

@@ -9,7 +9,7 @@ import Foundation
 @Observable
 final class AudioRecorderService {
     /// A finished take that has not been attached to a session yet.
-    struct Clip: Identifiable, Sendable {
+    nonisolated struct Clip: Identifiable, Sendable {
         let id: String
         let fileName: String
         let bytes: Int
@@ -17,14 +17,18 @@ final class AudioRecorderService {
         let createdAt: Date
         let label: String
 
-        var url: URL { RecordingStore.url(for: fileName) }
+        @MainActor var url: URL { RecordingStore.url(for: fileName) }
     }
 
     private(set) var isRecording = false
+    private(set) var isStarting = false
     private(set) var isPaused = false
     private(set) var elapsedSec = 0
     private(set) var lastError: String?
     private(set) var pending: [Clip] = []
+    private(set) var inputLevels: [Float] = []
+
+    private enum CaptureError: Error { case startFailed }
 
     var elapsedDisplay: String {
         String(format: "%02d:%02d", elapsedSec / 60, elapsedSec % 60)
@@ -33,10 +37,18 @@ final class AudioRecorderService {
     @ObservationIgnored private var recorder: AVAudioRecorder?
     @ObservationIgnored private var currentFile: String?
     @ObservationIgnored private var ticker: Timer?
+    @ObservationIgnored private var startGeneration = 0
 
     func start(label: String = "") async {
+        guard !isRecording, !isStarting else { return }
+        isStarting = true
+        startGeneration += 1
+        let attempt = startGeneration
+        defer { if startGeneration == attempt { isStarting = false } }
         lastError = nil
-        guard await requestMic() else {
+        let authorized = await requestMic()
+        guard startGeneration == attempt, !Task.isCancelled else { return }
+        guard authorized else {
             lastError = String(localized: "需要麦克风权限才能录音")
             return
         }
@@ -56,17 +68,26 @@ final class AudioRecorderService {
         ]
         do {
             let recorder = try AVAudioRecorder(url: RecordingStore.url(for: name), settings: settings)
-            recorder.record()
+            recorder.isMeteringEnabled = true
+            guard recorder.prepareToRecord(), recorder.record() else { throw CaptureError.startFailed }
             self.recorder = recorder
             currentFile = name
             isRecording = true
             isPaused = false
             elapsedSec = 0
+            inputLevels = Array(repeating: 0, count: 32)
             startTicker()
         } catch {
+            RecordingStore.delete(fileName: name)
             AudioSessionCoordinator.shared.release(.record)
             lastError = String(localized: "无法开始录音")
         }
+    }
+
+    /// Permission prompts may finish after navigation or a different tool starts.
+    func cancelStart() {
+        startGeneration += 1
+        isStarting = false
     }
 
     func pause() {
@@ -79,7 +100,10 @@ final class AudioRecorderService {
 
     func resume() {
         guard isRecording, isPaused, let recorder else { return }
-        recorder.record()
+        guard recorder.record() else {
+            lastError = String(localized: "无法继续录音，请重试")
+            return
+        }
         isPaused = false
         startTicker()
     }
@@ -95,6 +119,7 @@ final class AudioRecorderService {
         isRecording = false
         isPaused = false
         elapsedSec = 0
+        inputLevels = []
         AudioSessionCoordinator.shared.release(.record)
 
         let url = RecordingStore.url(for: name)
@@ -112,10 +137,15 @@ final class AudioRecorderService {
 
     private func startTicker() {
         stopTicker()
-        ticker = Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+        ticker = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self, let recorder = self.recorder else { return }
                 self.elapsedSec = Int(recorder.currentTime.rounded())
+                recorder.updateMeters()
+                let level = min(1, max(0, (recorder.averagePower(forChannel: 0) + 60) / 60))
+                let smoothed = (self.inputLevels.last ?? 0) * 0.6 + level * 0.4
+                self.inputLevels.append(smoothed)
+                if self.inputLevels.count > 32 { self.inputLevels.removeFirst(self.inputLevels.count - 32) }
             }
         }
         if let ticker { RunLoop.main.add(ticker, forMode: .common) }

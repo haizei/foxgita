@@ -76,7 +76,7 @@ final class PracticeFlowUITests: XCTestCase {
         field.typeText("节拍器速度测试")
         app.buttons["创建练习"].tap()
 
-        let speed = app.buttons["速度 (BPM)，打开节拍器设置"]
+        let speed = app.buttons["metronome.open-speed"]
         XCTAssertTrue(speed.waitForExistence(timeout: 5))
         speed.tap()
         XCTAssertTrue(app.descendants(matching: .any)["metronome.speed-sheet"].waitForExistence(timeout: 3))
@@ -136,14 +136,13 @@ final class PracticeFlowUITests: XCTestCase {
         firstAccentBar.tap()
         XCTAssertEqual(firstAccentBar.label, "第 1 拍，静音拍")
 
-        let allBeatsTrack = app.buttons["节拍反馈：所有节拍"]
-        XCTAssertTrue(allBeatsTrack.exists)
-        allBeatsTrack.tap()
-        XCTAssertTrue(app.buttons["节拍反馈：重音节拍"].exists)
-        app.buttons["节拍反馈：重音节拍"].tap()
-        XCTAssertTrue(app.buttons["节拍反馈：单摆模式"].exists)
-        app.buttons["节拍反馈：单摆模式"].tap()
-        XCTAssertTrue(app.buttons["节拍反馈：重音及次节拍"].exists)
+        app.buttons["metronome.open-sound-settings"].tap()
+        let pendulum = app.buttons["metronome.visual.pendulum"]
+        if !pendulum.isHittable { app.swipeUp() }
+        XCTAssertTrue(pendulum.waitForExistence(timeout: 3))
+        if pendulum.value as? String != "已选择" { pendulum.tap() }
+        XCTAssertEqual(pendulum.value as? String, "已选择")
+        app.buttons["metronome.sound.done"].tap()
 
         XCTContext.runActivity(named: "Metronome Display Card — Figma 841:140") { activity in
             let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -234,6 +233,24 @@ final class PracticeFlowUITests: XCTestCase {
 
         app.buttons["开始这项练习"].tap()
         XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
+        let note = app.descendants(matching: .any)["practice.note-editor"]
+        for _ in 0..<3 where !note.isHittable { app.swipeUp() }
+        XCTAssertTrue(note.waitForExistence(timeout: 3))
+        note.tap()
+        note.typeText("今天把节奏放慢后更稳定")
+        app.buttons["完成"].tap()
+        XCTAssertTrue(app.staticTexts["项目详情"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["今天把节奏放慢后更稳定"].exists)
+        app.buttons["查看全部 ›"].tap()
+        let notesHeader = app.staticTexts["我的笔记"]
+        XCTAssertTrue(notesHeader.waitForExistence(timeout: 5))
+        XCTAssertTrue(app.staticTexts["共 1 条练习笔记"].exists)
+        XCTAssertTrue(app.buttons["查看练习记录 ›"].exists)
+        XCTContext.runActivity(named: "Project Notes — Figma 1983:5") { activity in
+            let attachment = XCTAttachment(screenshot: app.screenshot())
+            attachment.lifetime = .keepAlways
+            activity.add(attachment)
+        }
         app.buttons["返回"].tap()
         XCTAssertTrue(app.staticTexts["项目详情"].waitForExistence(timeout: 5))
     }

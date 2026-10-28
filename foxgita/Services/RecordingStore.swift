@@ -5,6 +5,7 @@
 
 import AVFoundation
 import Foundation
+import UniformTypeIdentifiers
 
 /// Owns the on-disk side of recordings. The database stores file names only,
 /// because the sandbox container path changes between installs.
@@ -13,7 +14,7 @@ enum RecordingStore {
 
     static var directory: URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let directory = documents.appendingPathComponent(folderName, isDirectory: true)
+        let directory = documents.appendingPathComponent(PracticeTestEnvironment.isActive ? "TestRecordings" : folderName, isDirectory: true)
         if !FileManager.default.fileExists(atPath: directory.path) {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -70,14 +71,21 @@ enum RecordingStore {
 
     private static let mediaExtensions: Set<String> = ["m4a", "mov", "mp4", "m4v"]
 
+    private static func isManagedMedia(_ file: URL) -> Bool {
+        if mediaExtensions.contains(file.pathExtension.lowercased()) { return true }
+        guard file.lastPathComponent.hasPrefix("rec-"), let type = UTType(filenameExtension: file.pathExtension) else { return false }
+        return type.conforms(to: .audio) || type.conforms(to: .movie)
+    }
+
     /// Builds before the Recordings subfolder existed wrote clips into the
     /// Documents root. Move them so there is a single place to sweep.
     static func migrateLegacyFiles() {
+        guard !PracticeTestEnvironment.isActive else { return }
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: documents, includingPropertiesForKeys: nil
         )) ?? []
-        for file in contents where mediaExtensions.contains(file.pathExtension.lowercased()) {
+        for file in contents where isManagedMedia(file) {
             let destination = url(for: file.lastPathComponent)
             guard !FileManager.default.fileExists(atPath: destination.path) else { continue }
             try? FileManager.default.moveItem(at: file, to: destination)
@@ -104,7 +112,7 @@ enum RecordingStore {
             at: directory, includingPropertiesForKeys: nil
         )) ?? []
         var removed = 0
-        for file in contents where mediaExtensions.contains(file.pathExtension.lowercased()) {
+        for file in contents where isManagedMedia(file) {
             guard !referenced.contains(file.lastPathComponent) else { continue }
             if (try? FileManager.default.removeItem(at: file)) != nil { removed += 1 }
         }
@@ -115,7 +123,7 @@ enum RecordingStore {
         let contents = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: nil
         )) ?? []
-        for file in contents where mediaExtensions.contains(file.pathExtension.lowercased()) {
+        for file in contents where isManagedMedia(file) {
             try? FileManager.default.removeItem(at: file)
         }
     }

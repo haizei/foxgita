@@ -7,6 +7,13 @@ import Testing
 @testable import foxgita
 
 struct MetronomeMeterTests {
+    @Test func unsupportedDenominatorFallsBackWithoutChangingBeatCount() {
+        let meter = MetronomeMeter.parseTimeSignature("5/3")
+        #expect(meter.beats == 5)
+        #expect(meter.denominator == 4)
+        #expect(MetronomeMeter.parseTimeSignature("6/8").denominator == 8)
+    }
+
     @Test func parseDefaultsInvalidToFourFour() {
         #expect(MetronomeMeter.parseTimeSignature(nil).beats == 4)
         #expect(MetronomeMeter.parseTimeSignature("bad").beats == 4)

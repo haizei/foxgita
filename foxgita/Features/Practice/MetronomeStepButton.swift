@@ -28,6 +28,8 @@ struct MetronomeStepButton: View {
                     Circle()
                         .stroke(GitaTheme.borderSubtle, lineWidth: 0.75)
                 }
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!enabled)

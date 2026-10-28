@@ -39,10 +39,11 @@ final class PracticeTimer {
         if let ticker { RunLoop.main.add(ticker, forMode: .common) }
     }
 
-    func pause() {
+    func pause(at deadline: Date? = nil) {
         stopTicker()
         guard isRunning else { return }
-        accumulated += now().timeIntervalSince(resumedAt ?? now())
+        let stoppedAt = min(now(), deadline ?? now())
+        accumulated += max(0, stoppedAt.timeIntervalSince(resumedAt ?? stoppedAt))
         resumedAt = nil
         isRunning = false
         elapsedSec = Int(accumulated)

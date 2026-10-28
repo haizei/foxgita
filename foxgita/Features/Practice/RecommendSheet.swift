@@ -148,6 +148,7 @@ struct RecommendSheet: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(isSubmitting)
+                        .accessibilityIdentifier("practice.confirm-create")
                     }
                     .padding(16)
                     .background(GitaTheme.bgSurface)

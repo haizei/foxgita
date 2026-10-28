@@ -99,6 +99,7 @@ final class PracticeStore {
             projectId: item.projectId,
             note: item.note,
             recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
+            imageCount: (try? NoteImageStore().images(for: item.id).count) ?? 0,
             categoryRaw: item.categoryRaw,
             subtitle: item.subtitle,
             targetMin: item.targetMin,
@@ -425,6 +426,22 @@ final class PracticeStore {
         }
     }
 
+    func savePracticeNote(id: UUID, note: String, now: Date) throws {
+        let item = try requireLivePracticeItem(id: id)
+        let previousNote = item.note
+        let previousDate = item.updatedAt
+        item.note = note
+        item.updatedAt = now
+        do {
+            try persistPracticeItemChanges()
+        } catch {
+            item.note = previousNote
+            item.updatedAt = previousDate
+            throw error
+        }
+        markInvocationIfEffective(item, now: now)
+    }
+
     func savePracticeItem(
         id: UUID,
         durationSeconds: Int,
@@ -547,6 +564,14 @@ final class PracticeStore {
         try repository.deleteMetronomeTrainingData(practiceItemId: id)
         try clearVersionRefs(pointingTo: id, now: now)
         try persistPracticeItemChanges()
+        try? NoteImageStore().removeImages(for: id)
+    }
+
+    func noteImagesDidChange(for id: UUID, now: Date = Date()) throws {
+        let item = try requireLivePracticeItem(id: id)
+        item.updatedAt = now
+        try persistPracticeItemChanges()
+        markInvocationIfEffective(item, now: now)
     }
 
     func attachRecording(_ recording: RecordingRef, toPracticeItemId itemId: UUID, now: Date = Date()) throws {
@@ -1120,6 +1145,7 @@ final class PracticeStore {
             try repository.save()
             defaults.set(true, forKey: SeedData.seededKey)
             RecordingStore.removeAll()
+            try NoteImageStore().removeAll()
         }
         ensureProfile()
     }

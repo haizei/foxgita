@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum MetronomeBeatKind: Int, CaseIterable, Equatable {
+nonisolated enum MetronomeBeatKind: Int, CaseIterable, Equatable, Sendable {
     case mute = 0
     case weak = 1
     case medium = 2
@@ -100,6 +100,16 @@ enum MetronomeMeter {
     static let minBeats = 2
     static let maxBeats = 12
     static let defaultDenominator = 4
+    static let supportedDenominators = [2, 4, 8, 16]
+
+    static func beatUnitName(_ denominator: Int) -> String {
+        switch denominator {
+        case 2: String(localized: "二分音符")
+        case 8: String(localized: "八分音符")
+        case 16: String(localized: "十六分音符")
+        default: String(localized: "四分音符")
+        }
+    }
 
     static func parseTimeSignature(_ raw: String?) -> (beats: Int, denominator: Int) {
         let trimmed = raw?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -113,7 +123,7 @@ enum MetronomeMeter {
         }
         return (
             min(maxBeats, max(minBeats, beats)),
-            denominator
+            supportedDenominators.contains(denominator) ? denominator : defaultDenominator
         )
     }
 

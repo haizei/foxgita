@@ -5,7 +5,7 @@ Gita 吉他练习 iOS 应用。用户在日常练习中配置节拍器、计时�
 ## Language
 
 **Metronome Display Card**:
-练习详情页内嵌的四列节拍器卡片（速度 / 拍号 / 音符 / 声音 + 四拍柱 + Beat Track）。
+练习详情页内嵌的节拍器卡片，展示拍号、速度、细分、Beat Bars 和 Beat Track，并提供音效与视觉设置入口。
 _Avoid_: 节拍器卡片、metronome card
 
 **Speed Sheet**:
@@ -17,7 +17,7 @@ _Avoid_: 速度设置页、BPM sheet
 _Avoid_: 拍号设置页
 
 **Sound Sheet**:
-点击「声音」列弹出的底部面板，标题为「节拍提示」，含七种 Metronome Sound Preset、音量、试听与强拍增强。
+承载音效、七种 Metronome Sound Preset 与视觉显示偏好的设置面板；更多声音设置承接强拍增强及独立的振动、闪拍提示。
 _Avoid_: 声音设置页、MetronomeSoundSheet（实现文件名可保留，但产品语言用 Sound Sheet）
 
 **Metronome Sound Preset**:
@@ -37,12 +37,16 @@ Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。�
 _Avoid_: 四拍柱、beat bar（口语）
 
 **Beat Track**:
-Beat Bars 下方可点击的胶囊形节拍视觉反馈区；点击后在四种 Beat Track Mode 间循环切换。
+Beat Bars 下方承载节拍高亮和钟摆运动的前台视觉反馈区域；其显示由 Metronome Visual Preferences 控制，不改变真实发声序列。
 _Avoid_: 进度点、dot track、装饰条
 
-**Beat Track Mode**:
-Beat Track 的视觉反馈策略，共有所有节拍、重音节拍、单摆、重音及次节拍四种；选择仅在当前练习期间保留。
-_Avoid_: 灯效、动画样式、播放模式
+**Metronome Visual Preferences**:
+所有练习共用的节拍器显示偏好，包含可同时开启的节拍模块与钟摆模式、Beat Highlight Filter 及小节计数显示选择；它与每条练习的声音和节奏配置分别保存。
+_Avoid_: Beat Track Mode、灯效、播放模式、声音配置
+
+**Beat Highlight Filter**:
+用户选择强拍、次强拍和普通拍中哪些等级产生视觉高亮的显示偏好；取消某等级的高亮不改变该拍的发声、力度或节奏位置。
+_Avoid_: Accent Pattern、静音设置、声音强拍增强
 
 **Main Beat Pulse**:
 主拍到达时 Beat Track 的整条短时反馈；颜色跟随该拍的强、次强、普通或静音等级。
@@ -53,7 +57,7 @@ _Avoid_: 闪一下、主灯
 _Avoid_: 次强拍、第二拍
 
 **Weak Subdivision Pulse**:
-一拍内部除 Secondary Pulse 外的轻拍；力度低于所属主拍，只在“重音及次节拍”模式中产生较窄、较浅的 Beat Track 反馈。
+一拍内部除 Secondary Pulse 外的轻拍；力度低于所属主拍，在视觉反馈中以较窄、较浅的节拍提示表达。
 _Avoid_: 弱拍、普通拍
 
 **Rest Position**:
@@ -61,7 +65,7 @@ _Avoid_: 弱拍、普通拍
 _Avoid_: 静音拍、跳过的拍
 
 **Pendulum Feedback**:
-“单摆”模式中随每个主拍在 Beat Track 两端交替移动的反馈；颜色跟随拍级，切分次拍不改变方向，停止后回到左端。
+钟摆模式中随每个主拍在 Beat Track 两端交替移动的反馈，可与节拍模块同时显示；颜色跟随拍级，切分次拍不改变方向，停止后回到左端。
 _Avoid_: 滑块、进度指示器
 
 **Tempo Ruler**:
@@ -97,7 +101,7 @@ _Avoid_: PracticeSession、TempoRampRuntime
 _Avoid_: Playback Session、后台任务
 
 **Practice Elapsed Time**:
-一次练习中实际发生并可保存的累计练习时长；暂停与停止期间不增加，且不因倒计时的显示或复位而减少。
+一次练习中实际发生并可保存的累计练习时长；它可在不启用节拍器时独立累计，录音与录像也属于练习。暂停与停止期间不增加，且不因倒计时的显示或复位而减少。
 _Avoid_: 倒计时、剩余时间、目标时长
 
 **Countdown Plan**:
@@ -109,7 +113,7 @@ _Avoid_: 目标练习时长、Practice Elapsed Time、倒计时模板
 _Avoid_: 倒计时页面、倒计时 Tab、覆盖练习计时
 
 **Countdown Run**:
-Countdown Plan 启动后的当前练习内运行过程；它与 Metronome Playback Run 同步开始、暂停和继续，在主动离开练习时结束，在锁屏或后台期间保持连续，发生播放打断后必须由用户明确恢复。
+Countdown Plan 启动后的当前练习内运行过程；它跟随 Practice Elapsed Time 开始、暂停和继续，不要求节拍器发声，在主动离开练习时结束，在锁屏或后台期间保持连续，发生播放打断后必须由用户明确恢复。
 _Avoid_: Practice Session、PracticeTimer、后台任务
 
 **Countdown Completion**:
@@ -133,8 +137,16 @@ _Avoid_: 后台保活、锁屏不断音
 _Avoid_: 后台录音、锁屏录音模式
 
 **Recording Segment**:
-两次明确开始与结束之间连续采集的练习音频；Playback Interruption 会保存并结束当前片段，恢复后的录音属于新片段。
+一次开始录音至停止保存之间归属同一份附件的练习音频，可在同一片段内暂停和继续。主练习暂停同时暂停录音，录音自身暂停只影响采集；停止录音保存附件但不结束练习。Playback Interruption 会保存并结束当前片段，恢复后的录音属于新片段。
 _Avoid_: 跨打断录音、临时录音文件
+
+**Beat Unit**:
+当前拍号分母代表的计拍音符，BPM 表示每分钟发生的这类拍点数；例如 6/8 的 120 BPM 表示每秒两个八分音符，不自动按附点四分音符换算。
+_Avoid_: 固定四分音符速度、自动复合拍换算
+
+**Bar Counter**:
+沿真实节拍器播放累计的正式小节序号，第一小节为 1，预备小节不计入；暂停后继续保留计数，重置或新一轮播放重新起算。计数是否显示不影响声音与计时。
+_Avoid_: 累计练习分钟、预备拍数、变速阶段数
 
 **Playback Interruption**:
 来电、Siri 或独占音频等系统事件强制结束当前连续播放的状态；事件结束后必须由用户明确恢复。
@@ -169,8 +181,24 @@ Metronome Playback Run 必须通过的两小时稳定性承诺，覆盖锁屏、
 _Avoid_: 冒烟测试、听起来正常
 
 **Saved Metronome Configuration**:
-跨练习访问保留的拍号、细分、重音和声音选择；它独立于一次练习是否形成有效记录。
-_Avoid_: Practice Session 配置、空练习记录
+每条练习分别保留的速度、拍号、细分、重音和声音参数；它独立于练习是否完成，不因关联同一项目而自动共享，也不继承步骤级配置。
+_Avoid_: 项目默认配置、步骤覆盖、Practice Session 配置、空练习记录
+
+**Practice Note**:
+每条练习记录唯一的一份可编辑文本笔记；自动保存只保留内容，不表示完成练习，项目中的笔记列表仍从原练习投影读取。
+_Avoid_: 多条笔记条目、独立项目笔记、完成标记
+
+**Practice Completion**:
+用户明确结束本次练习的动作；详情页顶部与底部的完成入口表达同一含义，自动保存、返回和 Countdown Completion 都不等同此动作。
+_Avoid_: 返回、自动保存、倒计时结束
+
+**Temporary Metronome Mute**:
+临时关闭节拍器发声但保留原音量和节奏配置的状态；取消静音后恢复原音量，不以修改声音预设表达静音。
+_Avoid_: 音量归零、暂停练习、静音拍
+
+**Auxiliary Beat Cue**:
+声音之外辅助感知节拍的振动或闪拍；两者由独立用户选择控制，不由任何声音预设自动开启。
+_Avoid_: 拍手自动闪拍、自动增强、强制振动
 
 **Playback Diagnostic Event**:
 用于重建播放生命周期的非内容事件，只包含时间、节拍配置、状态、错误码和设备路由类型，不包含练习内容或用户身份。
@@ -218,12 +246,20 @@ _Avoid_: AI 点评、智能评分、AI 诊断、演奏打分
 
 **Next Practice Focus**:
 项目详情中展示和编辑 Project.currentFocus 的卡片。进行中项目点击「开始这项练习」会在本地今天创建新 PracticeItem；记录页另有明确「继续这次练习」入口用于恢复原项。
-_Avoid_: 下次练什么、下步计划、练习目标、下一步
+项目详情的已采纳界面以「下次练什么」作为该卡片标题。
+_Avoid_: 下步计划、练习目标、下一步
 
 **Project Note Projection**:
 在项目详情与笔记历史页中，从关联练习记录中按时间倒序投影聚合的只读笔记列表；单条笔记维护在练习记录单一真理源中。
 _Avoid_: 项目笔记、专属笔记、独立备忘、项目日志
 
+**笔记语音输入 (Note Dictation)**:
+用户在写笔记时按住说话、松手结束或上滑取消，通过设备端识别将结果插入当前光标位置，并可继续编辑的输入方式；原始语音不作为练习媒体保留。开始时暂停节拍器与练习计时，结束后由用户手动恢复。
+_Avoid_: 练习录音、语音附件、整篇笔记替换
+
+**笔记图片 (Note Image)**:
+用户从相册选择或现场拍摄、归属本次练习记录，并可在记录详情中回看的图片；一条记录最多三张，未完成离开时仍保留，单独存在也构成有效练习内容。历史练习中的图片只可查看，不可新增或删除。
+_Avoid_: 图片转练习素材、练习项封面、项目图片
 
 
 **练习偏好 (Practice Preferences)**:

@@ -19,14 +19,14 @@ struct MetronomeDisplayCard: View {
         static let horizontalPadding: CGFloat = 12
         static let topPadding: CGFloat = 10
         static let bottomPadding: CGFloat = 13
-        static let controlHeight: CGFloat = 68
-        static let controlToBarsSpacing: CGFloat = 6
-        static let barsHeight: CGFloat = 106
+        static let controlHeight: CGFloat = 60
+        static let controlToBarsSpacing: CGFloat = 3
+        static let barsHeight: CGFloat = 95
         static let barsToTrackSpacing: CGFloat = 5
-        static let trackHeight: CGFloat = 35
+        static let trackHeight: CGFloat = 56
         static let fourBeatSpacing: CGFloat = 23.5
         static let fourBeatSideInset: CGFloat = 11.75
-        static let barCornerRadius: CGFloat = 6
+        static let barCornerRadius: CGFloat = 0
         static let secondaryPulseWidth: CGFloat = 72
         static let weakPulseWidth: CGFloat = 40
     }
@@ -39,6 +39,8 @@ struct MetronomeDisplayCard: View {
     var onLockedAccentTap: () -> Void = {}
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var typeSize
+    private var valueHeight: CGFloat { typeSize.isAccessibilitySize ? 76 : 40 }
     @State private var trackPulseShape = BeatTrackPulseShape.none
     @State private var trackPulseKind = MetronomeBeatKind.weak
     @State private var pendulumAtTrailing = false
@@ -53,19 +55,34 @@ struct MetronomeDisplayCard: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
-                entryColumn(anchor: .speed, label: String(localized: "速度 (BPM)")) {
-                    speedValue
-                }
-
                 entryColumn(anchor: .meter, label: String(localized: "拍号")) {
                     Text(meterText)
                         .font(GitaFont.largeTitle(.bold))
                         .foregroundStyle(GitaTheme.brand500)
                         .monospacedDigit()
-                        .frame(height: 40)
+                        .lineLimit(1).minimumScaleFactor(0.5)
+                        .frame(height: valueHeight)
                 }
 
-                entryColumn(anchor: .subdivision, label: String(localized: "音符")) {
+                VStack(spacing: 0) {
+                    metricLabel(String(localized: "速度 (BPM)"))
+                    HStack(spacing: 0) {
+                        Button { metronome.bump(-1) } label: {
+                            Image(systemName: "minus.circle").frame(width: 44, height: 44)
+                        }.accessibilityLabel("降低速度")
+                            .disabled(isAccentEditingLocked || metronome.bpm <= 40)
+                        Button { onEntryTap(.speed) } label: { speedValue }
+                            .accessibilityLabel("速度，打开调整速度")
+                            .accessibilityIdentifier("metronome.open-speed")
+                        Button { metronome.bump(1) } label: {
+                            Image(systemName: "plus.circle").frame(width: 44, height: 44)
+                        }.accessibilityLabel("提高速度")
+                            .disabled(isAccentEditingLocked || metronome.bpm >= 200)
+                    }
+                    .foregroundStyle(GitaTheme.brand500)
+                }.frame(width: 132)
+
+                entryColumn(anchor: .subdivision, label: String(localized: "细分")) {
                     Image(metronome.subdivision.assetName)
                         .resizable()
                         .renderingMode(.template)
@@ -75,9 +92,8 @@ struct MetronomeDisplayCard: View {
                         .frame(height: 40)
                 }
 
-                soundColumn
             }
-            .frame(height: Layout.controlHeight)
+            .frame(height: Layout.controlHeight + (typeSize.isAccessibilitySize ? 60 : 0))
 
             Color.clear.frame(height: Layout.controlToBarsSpacing)
             beatBars
@@ -87,14 +103,22 @@ struct MetronomeDisplayCard: View {
         .padding(.horizontal, Layout.horizontalPadding)
         .padding(.top, Layout.topPadding)
         .padding(.bottom, Layout.bottomPadding)
-        .frame(height: Layout.cardHeight)
+        .frame(height: Layout.cardHeight + (typeSize.isAccessibilitySize ? 60 : 0))
         .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius24))
+        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
         .overlay {
-            RoundedRectangle(cornerRadius: GitaTheme.radius24)
+            RoundedRectangle(cornerRadius: GitaTheme.radius8)
                 .stroke(GitaTheme.borderSubtle, lineWidth: 1)
         }
-        .shadow(color: GitaTheme.shadowCard, radius: 16, y: 4)
+        .overlay(alignment: .topTrailing) {
+            Button(action: onSoundTap) {
+                Image(systemName: "gearshape").font(.system(size: 15))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel("音效与视觉设置")
+            .accessibilityIdentifier("metronome.open-sound-settings")
+        }
         .onChange(of: metronome.visualEvent) { _, event in
             guard let event else {
                 resetPlaybackFeedback()
@@ -120,8 +144,8 @@ struct MetronomeDisplayCard: View {
             .foregroundStyle(GitaTheme.brand500)
             .monospacedDigit()
             .lineLimit(1)
-            .minimumScaleFactor(0.8)
-        .frame(height: 40)
+            .minimumScaleFactor(0.5)
+        .frame(height: valueHeight)
     }
 
     private var soundColumn: some View {
@@ -333,15 +357,7 @@ struct MetronomeDisplayCard: View {
     }
 
     private var beatTrack: some View {
-        Button {
-            metronome.cycleBeatTrackMode()
-            Haptics.selection()
-            showModeName()
-            trackPulseShape = .none
-            if metronome.beatTrackMode != .pendulum {
-                pendulumAtTrailing = false
-            }
-        } label: {
+        Group {
             GeometryReader { proxy in
                 ZStack {
                     RoundedRectangle(cornerRadius: GitaTheme.radius8)
@@ -360,7 +376,7 @@ struct MetronomeDisplayCard: View {
                             .frame(width: Layout.weakPulseWidth)
                     }
 
-                    if metronome.beatTrackMode == .pendulum {
+                    if metronome.visualPreferences.pendulumEnabled {
                         RoundedRectangle(cornerRadius: GitaTheme.radius8)
                             .fill(Self.fillColor(for: trackPulseKind, isActive: false))
                             .frame(width: Layout.trackHeight)
@@ -384,19 +400,38 @@ struct MetronomeDisplayCard: View {
             }
             .frame(height: Layout.trackHeight)
         }
-        .buttonStyle(.plain)
         .padding(.horizontal, Layout.fourBeatSideInset)
         .accessibilityIdentifier("metronome.beat-track")
-        .accessibilityLabel(Text("节拍反馈：\(metronome.beatTrackMode.displayName)"))
-        .accessibilityHint(Text("点击切换为\(metronome.beatTrackMode.next.displayName)"))
+        .accessibilityLabel("节拍视觉反馈")
+        .overlay(alignment: .trailing) {
+            if metronome.visualPreferences.barCounterVisible, let bar = metronome.displayedBar {
+                Text("第 \(bar) 小节").font(GitaFont.caption(.medium))
+                    .padding(.horizontal, 8).padding(.vertical, 3)
+                    .background(GitaTheme.bgSurface.opacity(0.9), in: Capsule())
+                    .padding(.trailing, 8)
+                    .accessibilityIdentifier("metronome.bar-counter")
+            }
+        }
     }
 
     private func handleVisualEvent(_ event: MetronomeVisualEvent) {
+        let preference = metronome.visualPreferences
+        if event.role == .main, preference.pendulumEnabled {
+            withAnimation(reduceMotion ? nil : .linear(duration: 60.0 / Double(metronome.bpm))) {
+                pendulumAtTrailing.toggle()
+            }
+        }
+        guard preference.beatModuleEnabled, preference.highlights(event.kind) else { return }
         if event.role == .main {
             showBeatBarPulse(for: event.beat)
         }
 
-        let shape = Self.pulseShape(for: metronome.beatTrackMode, event: event)
+        let shape: BeatTrackPulseShape = switch event.role {
+        case .main: .full
+        case .secondary: .secondarySubdivision
+        case .weak: .weakSubdivision
+        case .rest: .none
+        }
         guard shape != .none else { return }
         trackPulseKind = event.kind
 

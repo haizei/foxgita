@@ -10,6 +10,19 @@ import Testing
 
 @MainActor
 struct PracticeStoreTests {
+    @Test func savingOnlyNotePreservesElapsedAndSoundConfiguration() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let item = try store.createPracticeItem(input: makeInput(), now: Date(), calendar: shanghai())
+        try store.savePracticeItem(id: item.id, durationSeconds: 120, note: "旧笔记", now: Date(), metronomeSoundModeRaw: "woodblock", metronomeVolume: 63)
+        try store.savePracticeNote(id: item.id, note: "新笔记", now: Date())
+        let saved = try #require(try repo.practiceItem(id: item.id, profileId: item.profileId))
+        #expect(saved.note == "新笔记")
+        #expect(saved.durationSeconds == 120)
+        #expect(saved.metronomeSoundModeRaw == "woodblock")
+        #expect(saved.metronomeVolume == 63)
+    }
+
     private func makeStore(seeded: Bool = false) -> (PracticeStore, InMemoryPracticeRepository, UserDefaults) {
         let repo = InMemoryPracticeRepository()
         let defaults = UserDefaults(suiteName: "foxgita.tests.\(UUID().uuidString)")!

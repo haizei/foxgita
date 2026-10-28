@@ -8,6 +8,7 @@ struct ResumeSession: Equatable {
     var deletedAt: Date?
     var durationSec: Int
     var recordingCount: Int
+    var imageCount: Int = 0
     var startedAt: Date
 }
 
@@ -40,7 +41,8 @@ enum PracticeResumeQuery {
             PracticeRecordRules.isEffective(
                 durationSec: $0.durationSec,
                 noteText: $0.noteText,
-                recordingCount: $0.recordingCount
+                recordingCount: $0.recordingCount,
+                imageCount: $0.imageCount
             )
         }
         .sorted { $0.endedAt > $1.endedAt }
@@ -115,6 +117,7 @@ struct PracticeLineageItem: Equatable {
     var note: String
     var durationSeconds: Int
     var recordingCount: Int
+    var imageCount: Int = 0
     var createdAt: Date
     var deletedAt: Date?
 }
@@ -193,6 +196,7 @@ enum PracticeItemResumeQuery {
             note: item.note,
             durationSeconds: item.durationSeconds,
             recordingCount: item.recordings.filter { $0.deletedAt == nil }.count,
+            imageCount: (try? NoteImageStore().images(for: item.id).count) ?? 0,
             createdAt: item.createdAt,
             deletedAt: item.deletedAt
         )
@@ -216,7 +220,8 @@ enum PracticeItemResumeQuery {
         return PracticeRecordRules.isEffective(
             durationSec: item.durationSeconds,
             noteText: item.note,
-            recordingCount: item.recordingCount
+            recordingCount: item.recordingCount,
+            imageCount: item.imageCount
         )
     }
 
@@ -229,6 +234,7 @@ enum PracticeItemResumeQuery {
             deletedAt: item.deletedAt,
             durationSec: item.durationSeconds,
             recordingCount: item.recordingCount,
+            imageCount: item.imageCount,
             startedAt: item.createdAt
         )
     }

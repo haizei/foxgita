@@ -17,6 +17,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
     let projectId: UUID?
     let note: String
     let recordingCount: Int
+    let imageCount: Int
     let categoryRaw: String
     let subtitle: String
     let targetMin: Int
@@ -33,6 +34,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         projectId: UUID? = nil,
         note: String = "",
         recordingCount: Int = 0,
+        imageCount: Int = 0,
         categoryRaw: String = "chord",
         subtitle: String = "",
         targetMin: Int = 0,
@@ -48,6 +50,7 @@ struct PracticeItemSnapshot: Equatable, Identifiable {
         self.projectId = projectId
         self.note = note
         self.recordingCount = recordingCount
+        self.imageCount = imageCount
         self.categoryRaw = categoryRaw
         self.subtitle = subtitle
         self.targetMin = targetMin
@@ -62,7 +65,8 @@ enum PracticeItemRules {
         return PracticeRecordRules.isEffective(
             durationSec: item.durationSeconds,
             noteText: item.note,
-            recordingCount: item.recordingCount
+            recordingCount: item.recordingCount,
+            imageCount: item.imageCount
         )
     }
 

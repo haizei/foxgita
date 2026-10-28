@@ -31,6 +31,12 @@ final class MetronomeEngine {
     private(set) var isPlaying = false
     private(set) var bpm = 80
     private(set) var currentBeatInBar = 0
+    private(set) var currentBar = 0
+    private var excludedCountInBars = 0
+    var displayedBar: Int? {
+        currentBar > excludedCountInBars ? currentBar - excludedCountInBars : nil
+    }
+    func configureCountInBars(_ bars: Int) { excludedCountInBars = max(0, bars) }
     private(set) var beatsPerBar = 4
     private(set) var denominator = MetronomeMeter.defaultDenominator
     private(set) var accentPattern: [MetronomeBeatKind] = MetronomeMeter.defaultAccentPattern(beats: 4)
@@ -68,25 +74,33 @@ final class MetronomeEngine {
 
     var subdivisionRaw: Int { subdivision.rawValue }
     var configuredSubdivisionRaw: Int { configuredSubdivision.rawValue }
-    var flashOnAccent: Bool { soundPreset == .handClap && isPlaying }
+    var flashOnAccent: Bool { visualPreferences.flashEnabled && isPlaying }
+    private(set) var visualPreferences = MetronomeVisualPreferences()
+    private(set) var isTemporarilyMuted = false
+    var isPreviewing: Bool { previewRemainingBeats != nil }
+
+    func applyVisualPreferences(_ preference: MetronomeVisualPreferences) {
+        visualPreferences = preference
+        hapticsEnabled = preference.hapticsEnabled
+    }
+
+    func setTemporarilyMuted(_ muted: Bool) {
+        isTemporarilyMuted = muted
+        updateRenderConfiguration()
+    }
 
     private static let lead = 0.15
     private static let pumpInterval = 0.05
 
     @ObservationIgnored private var engine = AVAudioEngine()
-    @ObservationIgnored private var player = AVAudioPlayerNode()
+    @ObservationIgnored private var sourceNode: AVAudioSourceNode?
+    @ObservationIgnored private let renderer = MetronomeSampleRenderer(sampleRate: 44_100)
     @ObservationIgnored private var cutoffPlayer = AVAudioPlayerNode()
     @ObservationIgnored private let format = AVAudioFormat(
         standardFormatWithSampleRate: 44_100, channels: 1
     )!
     @ObservationIgnored private let session: AudioSessionCoordinator
     @ObservationIgnored private let soundBank: MetronomeSoundBank
-    @ObservationIgnored private var accentClick: AVAudioPCMBuffer?
-    @ObservationIgnored private var strongAccentClick: AVAudioPCMBuffer?
-    @ObservationIgnored private var mediumAccentClick: AVAudioPCMBuffer?
-    @ObservationIgnored private var beatClick: AVAudioPCMBuffer?
-    @ObservationIgnored private var secondarySubdivisionClick: AVAudioPCMBuffer?
-    @ObservationIgnored private var weakSubdivisionClick: AVAudioPCMBuffer?
     @ObservationIgnored private var pump: Timer?
     @ObservationIgnored private var nextClickFrame: AVAudioFramePosition = 0
     @ObservationIgnored private var beatIndex = 0
@@ -96,6 +110,17 @@ final class MetronomeEngine {
     @ObservationIgnored private var previewRemainingBeats: Int?
     @ObservationIgnored private var previewStopScheduled = false
     @ObservationIgnored private var scheduledBarIndex = 0
+    private struct PausedPosition {
+        let beat: Int
+        let bar: Int
+    }
+    @ObservationIgnored private var pausedPosition: PausedPosition?
+    private struct PreviewReturnState {
+        let position: PausedPosition?
+        let bar: Int
+        let countIn: Int
+    }
+    @ObservationIgnored private var previewReturnState: PreviewReturnState?
     @ObservationIgnored private var schedulerBPM = 80
     @ObservationIgnored private var pendingBoundaryBPM: Int?
     @ObservationIgnored private var pendingBoundarySubdivision: MetronomeSubdivision?
@@ -185,6 +210,12 @@ final class MetronomeEngine {
 
     func bumpBeatsPerBar(_ delta: Int) { setBeatsPerBar(configuredBeatsPerBar + delta) }
 
+    func setDenominator(_ value: Int) {
+        guard MetronomeMeter.supportedDenominators.contains(value) else { return }
+        configuredDenominator = value
+        if isPlaying { queueConfiguredRhythmChange() } else { applyConfiguredRhythm() }
+    }
+
     func cycleAccent(at index: Int) {
         guard configuredAccentPattern.indices.contains(index) else { return }
         configuredAccentPattern[index].cycle()
@@ -254,28 +285,73 @@ final class MetronomeEngine {
     func setSoundPreset(_ value: MetronomeSoundPreset) {
         guard value != soundPreset else { return }
         soundPreset = value
-        rebuildClickBuffers()
+        updateRenderConfiguration()
     }
 
     func setVolume(_ value: Int) {
         let clamped = min(100, max(0, value))
         guard clamped != volume else { return }
         volume = clamped
-        rebuildClickBuffers()
+        updateRenderConfiguration()
     }
 
     func setStrongBeatBoost(_ value: Bool) {
         guard value != strongBeatBoost else { return }
         strongBeatBoost = value
+        updateRenderConfiguration()
     }
 
     func preview(bars: Int = 2) throws {
+        if isPreviewing { stopPreview() }
         guard !isPlaying else { throw MetronomeError.previewUnavailableWhilePlaying }
+        let previous = PreviewReturnState(position: pausedPosition, bar: currentBar, countIn: excludedCountInBars)
+        previewReturnState = previous
         previewRemainingBeats = bars * beatsPerBar
-        try start()
+        do { try start() }
+        catch {
+            pausedPosition = previous.position
+            currentBar = previous.bar
+            excludedCountInBars = previous.countIn
+            previewReturnState = nil
+            throw error
+        }
+    }
+
+    func stopPreview() {
+        let previous = previewReturnState
+        stop()
+        if let previous {
+            pausedPosition = previous.position
+            currentBar = previous.bar
+            excludedCountInBars = previous.countIn
+        }
     }
 
     func start() throws {
+        pausedPosition = nil
+        try start(from: nil)
+    }
+
+    func resumePlayback() throws {
+        let position = pausedPosition
+        pausedPosition = nil
+        try start(from: position)
+    }
+
+    func pausePlayback() {
+        guard isPlaying else { return }
+        guard !isPreviewing else { stop(); return }
+        let bar = currentBar
+        let countIn = excludedCountInBars
+        let nextBeat = bar == 0 ? 0 : (currentBeatInBar + 1) % configuredBeatsPerBar
+        let nextBar = max(0, bar - 1) + (bar > 0 && nextBeat == 0 ? 1 : 0)
+        stop()
+        pausedPosition = PausedPosition(beat: nextBeat, bar: nextBar)
+        currentBar = bar
+        excludedCountInBars = countIn
+    }
+
+    private func start(from position: PausedPosition?) throws {
         guard !isPlaying else { return }
         var acquired = false
         do {
@@ -286,15 +362,15 @@ final class MetronomeEngine {
                 try engine.start()
             }
             guard engine.isRunning else { throw MetronomeError.engineNotRunning }
-            player.stop()
+            renderer.start()
             cancelArmedCountdownStop()
-            beatIndex = 0
+            beatIndex = position?.beat ?? 0
             subClickIndex = 0
-            scheduledBarIndex = 0
-            currentBeatInBar = 0
+            scheduledBarIndex = position?.bar ?? 0
+            currentBeatInBar = position?.beat ?? 0
+            if position == nil, !isPreviewing { currentBar = 0 }
             visualEvent = nil
             runToken += 1
-            player.play()
             nextClickFrame = currentFrame() + frames(0.1)
             isPlaying = true
             fill()
@@ -306,6 +382,8 @@ final class MetronomeEngine {
                 "start bpm=\(self.bpm, privacy: .public) running=\(self.engine.isRunning, privacy: .public)"
             )
         } catch {
+            renderer.stop()
+            engine.pause()
             isPlaying = false
             previewRemainingBeats = nil
             previewStopScheduled = false
@@ -318,11 +396,16 @@ final class MetronomeEngine {
     }
 
     func stop() {
+        previewReturnState = nil
+        pausedPosition = nil
+        currentBar = 0
+        excludedCountInBars = 0
         guard isPlaying || pump != nil else { return }
         cancelArmedCountdownStop()
         pump?.invalidate()
         pump = nil
-        player.stop()
+        renderer.stop()
+        engine.pause()
         isPlaying = false
         beatIndex = 0
         subClickIndex = 0
@@ -350,13 +433,14 @@ final class MetronomeEngine {
         cancelArmedCountdownStop()
         let frame = currentFrame() + frames(seconds)
         cutoffFrame = frame
+        renderer.setCutoff(frame)
         cutoffCompletion = onReached
         cutoffToken += 1
         let token = cutoffToken
         guard let buffer = cutoffBuffer else { return }
         cutoffPlayer.scheduleBuffer(
             buffer,
-            at: AVAudioTime(sampleTime: frame, atRate: format.sampleRate),
+            at: AVAudioTime(hostTime: renderer.hostTime(forFrame: frame)),
             options: [],
             completionCallbackType: .dataPlayedBack
         ) { [weak self] _ in
@@ -372,6 +456,7 @@ final class MetronomeEngine {
     func cancelArmedCountdownStop() {
         cutoffToken += 1
         cutoffFrame = nil
+        renderer.setCutoff(nil)
         cutoffCompletion = nil
         cutoffPlayer.stop()
     }
@@ -380,7 +465,7 @@ final class MetronomeEngine {
         stop()
         engine.stop()
         engine = AVAudioEngine()
-        player = AVAudioPlayerNode()
+        sourceNode = nil
         cutoffPlayer = AVAudioPlayerNode()
         graphConfigured = false
         metronomeLog.notice("audio graph reset after media-services reset")
@@ -389,25 +474,40 @@ final class MetronomeEngine {
     private func configureGraphIfNeeded() throws {
         guard !graphConfigured else { return }
         try soundBank.preloadAll(expectedFormat: format)
-        engine.attach(player)
+        var samples: [[Float]] = []
+        for preset in MetronomeSoundPreset.allCases {
+            guard let buffers = soundBank.buffers(for: preset) else { throw MetronomeError.soundAssetUnavailable(preset.rawValue) }
+            for buffer in [buffers.beat, buffers.strong] {
+                guard let channel = buffer.floatChannelData?[0] else { throw MetronomeError.soundAssetInvalid(preset.rawValue) }
+                samples.append(Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength))))
+            }
+        }
+        renderer.installSamples(samples)
+        let renderer = renderer
+        let source = AVAudioSourceNode(format: format) { silence, timestamp, count, buffers in
+            silence.pointee = false
+            let start = renderer.frame(forHostTime: timestamp.pointee.mHostTime)
+            for buffer in UnsafeMutableAudioBufferListPointer(buffers) {
+                if let data = buffer.mData {
+                    renderer.render(into: data.assumingMemoryBound(to: Float.self), startingAt: start, count: Int(count))
+                }
+            }
+            return noErr
+        }
+        sourceNode = source
+        engine.attach(source)
+        engine.connect(source, to: engine.mainMixerNode, format: format)
         engine.attach(cutoffPlayer)
-        engine.connect(player, to: engine.mainMixerNode, format: format)
         engine.connect(cutoffPlayer, to: engine.mainMixerNode, format: format)
         cutoffBuffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: 1)
         cutoffBuffer?.frameLength = 1
         cutoffBuffer?.floatChannelData?[0][0] = 0
-        rebuildClickBuffers()
+        updateRenderConfiguration()
         graphConfigured = true
     }
 
     private func fill() {
-        guard isPlaying, !previewStopScheduled,
-              let accent = accentClick,
-              let strongAccent = strongAccentClick,
-              let mediumAccent = mediumAccentClick,
-              let beat = beatClick,
-              let secondarySubdivision = secondarySubdivisionClick,
-              let weakSubdivision = weakSubdivisionClick else { return }
+        guard isPlaying, !previewStopScheduled else { return }
         let now = currentFrame()
         if let cutoffFrame, now >= cutoffFrame {
             finishArmedCountdownStop(token: cutoffToken)
@@ -456,23 +556,12 @@ final class MetronomeEngine {
                     now: now
                 )
             }
-            if beatKind != .mute,
-               let buffer = clickBuffer(
-                   for: step.role,
-                   beatKind: beatKind,
-                   accent: accent,
-                   strongAccent: strongAccent,
-                   mediumAccent: mediumAccent,
-                   beat: beat,
-                   secondarySubdivision: secondarySubdivision,
-                   weakSubdivision: weakSubdivision
-               ) {
-                player.scheduleBuffer(
-                    buffer,
-                    at: AVAudioTime(sampleTime: nextClickFrame, atRate: format.sampleRate),
-                    options: [],
-                    completionHandler: nil
-                )
+            if beatKind != .mute, step.role != .rest {
+                guard renderer.schedule(frame: nextClickFrame, role: step.role, kind: beatKind) else {
+                    metronomeLog.error("audio scheduling queue exhausted")
+                    stop()
+                    return
+                }
                 if beatKind == .strong && step.role == .main {
                     scheduleDownbeatHaptic(at: nextClickFrame, now: now)
                 }
@@ -484,12 +573,11 @@ final class MetronomeEngine {
                 previewRemainingBeats = remaining - 1
                 if remaining <= 1 {
                     previewStopScheduled = true
-                    schedulePreviewStop(at: scheduledFrame + frames(0.03), now: now)
+                    schedulePreviewStop(at: scheduledFrame + frames(0.075), now: now)
                     return
                 }
             }
         }
-        if !player.isPlaying { player.play() }
     }
 
     private func finishArmedCountdownStop(token: Int) {
@@ -515,6 +603,8 @@ final class MetronomeEngine {
                 guard let self, self.isPlaying, self.runToken == token else { return }
                 if let appliedBPM = event.appliedBPM { self.bpm = appliedBPM }
                 self.currentBeatInBar = event.beat
+                guard !self.isPreviewing else { return }
+                self.currentBar = event.bar + 1
                 self.onTimelineEvent?(event)
             }
         }
@@ -554,22 +644,14 @@ final class MetronomeEngine {
         DispatchQueue.main.asyncAfter(deadline: .now() + max(0, delay)) { [weak self] in
             MainActor.assumeIsolated {
                 guard let self, self.isPlaying, self.runToken == token else { return }
-                self.stop()
+                self.stopPreview()
             }
         }
     }
 
-    private var volumeScale: Double { Double(volume) / 100.0 }
-
-    private func rebuildClickBuffers() {
-        guard let source = soundBank.buffers(for: soundPreset) else { return }
-        let userGain = volumeScale
-        accentClick = Self.scaledCopy(source.beat, gain: userGain)
-        strongAccentClick = Self.scaledCopy(source.strong, gain: userGain)
-        mediumAccentClick = Self.scaledCopy(source.beat, gain: userGain * 0.95)
-        beatClick = Self.scaledCopy(source.beat, gain: userGain * 0.90)
-        secondarySubdivisionClick = Self.scaledCopy(source.beat, gain: userGain * 0.75)
-        weakSubdivisionClick = Self.scaledCopy(source.beat, gain: userGain * 0.60)
+    private func updateRenderConfiguration() {
+        let index = Array(MetronomeSoundPreset.allCases).firstIndex(of: soundPreset) ?? 0
+        renderer.configure(preset: index, volume: Float(volume) / 100, strongBeatBoost: strongBeatBoost, muted: isTemporarilyMuted)
     }
 
     private func intervalToNextClick() -> AVAudioFramePosition {
@@ -583,33 +665,6 @@ final class MetronomeEngine {
             delta = 1.0 - currentOffset + steps[0].offset
         }
         return frames(delta * beatDuration)
-    }
-
-    private func clickBuffer(
-        for role: MetronomePulseRole,
-        beatKind: MetronomeBeatKind,
-        accent: AVAudioPCMBuffer,
-        strongAccent: AVAudioPCMBuffer,
-        mediumAccent: AVAudioPCMBuffer,
-        beat: AVAudioPCMBuffer,
-        secondarySubdivision: AVAudioPCMBuffer,
-        weakSubdivision: AVAudioPCMBuffer
-    ) -> AVAudioPCMBuffer? {
-        switch role {
-        case .main:
-            switch beatKind {
-            case .strong: return strongBeatBoost ? strongAccent : accent
-            case .medium: return mediumAccent
-            case .weak: return beat
-            case .mute: return nil
-            }
-        case .secondary:
-            return secondarySubdivision
-        case .weak:
-            return weakSubdivision
-        case .rest:
-            return nil
-        }
     }
 
     private func applyPendingSubdivisionAtDownbeatIfNeeded() {
@@ -698,42 +753,11 @@ final class MetronomeEngine {
     }
 
     private func currentFrame() -> AVAudioFramePosition {
-        if let render = player.lastRenderTime,
-           let time = player.playerTime(forNodeTime: render) {
-            return time.sampleTime
-        }
-        if let render = engine.outputNode.lastRenderTime {
-            return render.sampleTime
-        }
-        return 0
+        renderer.frame(forHostTime: mach_absolute_time())
     }
 
     private func frames(_ seconds: Double) -> AVAudioFramePosition {
         AVAudioFramePosition(seconds * format.sampleRate)
     }
 
-    private static func scaledCopy(
-        _ source: AVAudioPCMBuffer, gain: Double
-    ) -> AVAudioPCMBuffer? {
-        guard let copy = AVAudioPCMBuffer(
-            pcmFormat: source.format, frameCapacity: source.frameLength
-        ) else { return nil }
-        copy.frameLength = source.frameLength
-        guard let sourceChannels = source.floatChannelData,
-              let destinationChannels = copy.floatChannelData else { return nil }
-        let sampleCount = Int(source.frameLength)
-        let clampedGain = Float(min(1, max(0, gain)))
-        for channelIndex in 0..<Int(source.format.channelCount) {
-            for frame in 0..<sampleCount {
-                destinationChannels[channelIndex][frame] =
-                    sourceChannels[channelIndex][frame] * clampedGain
-            }
-        }
-        return copy
-    }
-
-    deinit {
-        pump?.invalidate()
-        engine.stop()
-    }
 }

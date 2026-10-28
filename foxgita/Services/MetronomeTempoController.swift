@@ -224,6 +224,7 @@ final class MetronomeTempoController {
             engine.queueBpmAtNextBar(settings.startBPM)
         }
         if !isPlaying, settings.countInBars > 0 {
+            engine.configureCountInBars(settings.countInBars)
             subdivisionBeforeCountIn = engine.subdivision
             engine.setSubdivision(.quarter)
             if let subdivisionBeforeCountIn {

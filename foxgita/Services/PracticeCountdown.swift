@@ -15,6 +15,7 @@ final class PracticeCountdown {
     private(set) var configuredSeconds: Int
     private(set) var remainingSeconds: Int
     private(set) var reminderEnabled = false
+    private(set) var completionDate: Date?
     @ObservationIgnored var onCompletion: (() -> Void)?
 
     @ObservationIgnored private let now: () -> Date
@@ -34,9 +35,13 @@ final class PracticeCountdown {
     }
 
     var isActive: Bool { phase != .inactive }
+    var remainingTimeInterval: TimeInterval {
+        deadline.map { max(0, $0.timeIntervalSince(now())) } ?? TimeInterval(remainingSeconds)
+    }
 
     func applyPlan(minutes: Int, reminderEnabled: Bool, startImmediately: Bool) {
         stopTicker()
+        completionDate = nil
         let clampedMinutes = min(60, max(1, minutes))
         configuredSeconds = clampedMinutes * 60
         remainingSeconds = configuredSeconds
@@ -48,6 +53,7 @@ final class PracticeCountdown {
 
     func start() {
         guard phase != .running else { return }
+        completionDate = nil
         deadline = now().addingTimeInterval(TimeInterval(remainingSeconds))
         phase = .running
         startTicker()
@@ -69,6 +75,7 @@ final class PracticeCountdown {
 
     func reset() {
         stopTicker()
+        completionDate = nil
         deadline = nil
         remainingSeconds = configuredSeconds
         phase = .paused
@@ -83,6 +90,7 @@ final class PracticeCountdown {
     func complete() {
         guard phase == .running else { return }
         stopTicker()
+        completionDate = deadline ?? now()
         deadline = nil
         remainingSeconds = 0
         phase = .completed
@@ -91,6 +99,7 @@ final class PracticeCountdown {
 
     func close() {
         stopTicker()
+        completionDate = nil
         deadline = nil
         remainingSeconds = configuredSeconds
         reminderEnabled = false

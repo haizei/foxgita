@@ -19,5 +19,8 @@ struct PracticeRecordRulesTests {
         #expect(PracticeRecordRules.isEffective(durationSec: 0, noteText: "  有笔记  ", recordingCount: 0))
         #expect(PracticeRecordRules.isEffective(durationSec: 0, noteText: "   ", recordingCount: 0) == false)
         #expect(PracticeRecordRules.isEffective(durationSec: 0, noteText: "", recordingCount: 1))
+        #expect(PracticeRecordRules.isEffective(
+            durationSec: 0, noteText: "", recordingCount: 0, imageCount: 1
+        ))
     }
 }

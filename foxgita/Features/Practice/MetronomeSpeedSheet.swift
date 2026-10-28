@@ -20,6 +20,7 @@ struct MetronomeSpeedSheet: View {
     @State private var pendingManualTempo: Int?
     @State private var showRampHelp = false
     @State private var tapStartedAt: Date?
+    @Environment(\.dynamicTypeSize) private var typeSize
     @AppStorage("metronome.ramp-help-seen") private var hasSeenRampHelp = false
 
     init(
@@ -38,7 +39,8 @@ struct MetronomeSpeedSheet: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        ScrollView {
+          VStack(spacing: 0) {
             Capsule().fill(Color(.systemGray3)).frame(width: 40, height: 4).padding(.top, 12)
             header.padding(.top, 12)
             if expanded {
@@ -50,11 +52,13 @@ struct MetronomeSpeedSheet: View {
             Spacer(minLength: 12)
         }
         .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .frame(maxWidth: .infinity, alignment: .top)
+          }
         .background(GitaTheme.bgSurface)
-        .presentationDetents([.height(expanded ? 498 : 382)])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(expanded ? 498 : 382), .large])
         .presentationDragIndicator(.hidden)
         .interactiveDismissDisabled(controller.isRampActive)
+        .accessibilityElement(children: .contain)
         .accessibilityIdentifier("metronome.speed-sheet")
         .onAppear {
             MetronomeAnalytics.emit(
@@ -102,6 +106,7 @@ struct MetronomeSpeedSheet: View {
                 .font(.system(size: 14))
                 .foregroundStyle(GitaTheme.brand500)
                 .frame(minWidth: 48, minHeight: 44, alignment: .trailing)
+                .accessibilityIdentifier("metronome.speed.done")
         }.frame(height: 34)
     }
 

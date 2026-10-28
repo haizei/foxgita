@@ -414,9 +414,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = foxgita/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Gita;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便在练习时录下视频。";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便在练习时录下片段供你回听。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Gita 需要访问相册，以便从曲谱或笔记图片生成练习步骤，或选择已有练习视频做分段诊断。";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便拍摄练习笔记图片或录下练习视频。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便录下练习片段或将语音转为笔记文字。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Gita 需要访问相册，以便添加练习笔记图片、从图片生成练习步骤，或选择练习视频。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Gita 需要语音识别权限，以便在设备上将你的语音转成练习笔记文字。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -450,9 +451,10 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = foxgita/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Gita;
-				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便在练习时录下视频。";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便在练习时录下片段供你回听。";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Gita 需要访问相册，以便从曲谱或笔记图片生成练习步骤，或选择已有练习视频做分段诊断。";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Gita 需要相机权限，以便拍摄练习笔记图片或录下练习视频。";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Gita 需要麦克风权限，以便录下练习片段或将语音转为笔记文字。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Gita 需要访问相册，以便添加练习笔记图片、从图片生成练习步骤，或选择练习视频。";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Gita 需要语音识别权限，以便在设备上将你的语音转成练习笔记文字。";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

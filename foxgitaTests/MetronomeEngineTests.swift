@@ -7,6 +7,40 @@ private struct ApplyBoom: Error {}
 @MainActor
 @Suite(.serialized)
 struct MetronomeEngineTests {
+    @Test func previewPreservesPausedFormalBar() async throws {
+        let metronome = MetronomeEngine()
+        metronome.hapticsEnabled = false
+        metronome.setBpm(200)
+        try metronome.start()
+        defer { metronome.stop() }
+        try await Task.sleep(for: .milliseconds(450))
+        metronome.pausePlayback()
+        let bar = metronome.currentBar
+        try metronome.preview(bars: 1)
+        try await Task.sleep(for: .milliseconds(1500))
+        #expect(!metronome.isPlaying)
+        #expect(metronome.currentBar == bar)
+    }
+
+    @Test func pauseAndResumePreserveFormalBarWhileStopResetsIt() async throws {
+        let metronome = MetronomeEngine()
+        metronome.hapticsEnabled = false
+        metronome.setBpm(200)
+        try metronome.start()
+        defer { metronome.stop() }
+        try await Task.sleep(for: .milliseconds(450))
+        let bar = metronome.currentBar
+        #expect(bar >= 1)
+        metronome.pausePlayback()
+        #expect(!metronome.isPlaying)
+        #expect(metronome.currentBar == bar)
+        try metronome.resumePlayback()
+        try await Task.sleep(for: .milliseconds(250))
+        #expect(metronome.currentBar >= bar)
+        metronome.stop()
+        #expect(metronome.currentBar == 0)
+    }
+
     @Test func bumpClampsAndStepsByOne() {
         let metronome = MetronomeEngine(session: AudioSessionCoordinator(apply: { }))
         #expect(metronome.bpm == 80)

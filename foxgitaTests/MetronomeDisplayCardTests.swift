@@ -33,9 +33,9 @@ struct MetronomeDisplayCardTests {
     @Test func figmaLayoutConstantsMatchMetronomeOptimizationNode() {
         #expect(MetronomeDisplayCard.Layout.cardHeight == 243)
         #expect(MetronomeDisplayCard.Layout.horizontalPadding == 12)
-        #expect(MetronomeDisplayCard.Layout.controlHeight == 68)
-        #expect(MetronomeDisplayCard.Layout.barsHeight == 106)
-        #expect(MetronomeDisplayCard.Layout.trackHeight == 35)
+        #expect(MetronomeDisplayCard.Layout.controlHeight == 60)
+        #expect(MetronomeDisplayCard.Layout.barsHeight == 95)
+        #expect(MetronomeDisplayCard.Layout.trackHeight == 56)
         #expect(MetronomeDisplayCard.Layout.fourBeatSpacing == 23.5)
         #expect(MetronomeDisplayCard.Layout.fourBeatSideInset == 11.75)
         #expect(MetronomeDisplayCard.Layout.secondaryPulseWidth == 72)

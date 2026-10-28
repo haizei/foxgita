@@ -1,0 +1,150 @@
+{
+  "candidates": {
+    "realMetronome-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -21.23897794664204
+    },
+    "realMetronome-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -20.89863198050019
+    },
+    "electronicMetronome-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -18.752370496078214
+    },
+    "electronicMetronome-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -18.538433623386922
+    },
+    "windChime-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -7.797696932763505,
+      "a_rms_dbfs": -14.999999999999998
+    },
+    "windChime-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -4.415473353302936,
+      "a_rms_dbfs": -12.0
+    },
+    "woodblock-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -17.88884806001952
+    },
+    "woodblock-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.2000000000000006,
+      "a_rms_dbfs": -17.809324672052206
+    },
+    "drumKit1-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.2156413708998048,
+      "a_rms_dbfs": -15.0
+    },
+    "drumKit1-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -15.052846780444089
+    },
+    "drumKit2-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -15.991620078179658
+    },
+    "drumKit2-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -1.1999999999999993,
+      "a_rms_dbfs": -18.50502667402692
+    },
+    "handClap-beat": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -7.3451809607726295,
+      "a_rms_dbfs": -15.0
+    },
+    "handClap-strong": {
+      "frames": 3087,
+      "sample_rate": 44100,
+      "peak_dbfs": -4.552116326526599,
+      "a_rms_dbfs": -12.0
+    }
+  },
+  "previews": {
+    "ab-wood.wav": {
+      "bpm": 100,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-wood-80bpm.wav": {
+      "bpm": 80,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-wood-160bpm.wav": {
+      "bpm": 160,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-wood-160bpm-sixteenth.wav": {
+      "bpm": 160,
+      "subdivisions": 4,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-electronic.wav": {
+      "bpm": 100,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-electronic-80bpm.wav": {
+      "bpm": 80,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-electronic-160bpm.wav": {
+      "bpm": 160,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-electronic-160bpm-sixteenth.wav": {
+      "bpm": 160,
+      "subdivisions": 4,
+      "ordinary_a_rms_dbfs_both": -20.0
+    },
+    "ab-strong-beat.wav": {
+      "bpm": 100,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -21.239055436842854
+    },
+    "ab-strong-beat-80bpm.wav": {
+      "bpm": 80,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -21.239055436842854
+    },
+    "ab-strong-beat-160bpm.wav": {
+      "bpm": 160,
+      "subdivisions": 1,
+      "ordinary_a_rms_dbfs_both": -21.239055436842854
+    },
+    "ab-strong-beat-160bpm-sixteenth.wav": {
+      "bpm": 160,
+      "subdivisions": 4,
+      "ordinary_a_rms_dbfs_both": -21.239055436842854
+    }
+  }
+}

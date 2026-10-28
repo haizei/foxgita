@@ -18,14 +18,6 @@ struct MetronomeSettingsSheet: View {
         Array(MetronomeSubdivision.allCases)
     }
 
-    private var canDecreaseSubdivision: Bool {
-        subdivisionCases.first != metronome.configuredSubdivision
-    }
-
-    private var canIncreaseSubdivision: Bool {
-        subdivisionCases.last != metronome.configuredSubdivision
-    }
-
     var body: some View {
         NavigationStack {
             ScrollViewReader { proxy in
@@ -43,6 +35,8 @@ struct MetronomeSettingsSheet: View {
                         }
                         meterControls
                             .id(MetronomeSheetAnchor.meter.scrollSectionID)
+                        Text("BPM 按\(MetronomeMeter.beatUnitName(metronome.configuredDenominator))计拍")
+                            .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
                         accentSection
                         subdivisionSection
                             .id(MetronomeSheetAnchor.subdivision.scrollSectionID)
@@ -108,25 +102,35 @@ struct MetronomeSettingsSheet: View {
             .background(GitaTheme.brand50)
             .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius12))
 
-            controlColumn(title: String(localized: "音符")) {
+            controlColumn(title: String(localized: "计拍单位")) {
                 HStack(spacing: 8) {
                     MetronomeStepButton(
                         kind: .decrease,
                         diameter: stepButtonSize,
-                        enabled: !isLocked && canDecreaseSubdivision
+                        enabled: !isLocked && metronome.configuredDenominator > 2
                     ) {
-                        metronome.bumpSubdivision(-1)
+                        stepDenominator(-1)
                     }
+                    .accessibilityIdentifier("metronome.denominator.decrease")
+                    .accessibilityLabel("缩小计拍单位")
                     MetronomeStepButton(
                         kind: .increase,
                         diameter: stepButtonSize,
-                        enabled: !isLocked && canIncreaseSubdivision
+                        enabled: !isLocked && metronome.configuredDenominator < 16
                     ) {
-                        metronome.bumpSubdivision(1)
+                        stepDenominator(1)
                     }
+                    .accessibilityIdentifier("metronome.denominator.increase")
+                    .accessibilityLabel("增大计拍单位")
                 }
             }
         }
+    }
+
+    private func stepDenominator(_ delta: Int) {
+        let values = MetronomeMeter.supportedDenominators
+        guard let index = values.firstIndex(of: metronome.configuredDenominator), values.indices.contains(index + delta) else { return }
+        metronome.setDenominator(values[index + delta])
     }
 
     private func controlColumn<Content: View>(

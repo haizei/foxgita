@@ -5,7 +5,7 @@
 
 import Foundation
 
-enum MetronomePulseRole: Equatable {
+nonisolated enum MetronomePulseRole: Equatable, Sendable {
     case main
     case secondary
     case weak

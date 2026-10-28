@@ -5,9 +5,11 @@ enum PracticeRecordRules {
         id.hasPrefix("custom-") || id.hasPrefix("active-")
     }
 
-    static func isEffective(durationSec: Int, noteText: String, recordingCount: Int) -> Bool {
+    static func isEffective(
+        durationSec: Int, noteText: String, recordingCount: Int, imageCount: Int = 0
+    ) -> Bool {
         if durationSec > 0 { return true }
         if !noteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return true }
-        return recordingCount > 0
+        return recordingCount > 0 || imageCount > 0
     }
 }

@@ -28,7 +28,10 @@ struct foxgitaApp: App {
         #else
         let isDNAProgramsUITest = false
         #endif
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isDNAProgramsUITest)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isDNAProgramsUITest || PracticeTestEnvironment.isActive)
+        if PracticeTestEnvironment.isActive {
+            PracticeTestEnvironment.defaults.removeObject(forKey: SeedData.seededKey)
+        }
         do {
             let container = try ModelContainer(
                 for: schema, migrationPlan: GitaMigrationPlan.self, configurations: [config]
@@ -66,6 +69,7 @@ struct foxgitaApp: App {
             let invocationLog = LiveAIInvocationLog(store: invocationStore)
             let store = PracticeStore(
                 repository: SwiftDataPracticeRepository(context: container.mainContext),
+                defaults: PracticeTestEnvironment.defaults,
                 taskMemorySync: taskMemorySync,
                 aiCandidateSync: aiCandidateSync,
                 invocationStore: invocationStore

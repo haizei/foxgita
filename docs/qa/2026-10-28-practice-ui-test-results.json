@@ -1,0 +1,52 @@
+[
+  {
+    "name": "full-workspace",
+    "result_bundle": "/tmp/gita59-full-suite.xcresult",
+    "result": "Failed",
+    "logical_tests": 648,
+    "passed": 647,
+    "failed": 1,
+    "failures": [
+      {
+        "test": "testNewProjectDetailShowsHonestEmptyStateAndStartsNewPractice()",
+        "message": "Failed to tap \"写笔记\" Button: No matches found for Elements matching predicate '\"写笔记\" IN identifiers' from input {(\n    Button, label: '返回',\n    Button, label: '完成',\n    Button, label: '项目 · 界面验收项目690CCA',\n    Button, identifier: 'countdown.open-settings', label: '倒计时',\n    Button, identifier: 'practice.toggle-running', label: '开始',\n    Button, label: 'TAP',\n    Button, label: '新增步骤',\n    Button, label: '语音转文字',\n    Button, label: '录音',\n    Button, label: '录像',\n    Button, label: '添加笔记图片',\n    Button, label: '完成本次练习',\n    Button, label: '拍号，打开节拍器设置',\n    Button, identifier: 'minus.circle', label: '降低速度',\n    Button, identifier: 'metronome.open-speed', label: '速度，打开调整速度',\n    Button, identifier: 'plus.circle', label: '提高速度',\n    Button, label: '细分，打开节拍器设置',\n    Button, identifier: 'metronome.accent-beat.1', label: '第 1 拍，强拍',\n    Button, identifier: 'metronome.accent-beat.2', label: '第 2 拍，普通拍',\n    Button, identifier: 'metronome.accent-beat.3', label: '第 3 拍，普通拍',\n    Button, identifier: 'metronome.accent-beat.4', label: '第 4 拍，普通拍',\n    Button, identifier: 'metronome.open-sound-settings', label: '音效与视觉设置'\n)}"
+      }
+    ]
+  },
+  {
+    "name": "final-scoped-ui",
+    "result_bundle": "/tmp/gita59-final-ui.xcresult",
+    "result": "Passed",
+    "logical_tests": 5,
+    "passed": 5,
+    "failed": 0,
+    "failures": []
+  },
+  {
+    "name": "extra-ui-assertions",
+    "result_bundle": "/tmp/gita59-final-ui-assertions.xcresult",
+    "result": "Passed",
+    "logical_tests": 3,
+    "passed": 3,
+    "failed": 0,
+    "failures": []
+  },
+  {
+    "name": "fixed-project-note-working-tree",
+    "result_bundle": "/tmp/gita59-project-note-regression.xcresult",
+    "result": "Passed",
+    "logical_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "failures": []
+  },
+  {
+    "name": "fixed-project-note-commit-copy",
+    "result_bundle": "/tmp/gita59-note-projection-green.xcresult",
+    "result": "Passed",
+    "logical_tests": 1,
+    "passed": 1,
+    "failed": 0,
+    "failures": []
+  }
+]

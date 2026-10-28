@@ -1,0 +1,9 @@
+<svg preserveAspectRatio="none" overflow="visible" style="display: block;" width="14.5918" height="14.5918" viewBox="0 0 14.5918 14.5918" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="Detail/Screw/Left">
+<circle id="Screw/Head" cx="7.29592" cy="7.29592" r="6.96429" fill="#F6F6F6"/>
+<path id="Screw/Stroke" d="M13.5969 7.29592C13.5969 10.7759 10.7759 13.5969 7.29592 13.5969C3.81596 13.5969 0.994898 10.7759 0.994898 7.29592C0.994898 3.81596 3.81596 0.994898 7.29592 0.994898C10.7759 0.994898 13.5969 3.81596 13.5969 7.29592Z" stroke-width="0.663265" stroke="#D6D9DE"/>
+<g id="Screw/Slot">
+<path id="Vector" d="M5.30612 5.30612L7.79337 7.79337M7.79337 7.79337L9.28571 9.28571M7.79337 7.79337L6.30102 9.28571M7.79337 7.79337L9.28571 6.30102" stroke-width="0.895408" stroke-linecap="round" stroke-linejoin="round" stroke="#999999"/>
+</g>
+</g>
+</svg>
