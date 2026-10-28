@@ -2,8 +2,14 @@
   "date": "2026-10-29",
   "issue": 59,
   "base_commit": "dc1dff0",
-  "device": { "model": "iPhone 17 Pro", "os_version": "26.1" },
-  "ui_build_for_testing": { "exit_code": 0, "signing": "succeeded_in_temporary_copy" },
+  "device": {
+    "model": "iPhone 17 Pro",
+    "os_version": "26.1"
+  },
+  "ui_build_for_testing": {
+    "exit_code": 0,
+    "signing": "succeeded_in_temporary_copy"
+  },
   "ui_execution": {
     "status": "blocked_by_free_development_app_limit",
     "requested_ui_cases": 3,
@@ -14,10 +20,30 @@
     "other_apps_uninstalled": false
   },
   "hardware_short_tests": {
-    "build": "compiled",
-    "status": "cancelled_while_waiting_for_unlock",
-    "executed_tests": 0,
-    "result_bundle": "/tmp/gita59-device-hardware-short.xcresult"
+    "status": "pre_fix_two_passed_one_failed; post_fix_physical_validation_pending",
+    "pre_fix_run": {
+      "executed_tests": 3,
+      "passed": 2,
+      "failed": 1,
+      "skipped": 0,
+      "result_bundle": "/tmp/gita59-device-hardware-short-unlocked.xcresult",
+      "failure": "Countdown completion measured after cleanup: 60.76565625 s versus 60 +/- 0.5 s"
+    },
+    "timing_diagnostic": {
+      "executed_tests": 1,
+      "passed": 0,
+      "failed": 1,
+      "result_bundle": "/tmp/gita59-device-countdown-timing.xcresult",
+      "callback_entry_seconds": 60.64466854161583,
+      "recorded_media_seconds": 60.39365079365079,
+      "stop_return_seconds": 60.76505312498193
+    },
+    "post_fix_run": {
+      "status": "cancelled_while_waiting_for_device_unlock",
+      "executed_tests": 0,
+      "result_bundle": "/tmp/gita59-device-hardware-short-fixed.xcresult",
+      "xcode_exit_code": 73
+    }
   },
   "simulator_hardware_gate": {
     "discovered_tests": 4,
@@ -27,8 +53,86 @@
     "result": "Skipped",
     "result_bundle": "/tmp/gita59-device-gate-sim.xcresult"
   },
-  "two_hour_foreground_timeline": "not_started",
-  "manual_device_matrix": "pending_user_device_operations_and_observations",
-  "review": { "standards_findings": 0, "spec_findings": 0 },
-  "acceptance_complete": false
+  "two_hour_foreground_timeline": "deferred_by_user; not_started",
+  "manual_device_matrix": "unverified; simulator and injected event checks do not establish physical call, route removal, lock, camera or acoustic acceptance",
+  "review": {
+    "standards_findings": 0,
+    "spec_findings": 0
+  },
+  "acceptance_complete": false,
+  "continuation_base_commit": "2d070d3",
+  "user_decisions": {
+    "long_test": "defer_two_hour_run",
+    "ui_automation": "use_simulator",
+    "short_hardware_tests": "run_after_unlock",
+    "manual_operations": "prefer_automation; no observed external call, headphone removal or camera capture supplied"
+  },
+  "simulator_settings_ui": {
+    "executed_tests": 5,
+    "passed": 5,
+    "failed": 0,
+    "skipped": 0,
+    "result_bundle": "/tmp/gita59-practice-sim-ui-short.xcresult"
+  },
+  "simulator_lifecycle_initial": {
+    "executed_tests": 26,
+    "passed": 25,
+    "failed": 1,
+    "skipped": 0,
+    "breakdown": "24 audio-session/tempo rules passed; background note round trip passed; silent switch center tap did not change value",
+    "result_bundle": "/tmp/gita59-practice-sim-lifecycle-short.xcresult"
+  },
+  "deadline_order_red": {
+    "executed_tests": 2,
+    "passed": 1,
+    "failed": 1,
+    "result_bundle": "/tmp/gita59-deadline-order-red-suite.xcresult",
+    "failure": "Deadline callback observed category application count 3 instead of pre-cleanup count 2"
+  },
+  "excluded_empty_filter_run": {
+    "result_bundle": "/tmp/gita59-deadline-order-red.xcresult",
+    "executed_tests": 0,
+    "included_as_pass": false
+  },
+  "simulator_post_fix_regression": {
+    "status": "completed",
+    "result_bundle": "/tmp/gita59-deadline-lifecycle-green.xcresult",
+    "executed_tests": 39,
+    "passed": 38,
+    "failed": 1,
+    "skipped": 0,
+    "service_tests_passed": 37,
+    "ui_failure": "Silent scenario clicked underlying Done button; final dedicated UI rerun recorded separately"
+  },
+  "simulator_lifecycle_final": {
+    "executed_tests": 2,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "result_bundle": "/tmp/gita59-lifecycle-ui-final.xcresult",
+    "scope": "Foreground/background round trips, elapsed time, note draft retention and subsequent return/reentry; not physical suspension or immediate background persistence proof"
+  },
+  "simulator_audio_rules_final": {
+    "status": "completed",
+    "result_bundle": "/tmp/gita59-session-tempo-final.xcresult",
+    "executed_tests": 24,
+    "passed": 24,
+    "failed": 0,
+    "skipped": 0
+  },
+  "diagnostic_ui_runs": [
+    {
+      "result_bundle": "/tmp/gita59-silent-background-diagnostic.xcresult",
+      "outcome": "Failed before background: primary button not hittable"
+    },
+    {
+      "result_bundle": "/tmp/gita59-silent-start-state.xcresult",
+      "outcome": "Failed before background; hierarchy showed advanced sound form still open"
+    }
+  ],
+  "final_phased_coverage": {
+    "related_unit_cases_passed": 61,
+    "ui_cases_passed": 7,
+    "note": "Phased runs; the original failed result bundles are retained. Hardware post-fix acceptance remains pending."
+  }
 }

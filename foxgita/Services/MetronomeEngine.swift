@@ -396,11 +396,18 @@ final class MetronomeEngine {
     }
 
     func stop() {
+        stop(beforeReleasingSession: nil)
+    }
+
+    private func stop(beforeReleasingSession onStopped: (() -> Void)?) {
         previewReturnState = nil
         pausedPosition = nil
         currentBar = 0
         excludedCountInBars = 0
-        guard isPlaying || pump != nil else { return }
+        guard isPlaying || pump != nil else {
+            onStopped?()
+            return
+        }
         cancelArmedCountdownStop()
         pump?.invalidate()
         pump = nil
@@ -416,6 +423,9 @@ final class MetronomeEngine {
         previewRemainingBeats = nil
         previewStopScheduled = false
         applyConfiguredRhythm()
+        // Category changes can block on real hardware. Deliver the deadline
+        // after silencing/resetting playback, before reconfiguring the session.
+        onStopped?()
         session.release(.playback)
         metronomeLog.debug(
             "stop running=\(self.engine.isRunning, privacy: .public) other=\(AVAudioSession.sharedInstance().isOtherAudioPlaying, privacy: .public)"
@@ -587,8 +597,7 @@ final class MetronomeEngine {
         cutoffCompletion = nil
         cutoffToken += 1
         cutoffPlayer.stop()
-        stop()
-        completion?()
+        stop(beforeReleasingSession: completion)
     }
 
     private func scheduleTimelineEvent(

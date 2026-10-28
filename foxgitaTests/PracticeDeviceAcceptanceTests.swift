@@ -114,9 +114,11 @@ final class PracticeDeviceAcceptanceTests: XCTestCase {
             recorder.discardPending()
         }
         var stoppedAt: TimeInterval?
+        var stopReturnedAt: TimeInterval?
         countdown.onCompletion = {
-            _ = runtime.handleCountdownCompletion()
             stoppedAt = ProcessInfo.processInfo.systemUptime
+            _ = runtime.handleCountdownCompletion()
+            stopReturnedAt = ProcessInfo.processInfo.systemUptime
         }
         defer { countdown.onCompletion = nil }
         engine.configureSound(modeRaw: nil, volume: 25, strongBeatBoost: true)
@@ -135,10 +137,20 @@ final class PracticeDeviceAcceptanceTests: XCTestCase {
         XCTAssertFalse(engine.isPlaying)
         XCTAssertFalse(recorder.isRecording)
         XCTAssertEqual(recorder.pending.count, 1)
-        XCTAssertEqual(try XCTUnwrap(stoppedAt) - startedAt, 60, accuracy: 0.5, "Observed service completion deadline")
+        XCTAssertEqual(try XCTUnwrap(stoppedAt) - startedAt, 60, accuracy: 0.5, "Observed countdown callback entry deadline")
         let clip = try XCTUnwrap(recorder.pending.first)
         let file = try AVAudioFile(forReading: clip.url)
         let duration = Double(file.length) / file.processingFormat.sampleRate
+        let evidence: [String: Double] = [
+            "callback_entry_seconds": try XCTUnwrap(stoppedAt) - startedAt,
+            "stop_return_seconds": try XCTUnwrap(stopReturnedAt) - startedAt,
+            "recorded_media_seconds": duration
+        ]
+        print("DEVICE_COUNTDOWN \(evidence)")
+        let attachment = XCTAttachment(data: try JSONSerialization.data(withJSONObject: evidence, options: [.prettyPrinted, .sortedKeys]), uniformTypeIdentifier: "public.json")
+        attachment.name = "Countdown callback and recorded media timing"
+        attachment.lifetime = .keepAlways
+        add(attachment)
         XCTAssertEqual(duration, 60, accuracy: 0.5, "Recorded media must exclude post-deadline wall time")
         XCTAssertFalse(runtime.handleCountdownCompletion(), "Completion must remain idempotent")
     }
