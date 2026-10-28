@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-29",
+  "issue": 59,
+  "base_commit": "dc1dff0",
+  "device": { "model": "iPhone 17 Pro", "os_version": "26.1" },
+  "ui_build_for_testing": { "exit_code": 0, "signing": "succeeded_in_temporary_copy" },
+  "ui_execution": {
+    "status": "blocked_by_free_development_app_limit",
+    "requested_ui_cases": 3,
+    "executed_ui_cases": 0,
+    "xcode_reported_infrastructure_failures": 1,
+    "xcode_exit_code": 65,
+    "result_bundle": "/tmp/gita59-device-practice-ui.xcresult",
+    "other_apps_uninstalled": false
+  },
+  "hardware_short_tests": {
+    "build": "compiled",
+    "status": "cancelled_while_waiting_for_unlock",
+    "executed_tests": 0,
+    "result_bundle": "/tmp/gita59-device-hardware-short.xcresult"
+  },
+  "simulator_hardware_gate": {
+    "discovered_tests": 4,
+    "passed": 0,
+    "failed": 0,
+    "skipped": 4,
+    "result": "Skipped",
+    "result_bundle": "/tmp/gita59-device-gate-sim.xcresult"
+  },
+  "two_hour_foreground_timeline": "not_started",
+  "manual_device_matrix": "pending_user_device_operations_and_observations",
+  "review": { "standards_findings": 0, "spec_findings": 0 },
+  "acceptance_complete": false
+}
