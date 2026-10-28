@@ -1,0 +1,150 @@
+{
+  "selected_on": "2026-10-29",
+  "user_decision": "采用新版自然瞬态方向",
+  "previous_bundle_commit": "8eeba84",
+  "candidate_commit": "8eeba84",
+  "files": [
+    {
+      "file": "drumKit1-beat.wav",
+      "previous_sha256": "f01928717f198a05ef024b456138efc1dcb13b95e270f9be8ceddf3b9fd0b313",
+      "approved_sha256": "a2d5fe8bb8016ef8037731c84b31aa6c42a7f1b0b411619efd5ce36800214732",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.2157594858704137
+    },
+    {
+      "file": "drumKit1-strong.wav",
+      "previous_sha256": "637e9b9622ca4dfe0c3a0ab77e1edf4e29596686c2c415148f924dbcf062e446",
+      "approved_sha256": "107a9c1de9c266fed0fb730bb83f2e4678facebfc48f5cea30d468a7f55bf5ff",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "drumKit2-beat.wav",
+      "previous_sha256": "557c2eb212c315439b7af0a473ad69430e0b3da06d925b34b0390a8d88ad3c7a",
+      "approved_sha256": "07ff079b3834e408359bc5d1ad9090c16e10a947248909d17e17b627c1829684",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "drumKit2-strong.wav",
+      "previous_sha256": "7ce2e70d94f3aac773eec9c38e6ed0d109e14cb0cfa32549ab3c0279d06f0fe8",
+      "approved_sha256": "d3e0b33e519f51aa50d230714874bd0f5336e474e4f1a63e20bf34bb8e97129d",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "electronicMetronome-beat.wav",
+      "previous_sha256": "91793d795a7cd4b24447e39e3f2fcb6aa4af4170090334a15bfab04330d24596",
+      "approved_sha256": "3ec2b262a4f36e8f2880516153b492c9d456c69f40bd7dd07886e5af78cb2a35",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "electronicMetronome-strong.wav",
+      "previous_sha256": "263b5ed927b3c8916f24e0bead40956ceea19db63ebd70b39376cb4dd881a175",
+      "approved_sha256": "449979eeeb4f7658d4ee9e50a6dbe87656965f46733b98cc2603fdecb0de1cf0",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "handClap-beat.wav",
+      "previous_sha256": "f2601422200256490039c12553c074f16ff2edbd757d4af1b707bb442c3575dd",
+      "approved_sha256": "8063445ce24c9d7f9840cdab8c7ff1c13c457d2a9caf1887134a6957806a37ce",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -7.3455864376466105
+    },
+    {
+      "file": "handClap-strong.wav",
+      "previous_sha256": "e95e8c7e171e5b7ab555b330264ce72d830f96e9778ae48d0d1430a445f3090f",
+      "approved_sha256": "a921edbf1b6a5d082f507e6d2618ff7d9c2a78fdcfbafb5c891e193cd312a554",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -4.552516385858775
+    },
+    {
+      "file": "realMetronome-beat.wav",
+      "previous_sha256": "13398cc6cb9ec618ba70c82f30365c5c689a15bc46b4ccffd5a6f096aa177fc3",
+      "approved_sha256": "f3f82b15c7c7486d3bdbee3a4b3b133e2cee65c21d951a855c7263b2b8a5b0c8",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "realMetronome-strong.wav",
+      "previous_sha256": "c00bd440954f38e72158a63be8300d3679c2ba934fce937773a3cc7a04640350",
+      "approved_sha256": "41bdee41c5ae9684ef40b94a4014731c743d2a8091d13064c405de980bb0e470",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "windChime-beat.wav",
+      "previous_sha256": "94aad2aedaf7ecc4202f22c618f7f1a36bcb5a5d099412d23c78b9a65d080983",
+      "approved_sha256": "457ff497cedf95fc1c1aa176ae97529050266de11017b4e818dca0b9cb59535f",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -7.798072225770553
+    },
+    {
+      "file": "windChime-strong.wav",
+      "previous_sha256": "aeee629392bbead42142ab054a9d45338922da48f4580bba8b6a0d6be6226a73",
+      "approved_sha256": "0be8c9d96e66af188aa3fd7e7e05e1fb1fc85ff1e91d6434f7b4780b3049a0e5",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -4.4157069091908685
+    },
+    {
+      "file": "woodblock-beat.wav",
+      "previous_sha256": "eaed153dbd710e620a38bd4db937bcd20fb7ad193742bea90bc3e63b6af4d809",
+      "approved_sha256": "af3dd13fcd0a2fdaf182ca5d9c80c364afec687b11e393c07f21c4f19630dc64",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    },
+    {
+      "file": "woodblock-strong.wav",
+      "previous_sha256": "44d0f55c2ff6d32964588e7708b78d5f3f54ca2e396f0167d833454325f2b31e",
+      "approved_sha256": "79bdf5a8bfdae4b428e111ddd4f02d8d8d5f9f4e38323cde7f485b7d6884c3d6",
+      "frames": 3087,
+      "sample_rate": 44100,
+      "channels": 1,
+      "bit_depth": 16,
+      "peak_dbfs": -1.200223669866087
+    }
+  ],
+  "listening_previews_preserved": true,
+  "real_device_acceptance": "unverified"
+}
