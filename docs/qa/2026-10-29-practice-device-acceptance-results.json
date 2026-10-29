@@ -20,7 +20,7 @@
     "other_apps_uninstalled": false
   },
   "hardware_short_tests": {
-    "status": "pre_fix_two_passed_one_failed; post_fix_physical_validation_pending",
+    "status": "final_post_fix_run_passed",
     "pre_fix_run": {
       "executed_tests": 3,
       "passed": 2,
@@ -43,6 +43,26 @@
       "executed_tests": 0,
       "result_bundle": "/tmp/gita59-device-hardware-short-fixed.xcresult",
       "xcode_exit_code": 73
+    },
+    "final_post_fix_run": {
+      "commit": "c4ee455",
+      "status": "Passed",
+      "executed_tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "duration_seconds": 132.885,
+      "result_bundle": "/tmp/gita59-device-short-final-unlocked.xcresult",
+      "suites": [
+        "PracticeDeviceAcceptanceTests (3 short cases; two-hour case excluded)",
+        "MetronomeDeadlineOrderingTests (2 cases)"
+      ],
+      "timing": {
+        "callback_entry_seconds": 60.09176170831779,
+        "recorded_media_seconds": 59.83637188208617,
+        "stop_return_seconds": 60.10381087497808
+      },
+      "scope": "Physical microphone, pause ownership, decoded take, countdown state/media duration, sound-preset timeline, deadline order and reentrant playback ownership; not acoustic loopback or full device matrix"
     }
   },
   "simulator_hardware_gate": {
@@ -133,6 +153,8 @@
   "final_phased_coverage": {
     "related_unit_cases_passed": 61,
     "ui_cases_passed": 7,
-    "note": "Phased runs; the original failed result bundles are retained. Hardware post-fix acceptance remains pending."
-  }
+    "note": "Phased runs; original failed and interrupted bundles retained. Five physical post-fix short checks passed; full device matrix and two-hour run remain incomplete.",
+    "physical_short_cases_passed": 5
+  },
+  "automated_short_checks_complete": true
 }
