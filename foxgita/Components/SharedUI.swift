@@ -346,7 +346,10 @@ struct SwipeRevealRow<Content: View>: View {
         }
         .coordinateSpace(.named(swipeSpace))
         .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius16))
-        .shadow(color: GitaTheme.shadowCard, radius: 8, y: 4)
+        .overlay {
+            RoundedRectangle(cornerRadius: GitaTheme.radius16)
+                .strokeBorder(GitaTheme.borderSubtle, lineWidth: 0.7)
+        }
         .accessibilityHint(Text(onEdit == nil ? "左滑可删除" : "左滑可编辑或删除"))
     }
 
@@ -459,6 +462,7 @@ struct DaySessionCard: View {
     var subtitle: String = ""
     let minutesText: String
     var projectCapsule: String? = nil
+    var sourceLabel: String? = nil
     var onProjectCapsule: (() -> Void)? = nil
     var action: (() -> Void)?
 
@@ -472,6 +476,7 @@ struct DaySessionCard: View {
         subtitle: String = "",
         minutesText: String? = nil,
         projectCapsule: String? = nil,
+        sourceLabel: String? = nil,
         onProjectCapsule: (() -> Void)? = nil,
         action: (() -> Void)? = nil
     ) {
@@ -484,6 +489,7 @@ struct DaySessionCard: View {
         self.subtitle = subtitle
         self.minutesText = minutesText ?? String(localized: "已练 \(minutes) 分钟")
         self.projectCapsule = projectCapsule
+        self.sourceLabel = sourceLabel
         self.onProjectCapsule = onProjectCapsule
         self.action = action
     }
@@ -509,6 +515,11 @@ struct DaySessionCard: View {
                     .font(GitaFont.body(.bold))
                     .foregroundStyle(GitaTheme.textPrimary)
                     .lineLimit(2)
+                if let sourceLabel {
+                    Text(sourceLabel)
+                        .font(GitaFont.micro())
+                        .foregroundStyle(GitaTheme.textSecondary)
+                }
                 if let projectCapsule, let onProjectCapsule {
                     Text(projectCapsule)
                         .font(GitaFont.caption(.medium))
@@ -534,7 +545,7 @@ struct DaySessionCard: View {
                     .foregroundStyle(GitaTheme.textSecondary)
                 Text(actionTitle)
                     .font(GitaFont.caption(.semibold))
-                    .foregroundStyle(solidCTA ? GitaTheme.brandOn : GitaTheme.textSecondary)
+                    .foregroundStyle(solidCTA ? GitaTheme.brandOn : GitaTheme.textPrimary)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
                     .background(solidCTA ? GitaTheme.brand500 : GitaTheme.bgSubtle)
@@ -565,7 +576,7 @@ struct DaySessionCard: View {
     }
 
     private var accessibilityLabelText: String {
-        [title, projectCapsule ?? subtitle, minutesText, actionTitle]
+        [title, sourceLabel ?? "", projectCapsule ?? subtitle, minutesText, actionTitle]
             .filter { !$0.isEmpty }
             .joined(separator: "，")
     }

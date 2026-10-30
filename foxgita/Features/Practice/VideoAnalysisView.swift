@@ -47,6 +47,14 @@ struct VideoAnalysisView: View {
             case .waiting: return GitaTheme.textTertiary
             }
         }
+
+        var textTint: Color {
+            switch self {
+            case .done: return GitaTheme.statusSuccessText
+            case .running: return GitaTheme.brand500
+            case .waiting: return GitaTheme.textTertiary
+            }
+        }
     }
 
     private var status: ReviewStatus {
@@ -186,7 +194,7 @@ struct VideoAnalysisView: View {
                 .frame(width: 6, height: 6)
             Text(state.label)
                 .font(GitaFont.caption(.semibold))
-                .foregroundStyle(state.tint)
+                .foregroundStyle(state.textTint)
         }
         .padding(.vertical, 10)
         .accessibilityElement(children: .combine)

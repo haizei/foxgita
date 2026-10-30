@@ -115,7 +115,7 @@ enum DNARecommendations {
             ("vocabulary", "音乐词汇", themes, .song, style.isEmpty ? "从熟悉的乐句积累音乐词汇" : "根据你选择的风格：" + style),
             ("listening", "听力训练", "音程辨认 · 和弦辨认", .scale, "用听觉巩固练习内容")
         ]
-        return PracticeRoutine(name: label + "与音乐表达练习", exercises: definitions.enumerated().map { i, item in
+        return PracticeRoutine(name: answers == nil ? "旋律与即兴练习" : label + "与音乐表达练习", exercises: definitions.enumerated().map { i, item in
             ProgramExercise(id: "dna.\(item.0)", title: item.1, subtitle: item.2,
                             minutes: minutes[i], category: item.3, reason: item.4)
         })

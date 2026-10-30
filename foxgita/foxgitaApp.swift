@@ -20,15 +20,22 @@ struct foxgitaApp: App {
     private let invocationStore: AIInvocationStore
     private let coordinator: MemoryConsentCoordinator
     private let durationPreferenceSync: DurationPreferenceSync
+    private let isProjectDetailUITest: Bool
 
     init() {
         let schema = Schema(versionedSchema: GitaSchemaV19.self)
+        #if DEBUG
+        let isProjectDetailUITest = ProcessInfo.processInfo.arguments.contains(ProjectDetailUITestFixture.launchArgument)
+        #else
+        let isProjectDetailUITest = false
+        #endif
+        self.isProjectDetailUITest = isProjectDetailUITest
         #if DEBUG
         let isDNAProgramsUITest = ProcessInfo.processInfo.arguments.contains("-DNAProgramsUITesting")
         #else
         let isDNAProgramsUITest = false
         #endif
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isDNAProgramsUITest || PracticeTestEnvironment.isActive)
+        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isProjectDetailUITest || isDNAProgramsUITest || PracticeTestEnvironment.isActive)
         if PracticeTestEnvironment.isActive {
             PracticeTestEnvironment.defaults.removeObject(forKey: SeedData.seededKey)
         }
@@ -111,6 +118,20 @@ struct foxgitaApp: App {
                 .onAppear {
                     store.prepare()
                     #if DEBUG
+                    do {
+                        try PracticeHistoryUITestFixture.seedIfRequested(store: store)
+                    } catch {
+                        Logger(subsystem: "com.haizei.foxgita", category: "ui-test")
+                            .error("History fixture failed: \(String(describing: error), privacy: .public)")
+                    }
+                    if isProjectDetailUITest {
+                        do {
+                            try ProjectDetailUITestFixture.seed(store: store, router: router)
+                        } catch {
+                            Logger(subsystem: "com.haizei.foxgita", category: "ui-test")
+                                .error("Project detail fixture failed: \(String(describing: error), privacy: .public)")
+                        }
+                    }
                     if let profile = try? store.activeProfileForDebug() {
                         try? MemoryDebugSeeder.seedIfNeeded(
                             defaults: .standard,

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UIKit
 @testable import foxgita
 
 private struct ApplyBoom: Error {}
@@ -39,6 +40,30 @@ struct MetronomeEngineTests {
         #expect(metronome.currentBar >= bar)
         metronome.stop()
         #expect(metronome.currentBar == 0)
+    }
+
+    @Test func sustainedPlaybackKeepsAudioClockAndPumpAlive() async throws {
+        // PracticeDetailView keeps the screen awake during foreground playback.
+        let previousIdleSetting = UIApplication.shared.isIdleTimerDisabled
+        UIApplication.shared.isIdleTimerDisabled = true
+        defer { UIApplication.shared.isIdleTimerDisabled = previousIdleSetting }
+        let metronome = MetronomeEngine()
+        var beatCount = 0
+        metronome.onTimelineEvent = { _ in beatCount += 1 }
+        try metronome.start()
+        defer { metronome.stop() }
+
+        // Exercise the real audio clock and timer beyond the short start/stop
+        // tests, including feedback on every downbeat, as in practice detail.
+        for _ in 0..<18 {
+            let previousCount = beatCount
+            try await Task.sleep(for: .seconds(10))
+            #expect(metronome.isPlaying)
+            #expect(metronome.isEngineRunning)
+            #expect(metronome.hasPump)
+            #expect(beatCount > previousCount)
+        }
+        #expect(beatCount >= 200)
     }
 
     @Test func bumpClampsAndStepsByOne() {

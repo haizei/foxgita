@@ -4,8 +4,8 @@
 //
 
 import AudioToolbox
-import SwiftData
 import PhotosUI
+import SwiftData
 import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
@@ -166,7 +166,6 @@ struct PracticeDetailView: View {
     @State private var dictationInsertionSelection: TextSelection?
     @State private var dictationInsertionText = ""
     @State private var noteImages: [NoteImage] = []
-    private let noteImageStore = NoteImageStore()
     @State private var selectedNotePhotos: [PhotosPickerItem] = []
     @State private var noteAttachmentsExpanded = false
     @State private var noteCameraPresented = false
@@ -223,6 +222,7 @@ struct PracticeDetailView: View {
     @State private var activeTrainingStartedAt: Date?
     @State private var interruptionObserverToken: UUID?
     @FocusState private var noteFocused: Bool
+    private let noteImageStore = NoteImageStore()
 
     private var metronome: MetronomeEngine { tempoController.engine }
 
@@ -379,6 +379,7 @@ struct PracticeDetailView: View {
                 draftProjectId = item.projectId
                 noteText = item.note
                 storedNote = item.note
+                loadNoteImages()
                 storedDurationSeconds = PracticeDetailState.initialElapsedSeconds(
                     storedDurationSeconds: item.durationSeconds
                 )
@@ -2222,6 +2223,7 @@ struct PracticeDetailView: View {
         let hadContent = hasUnsavedWork
             || storedDurationSeconds > 0
             || !storedNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !noteImages.isEmpty
             || !item.recordings.filter({ $0.deletedAt == nil }).isEmpty
         if hadContent {
             Haptics.success()

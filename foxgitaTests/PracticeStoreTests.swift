@@ -1070,6 +1070,33 @@ struct PracticeStoreTests {
         #expect(try repo.sessions().count == sessionsBefore)
     }
 
+    @Test func createPracticeItemLinksSelectedProjectInInitialSave() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        let now = date(2026, 8, 26)
+        let project = try store.createProject(name: "吉他基础练习", goal: "", now: now)
+        var input = makeInput()
+        input.projectId = project.id
+
+        let item = try store.createPracticeItem(input: input, now: now, calendar: shanghai())
+        let profileId = try activeProfileId(repo)
+        #expect(item.projectId == project.id)
+        #expect(try repo.practiceItem(id: item.id, profileId: profileId)?.projectId == project.id)
+    }
+
+    @Test func createPracticeItemRejectsMissingProjectWithoutSavingItem() throws {
+        let (store, repo, _) = makeStore(seeded: true)
+        store.prepare()
+        var input = makeInput()
+        input.projectId = UUID()
+
+        #expect(throws: StoreError.notFound) {
+            try store.createPracticeItem(input: input, now: date(2026, 8, 26), calendar: shanghai())
+        }
+        let profileId = try activeProfileId(repo)
+        #expect(try repo.practiceItems(profileId: profileId).isEmpty)
+    }
+
     @Test func savePracticeItem600TwiceStays600() throws {
         let (store, repo, _) = makeStore(seeded: true)
         store.prepare()

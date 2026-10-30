@@ -89,10 +89,10 @@ struct PracticeHomeStateTests {
         ]
         let state = PracticeHomeState.make(selectedDayKey: "2026-08-25", allItems: items)
         #expect(state.totalDurationSeconds == 130)
-        #expect(state.items.count == 3)
+        #expect(state.items.count == 2)
     }
 
-    @Test func calendarMarksComeFromTheSameCheckedInKeysAsTheList() {
+    @Test func calendarMarksOnlyEffectivePracticeWhileTodayKeepsUnplayedPlans() {
         let t25 = date(year: 2026, month: 8, day: 25, hour: 10)
         let t26 = date(year: 2026, month: 8, day: 26, hour: 10)
         let items = [
@@ -100,13 +100,12 @@ struct PracticeHomeStateTests {
             item(dayKey: "2026-08-26", createdAt: t26, title: "二十六", durationSeconds: 120),
             item(dayKey: "2026-08-24", createdAt: t25, title: "已删", isDeleted: true),
         ]
-        let state = PracticeHomeState.make(selectedDayKey: "2026-08-25", allItems: items)
+        let state = PracticeHomeState.make(selectedDayKey: "2026-08-25", allItems: items, todayDayKey: "2026-08-25")
 
         #expect(state.items.map(\.title) == ["二十五"])
         #expect(state.totalDurationSeconds == 0)
-        #expect(state.checkedInDayKeys == Set(["2026-08-25", "2026-08-26"]))
-        #expect(state.checkedInDayKeys == PracticeItemRules.checkedInDayKeys(in: items))
-        #expect(state.items.allSatisfy { state.checkedInDayKeys.contains($0.practiceDayKey) })
+        #expect(state.checkedInDayKeys == Set(["2026-08-26"]))
+        #expect(!state.checkedInDayKeys.contains("2026-08-25"))
         #expect(!state.checkedInDayKeys.contains("2026-08-24"))
     }
 
@@ -158,5 +157,41 @@ struct PracticeHomeStateTests {
                 durationSeconds: 125
             ) == "已练 3 分钟"
         )
+    }
+
+    @Test func historyShowsEffectiveRoutineFactsButNotUnpracticedPlans() {
+        let day = date(year: 2026, month: 8, day: 25, hour: 10)
+        let routine = PracticeItemSnapshot(
+            id: UUID(), practiceDayKey: "2026-08-25", createdAt: day,
+            title: "方案分段", durationSeconds: 90, isDeleted: false,
+            originId: "program.routine.run.stage.2026-08-25"
+        )
+        let note = PracticeItemSnapshot(
+            id: UUID(), practiceDayKey: "2026-08-25", createdAt: day,
+            title: "仅笔记", durationSeconds: 0, isDeleted: false, note: "复盘内容"
+        )
+        let state = PracticeHomeState.make(selectedDayKey: "2026-08-25", allItems: [
+            routine, note,
+            item(dayKey: "2026-08-25", createdAt: day, title: "未练计划", durationSeconds: 0),
+            item(dayKey: "2026-08-25", createdAt: day, title: "已删", isDeleted: true),
+            item(dayKey: "2026-08-26", createdAt: day, title: "其他日期"),
+        ])
+        #expect(Set(state.items.map(\.title)) == ["方案分段", "仅笔记"])
+        #expect(state.totalDurationSeconds == 90)
+    }
+
+    @Test func todayKeepsUnpracticedChecklistButExcludesRoutineFacts() {
+        let now = Date()
+        let key = PracticeDayKey.make(from: now, calendar: .current)
+        let routine = PracticeItemSnapshot(
+            id: UUID(), practiceDayKey: key, createdAt: now,
+            title: "方案分段", durationSeconds: 90, isDeleted: false,
+            originId: "program.routine.run.stage.\(key)"
+        )
+        let state = PracticeHomeState.make(selectedDayKey: key, allItems: [
+            routine, item(dayKey: key, createdAt: now, title: "今日计划", durationSeconds: 0),
+        ])
+        #expect(state.items.map(\.title) == ["今日计划"])
+        #expect(state.checkedInDayKeys == [key])
     }
 }

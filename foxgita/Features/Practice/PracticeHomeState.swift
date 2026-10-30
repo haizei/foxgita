@@ -6,13 +6,27 @@ struct PracticeHomeState: Equatable {
     let totalDurationSeconds: Int
     let checkedInDayKeys: Set<String>
 
-    static func make(selectedDayKey: String, allItems: [PracticeItemSnapshot]) -> Self {
-        PracticeHomeState(
+    static func make(
+        selectedDayKey: String,
+        allItems: [PracticeItemSnapshot],
+        todayDayKey: String = PracticeDayKey.make(from: .now, calendar: .current)
+    ) -> Self {
+        let effective = allItems.filter(PracticeItemRules.isEffective)
+        let visible = selectedDayKey == todayDayKey
+            ? allItems.filter { !($0.originId?.hasPrefix("program.routine.") ?? false) }
+            : effective
+        return PracticeHomeState(
             selectedDayKey: selectedDayKey,
-            items: PracticeItemRules.items(for: selectedDayKey, in: allItems),
-            totalDurationSeconds: PracticeItemRules.totalDuration(for: selectedDayKey, in: allItems),
-            checkedInDayKeys: PracticeItemRules.checkedInDayKeys(in: allItems)
+            items: PracticeItemRules.items(for: selectedDayKey, in: visible),
+            totalDurationSeconds: PracticeItemRules.totalDuration(for: selectedDayKey, in: visible),
+            checkedInDayKeys: Set(effective.map(\.practiceDayKey))
         )
+    }
+
+    static func sourceLabel(for item: PracticeItemSnapshot) -> String {
+        if item.originId?.hasPrefix("program.routine.") == true { return String(localized: "方案练习") }
+        if item.originId?.hasPrefix("program.checklist.") == true { return String(localized: "清单训练") }
+        return String(localized: "日常练习")
     }
 
     static func ctaTitle(isSelectedToday: Bool, durationSeconds: Int) -> String {

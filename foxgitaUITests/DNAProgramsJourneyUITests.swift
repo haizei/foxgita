@@ -11,7 +11,8 @@ final class DNAProgramsJourneyUITests: XCTestCase {
     }
 
     func testQuestionnaireDraftAndExplicitRoutineSave() {
-        XCTAssertTrue(app.staticTexts["通用方案"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["program.details"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["program.details"].value as? String, "通用方案")
         tap("program.preferences")
         tap("dna.choice.story")
         tap("dna.next")
@@ -32,14 +33,16 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["方案预览"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["20 分钟 · 4 个分段"].exists)
         tap("program.close")
-        XCTAssertTrue(app.staticTexts["通用方案"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["program.details"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["program.details"].value as? String, "通用方案")
         tap("program.draft")
         XCTAssertTrue(app.staticTexts["方案预览"].waitForExistence(timeout: 5))
         tap("program.save")
-        XCTAssertTrue(app.staticTexts["已保存方案"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["program.details"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["program.details"].value as? String, "已保存方案")
     }
 
-    func testCandidatesDeduplicateAndFooterOpensCreationWithExistingPractice() {
+    func testCandidatesDeduplicateAndInlineCreationRemainsReachable() {
         launchWithPreferences()
         tap("program.add.dna.improv")
         XCTAssertEqual(app.buttons["program.add.dna.improv"].label, "已添加")
@@ -157,21 +160,29 @@ final class DNAProgramsJourneyUITests: XCTestCase {
         app.terminate()
         app.launchArguments += ["-DNAProgramsPreferencesFixture"]
         app.launch()
-        XCTAssertTrue(app.staticTexts["已保存方案"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["program.details"].waitForExistence(timeout: 10))
+        XCTAssertEqual(app.buttons["program.details"].value as? String, "已保存方案")
     }
 
     private func tap(_ identifier: String) {
         let element = app.descendants(matching: .any)[identifier].firstMatch
-        let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : (app.scrollViews.allElementsBoundByIndex.last ?? app.scrollViews.firstMatch)
+        let scroller = app.collectionViews.firstMatch.exists ? app.collectionViews.firstMatch : app.scrollViews.firstMatch
+        func isReachable() -> Bool {
+            guard element.exists && element.isHittable else { return false }
+            let tabBar = app.tabBars.firstMatch
+            // A partially visible inline button can report hittable while its
+            // center is underneath the native tab bar. Reveal the whole control.
+            if tabBar.exists && tabBar.isHittable {
+                return element.frame.maxY < tabBar.frame.minY - 8
+            }
+            return true
+        }
         for _ in 0..<7 {
-            let footer = app.buttons["practice.create-button"]
-            let homeControl = identifier.hasPrefix("program.add.") || ["program.preferences", "program.draft", "program.details", "program.start-routine"].contains(identifier)
-            let coveredByFooter = homeControl && footer.exists && element.exists && element.frame.maxY >= footer.frame.minY - 16
-            if element.exists && element.isHittable && !coveredByFooter { break }
+            if isReachable() { break }
             scroller.swipeUp()
         }
-        if !element.exists || !element.isHittable {
-            for _ in 0..<5 where !element.exists || !element.isHittable { scroller.swipeDown() }
+        if !isReachable() {
+            for _ in 0..<5 where !isReachable() { scroller.swipeDown() }
         }
         if !element.exists {
             let attachment = XCTAttachment(screenshot: app.screenshot())
@@ -179,6 +190,7 @@ final class DNAProgramsJourneyUITests: XCTestCase {
             add(attachment)
         }
         XCTAssertTrue(element.waitForExistence(timeout: 5), identifier)
+        XCTAssertTrue(isReachable(), "Control must be fully visible: \(identifier)")
         element.tap()
     }
 }

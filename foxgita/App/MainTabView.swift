@@ -12,13 +12,13 @@ struct MainTabView: View {
         @Bindable var router = router
         TabView(selection: $router.selectedTab) {
             PracticeView()
-                .tabItem { Label("练习", systemImage: "music.note.list") }
+                .tabItem { Label { Text("练习") } icon: { Image("HomeTabPractice").renderingMode(.template) } }
                 .tag(MainTab.practice)
             RecordView()
-                .tabItem { Label("记录", systemImage: "list.bullet.rectangle") }
+                .tabItem { Label { Text("记录") } icon: { Image("HomeTabRecord").renderingMode(.template) } }
                 .tag(MainTab.record)
             SettingsView()
-                .tabItem { Label("设置", systemImage: "gearshape") }
+                .tabItem { Label { Text("设置") } icon: { Image("HomeTabSettings").renderingMode(.template) } }
                 .tag(MainTab.settings)
         }
         .tint(GitaTheme.brand500)

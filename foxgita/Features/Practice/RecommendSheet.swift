@@ -1,279 +1,250 @@
-//
-//  RecommendSheet.swift
-//  foxgita
-//
-
+import PhotosUI
 import SwiftData
 import SwiftUI
 
 struct RecommendSheet: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(PracticeStore.self) private var store
-    @Query(
-        filter: #Predicate<TaskItem> { $0.deletedAt == nil },
-        sort: \TaskItem.sortOrder
-    )
-    private var allTasks: [TaskItem]
+    @Query(filter: #Predicate<Project> { $0.deletedAt == nil })
+    private var projects: [Project]
 
-    @State private var category: PracticeCategory = .left
     @State private var name = ""
-    @State private var duration = 10
+    @State private var duration = 20
+    @State private var selectedProjectId: UUID?
+    @State private var showProjectSelection = false
+    @State private var showPhotoFlow = false
+    @State private var isCameraPresented = false
+    @State private var pickerItems: [PhotosPickerItem] = []
+    @State private var imageData: [Data] = []
+    @State private var isLoadingImage = false
+    @State private var isSubmitting = false
+    @State private var toast: String?
+    @State private var entryGate = PracticeEntryGate()
+    @State private var submitToken = PracticeEntryToken()
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
-    @State private var showPhotoSheet = false
-    @State private var showNextSessionSheet = false
-    @State private var toast: String?
-    @State private var isSubmitting = false
-    @State private var entryGate = PracticeEntryGate()
-    @State private var inFlightToken: PracticeEntryToken?
     private let credentials = LLMCredentialsStore()
-    /// Handed back to the presenter, which navigates in `.sheet(onDismiss:)`.
-    /// Pushing from inside the sheet races the dismissal animation.
+
+    /// The presenter navigates after this sheet has dismissed.
     @Binding var selection: String?
 
-    private var cards: [TaskItem] {
-        let allTemplates = allTasks.filter { $0.isTemplate && $0.category == category }
-        let visibleTemplates = allTemplates.filter { !store.isTemplateOriginDeleted($0.id) }
-        // Categories that ship templates stay template-only, even if every origin is tombstoned.
-        if !allTemplates.isEmpty { return visibleTemplates }
-        return allTasks.filter { !$0.isTemplate && $0.category == category }
+    private var projectName: String {
+        guard let selectedProjectId else { return "未选择项目" }
+        return projects.first(where: { $0.id == selectedProjectId })?.name ?? "未选择项目"
     }
 
     var body: some View {
         VStack(spacing: 0) {
             Capsule()
                 .fill(GitaTheme.borderSubtle)
-                .frame(width: 36, height: 4)
+                .frame(width: 40, height: 4)
                 .padding(.top, 10)
 
             HStack {
-                Text("推荐练习")
+                Text("创建练习")
                     .font(.system(size: 20, weight: .bold))
                 Spacer()
                 Button("关闭") { dismiss() }
                     .font(.system(size: 14))
                     .foregroundStyle(GitaTheme.textSecondary)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 16)
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("创建自己的练习")
-                            .font(.system(size: 16, weight: .bold))
-                        Text("写下练习名称，设定今天的小目标")
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textSecondary)
-                        HStack(spacing: 8) {
-                            TextField("例如：F 和弦转换", text: $name)
-                                .padding(.leading, 10)
-                            Button {
-                                let missing = credentials.missingFieldLabels(
-                                    baseURL: llmBaseURL, model: llmModel
-                                )
-                                if missing.isEmpty {
-                                    showPhotoSheet = true
-                                } else {
-                                    toast = String(
-                                        localized: "还缺 \(missing.joined(separator: "、"))，请在设置里填完并点保存"
-                                    )
-                                    hideToastLater()
-                                }
-                            } label: {
-                                Text("拍摄/照片")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(GitaTheme.brand500)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 34)
-                                    .background(GitaTheme.brand50)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                VStack(spacing: 12) {
+                    HStack(spacing: 8) {
+                        TextField("练习名称", text: $name)
+                            .font(.system(size: 16, weight: .semibold))
+                            .accessibilityIdentifier("practice.create-name")
+                        HStack(spacing: 2) {
+                            Button { duration = max(5, duration - 5) } label: {
+                                Image(systemName: "minus.circle")
+                                    .frame(width: 30, height: 34)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(showPhotoSheet || showNextSessionSheet)
-                            Button {
-                                let missing = credentials.missingFieldLabels(
-                                    baseURL: llmBaseURL, model: llmModel
-                                )
-                                if missing.isEmpty {
-                                    showNextSessionSheet = true
-                                } else {
-                                    toast = String(
-                                        localized: "还缺 \(missing.joined(separator: "、"))，请在设置里填完并点保存"
-                                    )
-                                    hideToastLater()
-                                }
-                            } label: {
-                                Text("安排今日")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(GitaTheme.brand500)
-                                    .padding(.horizontal, 10)
-                                    .frame(height: 34)
-                                    .background(GitaTheme.brand50)
-                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                            Text("\(duration) 分钟")
+                                .font(.system(size: 14, weight: .medium))
+                                .fixedSize()
+                            Button { duration = min(60, duration + 5) } label: {
+                                Image(systemName: "plus.circle.fill")
+                                    .frame(width: 30, height: 34)
                             }
-                            .buttonStyle(.plain)
-                            .disabled(showPhotoSheet || showNextSessionSheet)
-                            Rectangle()
-                                .fill(GitaTheme.borderSubtle)
-                                .frame(width: 1, height: 24)
-                            HStack(spacing: 8) {
-                                Button { duration = max(5, duration - 5) } label: {
-                                    Text("－").frame(width: 28, height: 28)
-                                }
-                                Text("\(duration) 分钟")
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .frame(minWidth: 40)
-                                Button { duration = min(60, duration + 5) } label: {
-                                    Text("＋").frame(width: 28, height: 28)
-                                }
-                            }
-                            .foregroundStyle(GitaTheme.textSecondary)
-                            .padding(.trailing, 6)
                         }
-                        .padding(.vertical, 6)
+                        .foregroundStyle(GitaTheme.brand500)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(height: 60)
+                    .background(GitaTheme.bgSubtle)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+
+                    Button { showProjectSelection = true } label: {
+                        HStack {
+                            Text("归属项目")
+                            Spacer()
+                            Text(projectName)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 12, weight: .semibold))
+                        }
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(GitaTheme.textPrimary)
+                        .padding(.horizontal, 14)
+                        .frame(height: 56)
                         .background(GitaTheme.bgSubtle)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                        Button {
-                            submitCustom()
-                        } label: {
-                            Text("创建练习")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(GitaTheme.brandOn)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 13)
-                                .background(GitaTheme.brand500)
-                                .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("practice.select-project")
+
+                    HStack(spacing: 10) {
+                        sourceCard(title: "拍照", detail: "立即拍摄纸质内容", icon: "camera.fill", primary: true) {
+                            guard checkAIConfiguration() else { return }
+                            isCameraPresented = true
+                        }
+
+                        PhotosPicker(selection: $pickerItems, maxSelectionCount: 3, matching: .images) {
+                            sourceCardContent(title: "从相册选择", detail: "选择截图或已有照片", icon: "photo.on.rectangle", primary: false)
                         }
                         .buttonStyle(.plain)
-                        .disabled(isSubmitting)
-                        .accessibilityIdentifier("practice.confirm-create")
+                        .accessibilityIdentifier("practice.album")
+                        .disabled(isLoadingImage || showPhotoFlow)
                     }
-                    .padding(16)
-                    .background(GitaTheme.bgSurface)
-                    .clipShape(RoundedRectangle(cornerRadius: 16))
+                    .padding(.top, 8)
 
-                    HStack {
-                        Text("推荐分类")
-                            .font(.system(size: 18, weight: .bold))
-                        Spacer()
-                        Text("7 个固定分类")
-                            .font(.system(size: 12))
-                            .foregroundStyle(GitaTheme.textSecondary)
-                    }
-
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            ForEach(PracticeCategory.allCases) { cat in
-                                Button {
-                                    category = cat
-                                } label: {
-                                    Text(cat.label)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(category == cat ? GitaTheme.brandOn : GitaTheme.textSecondary)
-                                        .padding(.horizontal, 14)
-                                        .padding(.vertical, 8)
-                                        .background(category == cat ? GitaTheme.brand500 : GitaTheme.bgSubtle)
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
-                        ForEach(cards, id: \.id) { task in
-                            Button {
-                                submitRecommend(task)
-                            } label: {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    Text(task.title)
-                                        .font(.system(size: 14, weight: .bold))
-                                        .foregroundStyle(GitaTheme.textPrimary)
-                                        .lineLimit(1)
-                                    Text(task.subtitle)
-                                        .font(.system(size: 11))
-                                        .foregroundStyle(GitaTheme.textSecondary)
-                                        .lineLimit(1)
-                                }
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(14)
-                                .background(GitaTheme.bgSubtle)
-                                .clipShape(RoundedRectangle(cornerRadius: 14))
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(isSubmitting)
-                        }
+                    if let toast {
+                        Text(toast)
+                            .font(.system(size: 13))
+                            .foregroundStyle(GitaTheme.brand500)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 28)
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
             }
+
+            Button(action: createManualPractice) {
+                Text("确认并创建练习")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(GitaTheme.brandOn)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 56)
+                    .background(GitaTheme.brand500)
+                    .clipShape(RoundedRectangle(cornerRadius: 18))
+            }
+            .buttonStyle(.plain)
+            .disabled(isSubmitting || isLoadingImage)
+            .accessibilityIdentifier("practice.confirm-create")
+            .padding(.horizontal, 20)
+            .padding(.bottom, 22)
         }
-        .background(GitaTheme.bgDefault)
-        .sheet(isPresented: $showPhotoSheet) {
+        .background(GitaTheme.bgSurface)
+        .sheet(isPresented: $showProjectSelection) {
+            PracticeProjectSelectionView(selectedProjectId: $selectedProjectId)
+        }
+        .sheet(isPresented: $showPhotoFlow, onDismiss: { pickerItems = [] }) {
             PhotoPracticeSheet(
-                fallbackCategory: category,
+                imageData: imageData,
+                requestedTitle: name,
+                fallbackCategory: .chord,
                 baseURL: llmBaseURL,
                 model: llmModel,
+                selectedProjectId: $selectedProjectId,
                 selection: $selection,
+                onReselect: { showPhotoFlow = false },
                 onFinished: {
-                    showPhotoSheet = false
+                    showPhotoFlow = false
                     dismiss()
                 }
             )
         }
-        .sheet(isPresented: $showNextSessionSheet) {
-            NextSessionSheet(
-                initialMinutes: duration,
-                fallbackCategory: category,
-                baseURL: llmBaseURL,
-                model: llmModel,
-                selection: $selection,
-                onFinished: {
-                    showNextSessionSheet = false
-                    dismiss()
-                }
+        .fullScreenCover(isPresented: $isCameraPresented) {
+            StillImageCameraPicker(
+                isPresented: $isCameraPresented,
+                onPicked: { data in
+                    imageData = [data]
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                        showPhotoFlow = true
+                    }
+                },
+                onCancel: {}
             )
+            .ignoresSafeArea()
         }
-        .overlay {
-            if let toast {
-                VStack {
-                    Spacer()
-                    ToastBanner(text: toast).padding(.bottom, 40)
-                }
-            }
+        .onChange(of: pickerItems) { _, items in
+            guard !items.isEmpty else { return }
+            loadPhotos(items)
         }
-        .presentationDetents([.large])
+        .presentationDetents([.height(500)])
         .presentationDragIndicator(.hidden)
     }
 
-    private func submitCustom() {
-        submit(PracticeEntry.custom(name: name, category: category))
-    }
-
-    private func submitRecommend(_ template: TaskItem) {
-        submit(PracticeEntry.recommend(from: template))
-    }
-
-    private func submit(_ input: PracticeItemInput) {
-        let token = inFlightToken ?? PracticeEntryToken()
-        inFlightToken = token
-        if isSubmitting {
-            if let item = try? entryGate.submit(
-                store: store, input: input, token: token, now: Date(), calendar: .current
-            ) {
-                selection = item.id.uuidString
-            }
-            return
+    private func sourceCard(title: String, detail: String, icon: String, primary: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            sourceCardContent(title: title, detail: detail, icon: icon, primary: primary)
         }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier(primary ? "practice.camera" : "practice.source")
+        .disabled(isLoadingImage || showPhotoFlow)
+    }
+
+    private func sourceCardContent(title: String, detail: String, icon: String, primary: Bool) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: icon)
+                .font(.system(size: 26, weight: .medium))
+            VStack(alignment: .leading, spacing: 5) {
+                Text(title).font(.system(size: 15, weight: .semibold))
+                Text(detail)
+                    .font(.system(size: 11))
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: 0)
+        }
+        .foregroundStyle(primary ? GitaTheme.brand500 : GitaTheme.textPrimary)
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity)
+        .frame(height: 88)
+        .background(primary ? GitaTheme.brand50 : GitaTheme.bgSubtle)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func checkAIConfiguration() -> Bool {
+        let missing = credentials.missingFieldLabels(baseURL: llmBaseURL, model: llmModel)
+        guard missing.isEmpty else {
+            toast = "还缺 \(missing.joined(separator: "、"))，请在设置里填完并点保存"
+            return false
+        }
+        return true
+    }
+
+    private func loadPhotos(_ items: [PhotosPickerItem]) {
+        guard checkAIConfiguration() else { pickerItems = []; return }
+        isLoadingImage = true
+        Task {
+            var loaded: [Data] = []
+            for item in items.prefix(3) {
+                if let data = try? await item.loadTransferable(type: Data.self) {
+                    loaded.append(data)
+                }
+            }
+            isLoadingImage = false
+            guard !loaded.isEmpty else {
+                toast = "图片读取失败，请重新选择"
+                pickerItems = []
+                return
+            }
+            imageData = loaded
+            showPhotoFlow = true
+        }
+    }
+
+    private func createManualPractice() {
+        guard !isSubmitting else { return }
         isSubmitting = true
         do {
             let item = try entryGate.submit(
                 store: store,
-                input: input,
-                token: token,
+                input: PracticeEntry.custom(name: name, category: .chord, targetMin: duration, projectId: selectedProjectId),
+                token: submitToken,
                 now: Date(),
                 calendar: .current
             )
@@ -281,11 +252,7 @@ struct RecommendSheet: View {
             dismiss()
         } catch {
             isSubmitting = false
-            inFlightToken = nil
+            toast = "创建练习失败，请重试"
         }
-    }
-
-    private func hideToastLater() {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { toast = nil }
     }
 }

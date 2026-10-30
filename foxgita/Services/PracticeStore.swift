@@ -39,6 +39,7 @@ struct PracticeItemInput {
     var steps: [String] = []
     var subtitle: String = ""
     var targetMin: Int = 0
+    var projectId: UUID? = nil
 }
 
 struct HistoricalPracticeUpdate {
@@ -388,6 +389,13 @@ final class PracticeStore {
 
     func createPracticeItem(input: PracticeItemInput, now: Date, calendar: Calendar) throws -> PracticeItem {
         let profileId = try requireProfileUUID()
+        if let projectId = input.projectId {
+            guard let project = try repository.project(id: projectId, profileId: profileId),
+                  project.status == .active else {
+                lastError = .notFound
+                throw StoreError.notFound
+            }
+        }
         let lineage = try repository.practiceItems(profileId: profileId)
             .map(PracticeItemResumeQuery.lineageItem(from:))
         let seededBpm = PracticeItemResumeQuery.seedBpm(
@@ -409,6 +417,7 @@ final class PracticeStore {
             note: "",
             sourceRaw: input.source.rawValue,
             originId: input.originId,
+            projectId: input.projectId,
             steps: PracticeDetailState.initialSteps(input.steps),
             subtitle: input.subtitle,
             targetMin: PracticeHomeState.initialTargetMin(input.targetMin),

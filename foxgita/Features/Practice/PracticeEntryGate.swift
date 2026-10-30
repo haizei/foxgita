@@ -9,7 +9,7 @@ struct PracticeEntryToken: Hashable, Sendable {
 }
 
 enum PracticeEntry {
-    static func custom(name: String, category: PracticeCategory) -> PracticeItemInput {
+    static func custom(name: String, category: PracticeCategory, targetMin: Int = 10, projectId: UUID? = nil) -> PracticeItemInput {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         return PracticeItemInput(
             title: trimmed.isEmpty ? String(localized: "未命名练习") : trimmed,
@@ -20,7 +20,8 @@ enum PracticeEntry {
             timeSignature: nil,
             steps: [],
             subtitle: "",
-            targetMin: 10
+            targetMin: targetMin,
+            projectId: projectId
         )
     }
 
@@ -38,7 +39,7 @@ enum PracticeEntry {
         )
     }
 
-    static func photo(draft: AIPracticeDraft, generationId: String) -> PracticeItemInput {
+    static func photo(draft: AIPracticeDraft, generationId: String, projectId: UUID? = nil) -> PracticeItemInput {
         PracticeItemInput(
             title: draft.title,
             category: draft.category,
@@ -48,7 +49,8 @@ enum PracticeEntry {
             timeSignature: nil,
             steps: draft.steps,
             subtitle: draft.subtitleLine,
-            targetMin: draft.targetMin
+            targetMin: draft.targetMin,
+            projectId: projectId
         )
     }
 

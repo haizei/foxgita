@@ -76,8 +76,7 @@ struct ProjectNotesListView: View {
     }
 
     var body: some View {
-        ZStack {
-            PageBackground()
+        GeometryReader { geometry in
             VStack(spacing: 0) {
                 header
                 if let project {
@@ -114,8 +113,11 @@ struct ProjectNotesListView: View {
                     .padding(.bottom, 32)
                 }
             }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+            .background(PageBackground())
         }
         .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
     }
 
@@ -134,8 +136,9 @@ struct ProjectNotesListView: View {
             Text("我的笔记")
                 .font(GitaFont.headline())
                 .foregroundStyle(GitaTheme.textPrimary)
+                .accessibilityIdentifier("project-notes.title")
             Spacer(minLength: 0)
-            Color.clear.frame(minWidth: 44)
+            Color.clear.frame(width: 44, height: 44)
         }
         .frame(minHeight: 56)
         .padding(.horizontal, GitaTheme.pagePadding)

@@ -56,49 +56,44 @@ struct AudioComparisonView: View {
         )
     }
 
-    private var confirmedFragment: String? {
-        guard let confirmation,
-              case .ready(let stage, let recent) = readiness,
-              confirmation.matches(projectId: projectId, stage: stage, recent: recent) else {
-            return nil
-        }
-        return confirmation.fragment
-    }
-
     private var decision: ProjectPracticeStateHandoff.Decision? {
         guard let snapshot else { return nil }
         return ProjectPracticeStateHandoff.startDecision(project: snapshot)
     }
 
     var body: some View {
-        ZStack {
-            PageBackground()
-            VStack(spacing: 0) {
-                header(showsReplace: canReplaceRecording)
-                if let snapshot {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 16) {
-                            Text(snapshot.name)
-                                .font(GitaFont.callout())
-                                .foregroundStyle(GitaTheme.textSecondary)
-                                .frame(maxWidth: .infinity)
-                            comparisonBody
+        GeometryReader { geometry in
+            ZStack {
+                VStack(spacing: 0) {
+                    header(showsReplace: canReplaceRecording)
+                    if let snapshot {
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 16) {
+                                Text(snapshot.name)
+                                    .font(GitaFont.callout())
+                                    .foregroundStyle(GitaTheme.textSecondary)
+                                    .frame(maxWidth: .infinity)
+                                comparisonBody
+                            }
+                            .padding(.horizontal, GitaTheme.pagePadding)
+                            .padding(.bottom, 24)
                         }
-                        .padding(.horizontal, GitaTheme.pagePadding)
-                        .padding(.bottom, 24)
+                    } else {
+                        missing
                     }
-                } else {
-                    missing
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+                if let toast {
+                    VStack {
+                        Spacer()
+                        ToastBanner(text: toast).padding(.bottom, 96)
+                    }
                 }
             }
-            if let toast {
-                VStack {
-                    Spacer()
-                    ToastBanner(text: toast).padding(.bottom, 96)
-                }
-            }
+            .background(PageBackground())
         }
         .navigationBarHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .toolbar(.hidden, for: .tabBar)
         .onAppear {
             creatingTodayLock = false
@@ -161,6 +156,14 @@ struct AudioComparisonView: View {
                     .foregroundStyle(GitaTheme.textSecondary)
                 Button("更换录音") { showReplaceSheet = true }
                     .foregroundStyle(GitaTheme.brand500)
+                if let overrideStageId, let source = sourceItemId(for: overrideStageId) {
+                    Button("查看录音 A 的原练习") { openSource(source) }
+                        .foregroundStyle(GitaTheme.brand500)
+                }
+                if let overrideRecentId, let source = sourceItemId(for: overrideRecentId) {
+                    Button("查看录音 B 的原练习") { openSource(source) }
+                        .foregroundStyle(GitaTheme.brand500)
+                }
             }
         case .unavailable:
             Text("还没有可以对照的录音")
@@ -367,10 +370,16 @@ struct AudioComparisonView: View {
                 Text("\(ProgressFirstFormat.monthDay(track.dayKey)) · \(track.createdAt.formatted(date: .omitted, time: .shortened))")
                     .font(GitaFont.caption())
                     .foregroundStyle(GitaTheme.textSecondary)
-                Text(confirmedFragment ?? "片段未确认")
-                    .font(GitaFont.caption())
-                    .foregroundStyle(GitaTheme.textSecondary)
-                    .lineLimit(1)
+                Button {
+                    openSource(track.itemId)
+                } label: {
+                    Text(track.title)
+                        .font(GitaFont.caption(.semibold))
+                        .foregroundStyle(GitaTheme.brand500)
+                        .lineLimit(2)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("查看原练习，\(track.title)")
             }
             .frame(width: 100, alignment: .leading)
             Button {
@@ -415,6 +424,15 @@ struct AudioComparisonView: View {
         !AudioBenchmarkVersion.tracks(projectId: projectId, items: allSnapshots).isEmpty
     }
 
+    private func sourceItemId(for clipId: String) -> UUID? {
+        allSnapshots.first { item in item.recordings.contains { $0.id == clipId } }?.id
+    }
+
+    private func openSource(_ itemId: UUID) {
+        player.stop()
+        router.recordPath.append(.practiceDetail(itemId: itemId))
+    }
+
     private func header(showsReplace: Bool) -> some View {
         HStack {
             Button("返回") {
@@ -423,7 +441,7 @@ struct AudioComparisonView: View {
             }
             .font(GitaFont.callout())
             .foregroundStyle(GitaTheme.textSecondary)
-            .frame(minWidth: 44, alignment: .leading)
+            .frame(width: 80, alignment: .leading)
             Spacer(minLength: 0)
             Text("录音对比")
                 .font(GitaFont.headline())
@@ -433,9 +451,9 @@ struct AudioComparisonView: View {
                 Button("更换录音") { showReplaceSheet = true }
                     .font(GitaFont.caption(.semibold))
                     .foregroundStyle(GitaTheme.brand500)
-                    .frame(minWidth: 44, alignment: .trailing)
+                    .frame(width: 80, alignment: .trailing)
             } else {
-                Color.clear.frame(minWidth: 44)
+                Color.clear.frame(width: 80, height: 44)
             }
         }
         .frame(minHeight: 56)
@@ -454,13 +472,13 @@ struct AudioComparisonView: View {
         return NavigationStack {
             List {
                 Section("录音 A") {
-                    ForEach(options) { track in
-                        replaceRow(track, side: .a)
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, track in
+                        replaceRow(track, side: .a, index: index)
                     }
                 }
                 Section("录音 B") {
-                    ForEach(options) { track in
-                        replaceRow(track, side: .b)
+                    ForEach(Array(options.enumerated()), id: \.element.id) { index, track in
+                        replaceRow(track, side: .b, index: index)
                     }
                 }
             }
@@ -475,7 +493,7 @@ struct AudioComparisonView: View {
         .presentationDetents([.medium])
     }
 
-    private func replaceRow(_ track: AudioBenchmarkTrack, side: AudioComparisonPlayback.Side) -> some View {
+    private func replaceRow(_ track: AudioBenchmarkTrack, side: AudioComparisonPlayback.Side, index: Int) -> some View {
         Button {
             applyReplacement(side, clipId: track.clip.id)
         } label: {
@@ -488,6 +506,7 @@ struct AudioComparisonView: View {
                     .foregroundStyle(GitaTheme.textSecondary)
             }
         }
+        .accessibilityIdentifier("comparison.option.\(side.rawValue).\(index)")
     }
 
     private func applyReplacement(_ side: AudioComparisonPlayback.Side, clipId: String) {

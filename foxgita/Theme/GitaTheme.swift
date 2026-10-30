@@ -35,6 +35,7 @@ enum GitaTheme {
     static let borderSubtle = Color(.borderSubtle)
     static let borderInactive = Color(.borderInactive)
     static let statusSuccess = Color(.statusSuccess)
+    static let statusSuccessText = Color(.statusSuccessText)
     static let statusError = Color(.statusError)
 
     // Category
