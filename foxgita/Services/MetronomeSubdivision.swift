@@ -41,6 +41,18 @@ enum MetronomeSubdivision: Int, CaseIterable, Identifiable, Equatable {
 
     var assetName: String { "MetronomeSubdivision\(rawValue)" }
 
+    /// Describes the rhythm independently of the chosen beat unit.
+    var notationAccessibilityLabel: String {
+        switch self {
+        case .quarter: String(localized: "每拍一个音符")
+        case .twoEighths: String(localized: "每拍两个音符")
+        case .eighthRestEighth: String(localized: "每拍两等分，前休止")
+        case .twoEighthRest: String(localized: "每拍两个音符加休止")
+        case .fourSixteenths: String(localized: "每拍四个音符")
+        default: accessibilityLabel
+        }
+    }
+
     var accessibilityLabel: String {
         switch self {
         case .quarter: String(localized: "四分音符")

@@ -57,7 +57,7 @@ struct MetronomeDisplayCard: View {
     @State private var modeNameTask: Task<Void, Never>?
     @State private var activeBeat: Int?
 
-    private var meterText: String { metronome.timeSignatureText }
+    private var meterText: String { metronome.configuredTimeSignatureText }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -70,6 +70,7 @@ struct MetronomeDisplayCard: View {
                         .lineLimit(1).minimumScaleFactor(0.5)
                         .frame(height: valueHeight)
                 }
+                .accessibilityValue(meterText)
 
                 VStack(spacing: 0) {
                     metricLabel(String(localized: "速度 (BPM)"))
@@ -89,15 +90,7 @@ struct MetronomeDisplayCard: View {
                     .foregroundStyle(GitaTheme.brand500)
                 }.frame(width: 132)
 
-                entryColumn(anchor: .subdivision, label: String(localized: "细分")) {
-                    Image(metronome.subdivision.assetName)
-                        .resizable()
-                        .renderingMode(.template)
-                        .scaledToFit()
-                        .foregroundStyle(GitaTheme.brand500)
-                        .frame(width: 32, height: 32)
-                        .frame(height: 40)
-                }
+
 
             }
             .frame(height: Layout.controlHeight + (typeSize.isAccessibilitySize ? 60 : 0))

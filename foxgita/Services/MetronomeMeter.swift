@@ -107,6 +107,8 @@ enum MetronomeMeter {
         case 2: String(localized: "二分音符")
         case 8: String(localized: "八分音符")
         case 16: String(localized: "十六分音符")
+        case 32: String(localized: "三十二分音符")
+        case 64: String(localized: "六十四分音符")
         default: String(localized: "四分音符")
         }
     }

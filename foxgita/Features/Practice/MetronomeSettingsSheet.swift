@@ -204,16 +204,28 @@ struct MetronomeSettingsSheet: View {
             metronome.cycleAccent(at: index)
             Haptics.selection()
         } label: {
-            Image(kind.assetName)
-                .resizable()
-                .scaledToFit()
-                .frame(height: 42)
+            MetronomeNotationView(
+                notation: MetronomeNotation(beatUnit: metronome.configuredDenominator, kind: kind),
+                color: accentColor(kind)
+            )
+                .frame(width: 52, height: 42)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(isLocked)
         .accessibilityLabel(accentAccessibilityLabel(for: index, kind: kind))
+        .accessibilityIdentifier("metronome.settings.accent.\(index)")
+        .accessibilityValue(Text(MetronomeMeter.beatUnitName(metronome.configuredDenominator)))
+    }
+
+    private func accentColor(_ kind: MetronomeBeatKind) -> Color {
+        switch kind {
+        case .strong: GitaTheme.brand500
+        case .medium: GitaTheme.accentMedium
+        case .weak: GitaTheme.textPrimary
+        case .mute: GitaTheme.textSecondary.opacity(0.35)
+        }
     }
 
     private func accentAccessibilityLabel(for index: Int, kind: MetronomeBeatKind) -> Text {
@@ -237,6 +249,7 @@ struct MetronomeSettingsSheet: View {
 
     private func subdivisionCell(_ value: MetronomeSubdivision) -> some View {
         let selected = metronome.configuredSubdivision == value
+        let notation = MetronomeNotation(subdivision: value, beatUnit: metronome.configuredDenominator)
         return Button {
             metronome.setSubdivision(value)
             Haptics.selection()
@@ -244,12 +257,8 @@ struct MetronomeSettingsSheet: View {
             ZStack {
                 Rectangle()
                     .fill(selected ? GitaTheme.brand50 : GitaTheme.bgSurface)
-                Image(value.assetName)
-                    .resizable()
-                    .renderingMode(.template)
-                    .foregroundStyle(GitaTheme.textPrimary)
-                    .scaledToFit()
-                    .padding(.horizontal, 16)
+                MetronomeNotationView(notation: notation)
+                    .padding(.horizontal, 8)
                     .padding(.vertical, 20)
             }
             .frame(maxWidth: .infinity)
@@ -266,7 +275,9 @@ struct MetronomeSettingsSheet: View {
         }
         .buttonStyle(.plain)
         .disabled(isLocked)
-        .accessibilityLabel(Text(value.accessibilityLabel))
+        .accessibilityIdentifier("metronome.settings.subdivision.\(value.rawValue)")
+        .accessibilityLabel(Text(value.notationAccessibilityLabel))
+        .accessibilityValue(Text(MetronomeMeter.beatUnitName(notation.noteValue)))
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
