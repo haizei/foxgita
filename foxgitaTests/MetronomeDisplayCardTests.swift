@@ -38,8 +38,6 @@ struct MetronomeDisplayCardTests {
         #expect(MetronomeDisplayCard.Layout.trackHeight == 56)
         #expect(MetronomeDisplayCard.Layout.fourBeatSpacing == 23.5)
         #expect(MetronomeDisplayCard.Layout.fourBeatSideInset == 11.75)
-        #expect(MetronomeDisplayCard.Layout.secondaryPulseWidth == 72)
-        #expect(MetronomeDisplayCard.Layout.weakPulseWidth == 40)
     }
 
     @Test func muteUsesOneNeutralSegmentWhileAccentStrengthKeepsItsSemanticCount() {

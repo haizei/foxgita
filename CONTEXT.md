@@ -57,7 +57,7 @@ Display Card 中随当前拍高亮的竖向反馈柱，表达 Accent Pattern。�
 _Avoid_: 四拍柱、beat bar（口语）
 
 **Beat Track**:
-Beat Bars 下方承载节拍高亮和钟摆运动的前台视觉反馈区域；其显示由 Metronome Visual Preferences 控制，不改变真实发声序列。
+Beat Bars 下方承载节拍高亮和钟摆运动的前台视觉反馈区域；主拍和细分提示均为整条亮暗，以颜色深浅区分力度，不以局部宽度表达。其显示由 Metronome Visual Preferences 控制，不改变真实发声序列。
 _Avoid_: 进度点、dot track、装饰条
 
 **Metronome Visual Preferences**:
@@ -77,7 +77,7 @@ _Avoid_: 闪一下、主灯
 _Avoid_: 次强拍、第二拍
 
 **Weak Subdivision Pulse**:
-一拍内部除 Secondary Pulse 外的轻拍；力度低于所属主拍，在视觉反馈中以较窄、较浅的节拍提示表达。
+一拍内部除 Secondary Pulse 外的轻拍；力度低于所属主拍，在视觉反馈中以整条较浅的节拍提示表达。
 _Avoid_: 弱拍、普通拍
 
 **Rest Position**:
@@ -85,7 +85,7 @@ _Avoid_: 弱拍、普通拍
 _Avoid_: 静音拍、跳过的拍
 
 **Pendulum Feedback**:
-钟摆模式中随每个主拍在 Beat Track 两端交替移动的反馈，可与节拍模块同时显示；颜色跟随拍级，切分次拍不改变方向，停止后回到左端。
+钟摆模式中随每个主拍在 Beat Track 两端交替移动的反馈，可与节拍模块同时显示；颜色跟随拍级，切分次拍不改变方向，仅播放时显示，停止后隐藏并重置到左端。
 _Avoid_: 滑块、进度指示器
 
 **Tempo Ruler**:

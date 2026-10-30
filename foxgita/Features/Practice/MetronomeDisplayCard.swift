@@ -12,6 +12,15 @@ struct MetronomeDisplayCard: View {
         case secondarySubdivision
         case weakSubdivision
         case pendulum
+
+        var opacity: Double {
+            switch self {
+            case .full: 1
+            case .secondarySubdivision: 0.72
+            case .weakSubdivision: 0.46
+            case .none, .pendulum: 0
+            }
+        }
     }
 
     enum Layout {
@@ -27,8 +36,6 @@ struct MetronomeDisplayCard: View {
         static let fourBeatSpacing: CGFloat = 23.5
         static let fourBeatSideInset: CGFloat = 11.75
         static let barCornerRadius: CGFloat = 0
-        static let secondaryPulseWidth: CGFloat = 72
-        static let weakPulseWidth: CGFloat = 40
     }
 
     let metronome: MetronomeEngine
@@ -363,20 +370,11 @@ struct MetronomeDisplayCard: View {
                     RoundedRectangle(cornerRadius: GitaTheme.radius8)
                         .fill(GitaTheme.bgSubtle)
 
-                    if trackPulseShape == .full {
-                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                            .fill(Self.fillColor(for: trackPulseKind, isActive: false))
-                    } else if trackPulseShape == .secondarySubdivision {
-                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.72))
-                            .frame(width: Layout.secondaryPulseWidth)
-                    } else if trackPulseShape == .weakSubdivision {
-                        RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                            .fill(Self.fillColor(for: trackPulseKind, isActive: false).opacity(0.46))
-                            .frame(width: Layout.weakPulseWidth)
-                    }
+                    RoundedRectangle(cornerRadius: GitaTheme.radius8)
+                        .fill(Self.fillColor(for: trackPulseKind, isActive: false))
+                        .opacity(trackPulseShape.opacity)
 
-                    if metronome.visualPreferences.pendulumEnabled {
+                    if metronome.isPlaying, metronome.visualPreferences.pendulumEnabled {
                         RoundedRectangle(cornerRadius: GitaTheme.radius8)
                             .fill(Self.fillColor(for: trackPulseKind, isActive: false))
                             .frame(width: Layout.trackHeight)
