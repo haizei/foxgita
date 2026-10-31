@@ -1,0 +1,133 @@
+{
+  "date": "2026-11-01",
+  "source": "https://www.figma.com/design/smeuuUaTOYE1URHhIGbzyd?node-id=2745-255",
+  "startingHead": "ca4afdd4a9526bdd6a2394c9ef514ef1be9669c2",
+  "scope": "Tuner frontend presentation, existing controls and accessibility; detector/model unchanged",
+  "parameters": {
+    "centralNoteSize": 80,
+    "stringNoteSize": 30,
+    "buttonDiameter": 52,
+    "accessibilityButtonDiameter": 64,
+    "headstockMaximumWidth": 300,
+    "sourceImageSize": [
+      971,
+      1619
+    ],
+    "pegYCoordinates": [
+      368,
+      663,
+      951
+    ],
+    "responsiveTransparentMarginRatio": "300/282"
+  },
+  "assets": [
+    {
+      "path": "foxgita/Assets.xcassets/TunerHeadstock.imageset/image.png",
+      "nonempty": true,
+      "sha256": "4f4f815a92056206ab47cad9c84b922e3252cebf30101d2341762fd4a49ee91c",
+      "exactMatchWithFigmaDownload": true
+    },
+    {
+      "path": "foxgita/Assets.xcassets/TunerBack.imageset/icon.svg",
+      "nonempty": true,
+      "sha256": "4c4960396309ee9932060d787fa3d3dba2787f2898318bc684a9570725c52777",
+      "exactMatchWithFigmaDownload": true
+    },
+    {
+      "path": "foxgita/Assets.xcassets/TunerSettings.imageset/icon.svg",
+      "nonempty": true,
+      "sha256": "d2b898a06645301cab794f9cf6887e854337b9398d4351455edd588390f2396b",
+      "exactMatchWithFigmaDownload": true
+    },
+    {
+      "path": "foxgita/Assets.xcassets/TunerChevronDown.imageset/icon.svg",
+      "nonempty": true,
+      "sha256": "c681acd64e07653bc405c70e598e7248b9506b1067269dd9a9c1c3d70f48b083",
+      "exactMatchWithFigmaDownload": true
+    }
+  ],
+  "checks": {
+    "red": {
+      "status": "expected failure",
+      "bundle": "/tmp/gita-tuner-frontend-red-20261101.xcresult",
+      "reason": "Existing button48pt failed approved52pt assertion."
+    },
+    "pitchAndModel": {
+      "status": "passed",
+      "passed": 49,
+      "bundle": "/tmp/gita-tuner-frontend-green-20261101.xcresult"
+    },
+    "streaming": {
+      "status": "passed",
+      "passed": 3,
+      "bundle": "/tmp/gita-tuner-frontend-green-20261101.xcresult"
+    },
+    "firstUI": {
+      "status": "test-only query false positive; rerun required",
+      "passed": 6,
+      "failed": 1,
+      "reason": "XCTest generic text query also matched cents accessibilityValue. Switched visible-status assertions to exact tuner.feedback identifier and label predicates."
+    },
+    "finalUI": {
+      "status": "passed",
+      "bundle": "/tmp/gita-tuner-frontend-final-20261101.xcresult",
+      "passed": 7,
+      "failed": 0,
+      "xcodebuildExitCode": 0,
+      "officialSummary": {
+        "result": "Passed",
+        "passedTests": 7,
+        "failedTests": 0,
+        "skippedTests": 0,
+        "totalTestCount": 7
+      }
+    },
+    "smallScreenUI": {
+      "status": "passed",
+      "device": "iPhone SE3 / iOS26.4",
+      "passed": 3,
+      "failed": 0,
+      "xcodebuildExitCode": 0,
+      "officialSummary": {
+        "result": "Passed",
+        "passedTests": 3,
+        "failedTests": 0,
+        "skippedTests": 0,
+        "totalTestCount": 3
+      },
+      "bundle": "/tmp/gita-tuner-frontend-se-20261101.xcresult"
+    },
+    "totalDistinctTunerTestsPassed": 59,
+    "additionalSmallScreenUIRunsPassed": 3
+  },
+  "review": {
+    "standards": {
+      "status": "approved",
+      "remainingFindings": 0,
+      "fixed": [
+        "Preserve existing severe-deviation warning above150cent.",
+        "Correct expected peg alignment geometry for375/320pt.",
+        "Disambiguate visible status text from VO value in UI tests."
+      ]
+    },
+    "spec": {
+      "status": "approved",
+      "remainingFindings": 0
+    }
+  },
+  "notes": [
+    "Readout presents pitch class only; VO retains string, octave and calibrated targetHz.",
+    "Healthy instructions hidden; exception/recovery/reference/weak-signal messages and existing severe-deviation warning remain visible.",
+    "Existing unit coverage validates flat spellings and preserved full octave labels.",
+    "No new assets or runtime Figma URLs.",
+    "Native status/safe areas and scrolling adapt the Figma layout; screenshot is not used as a page asset.",
+    "Full unrelated app suite is not repeated for this scoped frontend change.",
+    "No physical microphone or end-to-end performance claims from simulator UI verification."
+  ],
+  "screenshots": [
+    "docs/qa/2026-11-01-tuner-frontend-figma-sync-screenshots/Tuner-aligned-compact.png",
+    "docs/qa/2026-11-01-tuner-frontend-figma-sync-screenshots/Tuner-accessibility-dark.png",
+    "docs/qa/2026-11-01-tuner-frontend-figma-sync-screenshots/Tuner-half-step-down.png",
+    "docs/qa/2026-11-01-tuner-frontend-figma-sync-screenshots/Tuner-SE-compact.png"
+  ]
+}

@@ -7,6 +7,7 @@ struct TunerPitchTests {
         let tuning = try #require(GuitarTuning.allCases.first { $0.title == "整体降半音" })
         #expect(GuitarTuning.allCases.count == 4)
         #expect(tuning.targets.map(\.noteLabel) == ["E♭₄", "B♭₃", "G♭₃", "D♭₃", "A♭₂", "E♭₂"])
+        #expect(tuning.targets.map(\.noteName) == ["E♭", "B♭", "G♭", "D♭", "A♭", "E♭"])
         let expected = [311.1270, 233.0819, 184.9972, 138.5913, 103.8262, 77.7817]
         for (target, hz) in zip(tuning.targets, expected) {
             #expect(abs(target.frequency(a4: 440) - hz) < 0.001)
@@ -106,6 +107,7 @@ struct TunerPitchTests {
         let targets = GuitarTuning.standard.targets
         #expect(targets.map(\.number) == [1, 2, 3, 4, 5, 6])
         #expect(targets.map(\.noteLabel) == ["E₄", "B₃", "G₃", "D₃", "A₂", "E₂"])
+        #expect(targets.map(\.noteName) == ["E", "B", "G", "D", "A", "E"])
         #expect(abs(targets[5].frequency(a4: 440) - 82.4069) < 0.001)
         #expect(abs(targets[5].frequency(a4: 442) / targets[5].frequency(a4: 440) - 442.0 / 440) < 0.000001)
         #expect(GuitarTuning.dropD.targets[5].noteLabel == "D₂")

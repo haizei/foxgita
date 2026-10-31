@@ -8,7 +8,8 @@ struct TunerView: View {
     @Environment(AppRouter.self) private var router
     @State private var model: TunerModel
     @State private var showSettings = false
-    @ScaledMetric(relativeTo: .largeTitle) private var noteSize = 68
+    @ScaledMetric(relativeTo: .largeTitle) private var noteSize = 80
+    @ScaledMetric(relativeTo: .headline) private var targetNoteSize = 30
 
     init() {
         #if DEBUG
@@ -24,17 +25,17 @@ struct TunerView: View {
                 VStack(spacing: 0) {
                     VStack(spacing: 0) {
                         header
-                        modeSelector.padding(.top, 12)
-                        readout.padding(.top, 3)
-                        feedback.padding(.top, 3)
+                        modeSelector.padding(.top, 18)
+                        readout.padding(.top, 10)
+                        feedback.padding(.top, 4)
                         TunerCentsScale(cents: model.displayedCents, inTune: model.intonation == .inTune, isHeld: model.isHoldingReading)
                             .opacity(model.isHoldingReading ? 0.4 : 1)
                             .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.isHoldingReading)
-                            .padding(.horizontal, 8).padding(.top, 5)
+                            .padding(.horizontal, 8).padding(.top, 10)
                     }
                     .padding(.horizontal, 16)
                     headstock(width: max(0, min(450, geometry.size.width)))
-                        .padding(.top, 14)
+                        .padding(.top, 10)
                 }
                 .padding(.top, 8).padding(.bottom, 12)
                 .frame(maxWidth: 450).frame(maxWidth: .infinity)
@@ -102,15 +103,12 @@ struct TunerView: View {
     }
 
     private var readout: some View {
-        VStack(spacing: 0) {
-            Text(model.target.noteLabel).font(.system(size: noteSize, weight: .bold))
-                .foregroundStyle(GitaTheme.textPrimary).frame(minHeight: 79)
-                .accessibilityIdentifier("tuner.note")
-            Text("\(model.target.number) 弦 · 目标 \(model.targetFrequency, specifier: "%.1f") Hz")
-                .font(GitaFont.callout()).foregroundStyle(GitaTheme.textSecondary)
-                .frame(minHeight: 24)
-                .accessibilityIdentifier("tuner.target-frequency")
-        }
+        Text(model.target.noteName).font(.system(size: noteSize, weight: .bold))
+            .lineLimit(1).minimumScaleFactor(0.5)
+            .foregroundStyle(GitaTheme.textPrimary)
+            .frame(maxWidth: .infinity, minHeight: 96)
+            .accessibilityValue(Text("\(model.target.number) 弦，\(model.target.noteLabel)，目标 \(model.targetFrequency, specifier: "%.1f") Hz"))
+            .accessibilityIdentifier("tuner.note")
     }
 
     private var feedbackColor: Color { model.intonation == .inTune ? GitaTheme.statusSuccessText : GitaTheme.brand500 }
@@ -144,13 +142,15 @@ struct TunerView: View {
 
     private var feedback: some View {
         VStack(spacing: 2) {
-            Text(feedbackText).font(GitaFont.body(.semibold))
-                .multilineTextAlignment(.center).accessibilityIdentifier("tuner.feedback")
+            if model.cents.map({ abs($0) > 150 }) ?? true {
+                Text(feedbackText).font(GitaFont.body(.semibold))
+                    .multilineTextAlignment(.center).accessibilityIdentifier("tuner.feedback")
+            }
             Text(model.displayedCents.map { String(format: "%+.0f cent", $0.rounded()) } ?? "— cent")
                 .font(GitaFont.callout()).monospacedDigit()
                 .opacity(model.isHoldingReading ? 0.4 : 1)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: model.isHoldingReading)
-                .accessibilityValue(model.isHoldingReading ? String(localized: "上一读数") : "")
+                .accessibilityValue(feedbackText)
                 .accessibilityIdentifier("tuner.cents")
             if model.status == .permissionDenied {
                 Button("前往设置开启麦克风") {
@@ -172,13 +172,15 @@ struct TunerView: View {
             }
         }
         .foregroundStyle(model.cents == nil ? GitaTheme.textSecondary : feedbackColor)
-        .frame(maxWidth: .infinity, minHeight: 46)
+        .frame(maxWidth: .infinity, minHeight: 20)
         .accessibilityElement(children: .contain)
     }
 
     private func headstock(width: CGFloat) -> some View {
-        let diameter: CGFloat = typeSize.isAccessibilitySize && width >= 360 ? 64 : 48
-        let imageWidth = min(290, max(0, width - 2 * (diameter + 8)))
+        let diameter: CGFloat = typeSize.isAccessibilitySize && width >= 360 ? 64 : 52
+        // The 300 pt asset includes 9 pt transparent side margins. Let those
+        // margins share space with the controls, scaling the same way on SE.
+        let imageWidth = min(300, max(0, width - 2 * (diameter + 8)) * 300 / 282)
         let imageHeight = imageWidth * 1619 / 971
         return ZStack(alignment: .topLeading) {
             Image("TunerHeadstock").resizable().scaledToFit()
@@ -203,8 +205,10 @@ struct TunerView: View {
         let target = model.tuning.targets.first { $0.number == number }!
         let selected = model.selectedStringNumber == number
         return Button { model.selectString(number) } label: {
-            Text(target.noteLabel)
-                .font(GitaFont.headline()).lineLimit(1).minimumScaleFactor(0.5)
+            Text(target.noteName)
+                .font(.system(size: targetNoteSize, weight: .bold))
+                .lineLimit(1).minimumScaleFactor(0.3)
+                .padding(.horizontal, 4)
                 .frame(width: diameter, height: diameter)
                 .foregroundStyle(selected ? GitaTheme.brandOn : GitaTheme.textPrimary)
                 .background(selected ? GitaTheme.brand500 : GitaTheme.bgSurface, in: Circle())

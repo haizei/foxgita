@@ -8,6 +8,7 @@ nonisolated struct TunerString: Identifiable, Equatable, Sendable {
         self.number = number; self.midiNote = midiNote; self.usesFlats = usesFlats
     }
     var id: Int { number }
+    var noteName: String { String(noteLabel.dropLast()) }
     var noteLabel: String {
         let names = usesFlats
             ? ["C", "D♭", "D", "E♭", "E", "F", "G♭", "G", "A♭", "A", "B♭", "B"]
@@ -42,7 +43,7 @@ nonisolated enum GuitarTuning: String, CaseIterable, Identifiable, Sendable {
         }
     }
     var summary: String {
-        title + "  " + targets.reversed().map { String($0.noteLabel.dropLast()) }.joined(separator: " ")
+        title + "  " + targets.reversed().map(\.noteName).joined(separator: " ")
     }
 }
 
