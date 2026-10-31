@@ -7,7 +7,7 @@ import Foundation
 import Observation
 
 enum MainTab: Hashable {
-    case practice, record, settings
+    case practice, record, tools, settings
 }
 
 enum RecordHomeSegment: Hashable {

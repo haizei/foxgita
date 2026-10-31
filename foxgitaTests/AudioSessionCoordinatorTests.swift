@@ -6,6 +6,20 @@ private struct ApplyBoom: Error {}
 
 @MainActor
 struct AudioSessionCoordinatorTests {
+    @Test func tuningUsesMeasurementAndRestoresOverlappingRecordingMode() throws {
+        let coordinator = AudioSessionCoordinator(apply: {})
+        try coordinator.acquire(.record)
+        #expect(coordinator.inputMode == .default)
+        try coordinator.acquire(.tuning)
+        #expect(coordinator.inputMode == .measurement)
+        #expect(coordinator.prefersPlayAndRecord)
+        coordinator.release(.tuning)
+        #expect(coordinator.inputMode == .default)
+        #expect(coordinator.prefersPlayAndRecord)
+        coordinator.release(.record)
+        #expect(!coordinator.prefersPlayAndRecord)
+    }
+
     @Test func acquireFailureRollsBackCount() {
         let coordinator = AudioSessionCoordinator(apply: { throw ApplyBoom() })
         #expect(throws: ApplyBoom.self) {

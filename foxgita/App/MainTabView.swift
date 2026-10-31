@@ -17,6 +17,9 @@ struct MainTabView: View {
             RecordView()
                 .tabItem { Label { Text("记录") } icon: { Image("HomeTabRecord").renderingMode(.template) } }
                 .tag(MainTab.record)
+            ToolsView()
+                .tabItem { Label { Text("工具") } icon: { Image("HomeTabTools").renderingMode(.template) } }
+                .tag(MainTab.tools)
             SettingsView()
                 .tabItem { Label { Text("设置") } icon: { Image("HomeTabSettings").renderingMode(.template) } }
                 .tag(MainTab.settings)

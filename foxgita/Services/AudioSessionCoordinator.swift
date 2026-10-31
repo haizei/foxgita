@@ -13,6 +13,7 @@ final class AudioSessionCoordinator {
     enum Need: Hashable {
         case playback
         case record
+        case tuning
     }
 
     enum InterruptionEvent: Equatable, Sendable {
@@ -27,7 +28,8 @@ final class AudioSessionCoordinator {
     private let applyOverride: (@MainActor () throws -> Void)?
     private var interruptionObservers: [UUID: (InterruptionEvent) -> Void] = [:]
 
-    var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 }
+    var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 || needCounts[.tuning, default: 0] > 0 }
+    var inputMode: AVAudioSession.Mode { needCounts[.tuning, default: 0] > 0 ? .measurement : .default }
 
     init(apply: (@MainActor () throws -> Void)? = nil) {
         applyOverride = apply
@@ -116,9 +118,9 @@ final class AudioSessionCoordinator {
             return
         }
         let session = AVAudioSession.sharedInstance()
-        if needCounts[.record, default: 0] > 0 {
+        if prefersPlayAndRecord {
             try session.setCategory(
-                .playAndRecord, mode: .default, options: [.defaultToSpeaker, .mixWithOthers]
+                .playAndRecord, mode: inputMode, options: [.defaultToSpeaker, .mixWithOthers]
             )
         } else {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])

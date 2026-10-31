@@ -41,6 +41,7 @@ struct MetronomeDisplayCard: View {
     let metronome: MetronomeEngine
     var onEntryTap: (MetronomeSheetAnchor) -> Void = { _ in }
     var onSoundTap: () -> Void = {}
+    var onTapTempo: (() -> Void)?
     var onAccentTap: (Int) -> Void = { _ in }
     var isAccentEditingLocked = false
     var onLockedAccentTap: () -> Void = {}

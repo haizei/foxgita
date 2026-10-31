@@ -379,3 +379,16 @@ struct MetronomeSpeedSheet: View {
 }
 
 #Preview { MetronomeSpeedSheet(controller: MetronomeTempoController(), onDone: {}) }
+
+struct MetronomeSpeedBackdrop: View {
+    var onDismiss: () -> Void
+
+    var body: some View {
+        Button(action: onDismiss) {
+            Color.black.opacity(0.32).ignoresSafeArea()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("收起速度设置")
+        .accessibilityIdentifier("metronome.speed.dismiss")
+    }
+}

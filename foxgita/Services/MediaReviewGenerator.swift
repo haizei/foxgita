@@ -210,7 +210,7 @@ struct FileMediaImagePreparer: MediaImagePreparing {
         return encodedJPEG(UIImage(cgImage: cgImage))
     }
 
-    private final class WaitBox<T>: @unchecked Sendable {
+    nonisolated private final class WaitBox<T>: @unchecked Sendable {
         var value: T?
     }
 

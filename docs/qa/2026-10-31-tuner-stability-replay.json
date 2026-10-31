@@ -1,0 +1,475 @@
+{
+  "date": "2026-10-31",
+  "spec": "https://github.com/haizei/foxgita/issues/60",
+  "type": "offline estimator/model same-input replay; not live capture or streaming-worker benchmark",
+  "baseline": "pre-implementation working-tree TunerModel snapshot; only wall clock replaced with deterministic replay clock",
+  "optimized": "current TunerModel with injected monotonic clock; same unchanged YIN detector as baseline",
+  "method": {
+    "runtime": "native macOS Swift optimized executable with AVFoundation and Accelerate",
+    "input": "decode mono float PCM, detector window = 1024 * ceil(sampleRate/12000), hop = window/4",
+    "clock": "100 seconds + accumulated PCM frame count / actual sample rate",
+    "rawEligible": "pitch confidence >=0.95 and within180 cent of one standard-tuning target",
+    "published": "non-nil model.frequency, so baseline may include old frozen frequency whereas optimized separates held readings",
+    "publishedWithoutFreshEvidence": "model.frequency non-nil when current window did not have eligible input",
+    "firstPcmSeconds": "accumulated input duration to first published locked reading; not device wall latency or p95",
+    "confirmationEvents": "entries into model.intonation == inTune; not an independently annotated accuracy metric"
+  },
+  "sources": [
+    {
+      "title": "University of Iowa Musical Instrument Samples: guitar",
+      "url": "https://theremin.music.uiowa.edu/MISguitar.html",
+      "samples": [
+        {
+          "url": "https://theremin.music.uiowa.edu/sound%20files/MIS/Piano_Other/guitar/Guitar.pp.sulE.E2B2.mono.aif",
+          "durationUsedSeconds": 2
+        },
+        {
+          "url": "https://theremin.music.uiowa.edu/sound%20files/MIS/Piano_Other/guitar/Guitar.mf.sulE.E2B2.mono.aif",
+          "durationUsedSeconds": 2
+        }
+      ],
+      "note": "public sample recordings downloaded temporarily for local analysis; no source audio redistributed"
+    }
+  ],
+  "proxyInputs": {
+    "fan": "deterministic broadband noise plus60/120Hz hum",
+    "handling": "noise bursts",
+    "dual-string": "E2 + G3",
+    "clipped-guitar": "clipped amplified sine",
+    "resonant-guitar": "E2 + strong second harmonic",
+    "sweep": "40cent/s, -30 to +30cent",
+    "speech": "local macOS Tingting text-to-speech, no person recorded",
+    "speech-music": "same synthesized speech plus200Hz music proxy"
+  },
+  "comparison": [
+    {
+      "name": "clipped-guitar-proxy.wav",
+      "windows": 137,
+      "rawEligible": 137,
+      "beforePublished": 137,
+      "afterPublished": 133,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 1,
+      "afterConfirmationEvents": 1,
+      "beforeFirstPcmSeconds": 0.08533333333333333,
+      "afterFirstPcmSeconds": 0.17066666666666666
+    },
+    {
+      "name": "dual-string-proxy.wav",
+      "windows": 137,
+      "rawEligible": 0,
+      "beforePublished": 0,
+      "afterPublished": 0,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 0,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": null,
+      "afterFirstPcmSeconds": null
+    },
+    {
+      "name": "fan-proxy.wav",
+      "windows": 137,
+      "rawEligible": 0,
+      "beforePublished": 0,
+      "afterPublished": 0,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 0,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": null,
+      "afterFirstPcmSeconds": null
+    },
+    {
+      "name": "handling-proxy.wav",
+      "windows": 137,
+      "rawEligible": 0,
+      "beforePublished": 0,
+      "afterPublished": 0,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 0,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": null,
+      "afterFirstPcmSeconds": null
+    },
+    {
+      "name": "resonant-guitar-proxy.wav",
+      "windows": 137,
+      "rawEligible": 137,
+      "beforePublished": 137,
+      "afterPublished": 133,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 1,
+      "afterConfirmationEvents": 1,
+      "beforeFirstPcmSeconds": 0.08533333333333333,
+      "afterFirstPcmSeconds": 0.17066666666666666
+    },
+    {
+      "name": "speech-music-proxy.wav",
+      "windows": 372,
+      "rawEligible": 164,
+      "beforePublished": 234,
+      "afterPublished": 69,
+      "beforePublishedWithoutFreshEvidence": 70,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 87,
+      "beforeConfirmationEvents": 4,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": 0.2773333333333333,
+      "afterFirstPcmSeconds": 1.2373333333333334
+    },
+    {
+      "name": "speech-zh.wav",
+      "windows": 372,
+      "rawEligible": 139,
+      "beforePublished": 209,
+      "afterPublished": 54,
+      "beforePublishedWithoutFreshEvidence": 70,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 60,
+      "beforeConfirmationEvents": 5,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": 0.2773333333333333,
+      "afterFirstPcmSeconds": 1.2373333333333334
+    },
+    {
+      "name": "sweep-40cps.wav",
+      "windows": 67,
+      "rawEligible": 67,
+      "beforePublished": 67,
+      "afterPublished": 63,
+      "beforePublishedWithoutFreshEvidence": 0,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 0,
+      "beforeConfirmationEvents": 1,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": 0.08533333333333333,
+      "afterFirstPcmSeconds": 0.17066666666666666
+    },
+    {
+      "name": "Guitar.pp.sulE.E2B2.mono.aif",
+      "windows": 90,
+      "rawEligible": 82,
+      "beforePublished": 86,
+      "afterPublished": 78,
+      "beforePublishedWithoutFreshEvidence": 4,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 7,
+      "beforeConfirmationEvents": 0,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": 0.10666666666666667,
+      "afterFirstPcmSeconds": 0.192
+    },
+    {
+      "name": "Guitar.mf.sulE.E2B2.mono.aif",
+      "windows": 90,
+      "rawEligible": 42,
+      "beforePublished": 68,
+      "afterPublished": 38,
+      "beforePublishedWithoutFreshEvidence": 26,
+      "afterPublishedWithoutFreshEvidence": 0,
+      "afterHeldWindows": 43,
+      "beforeConfirmationEvents": 0,
+      "afterConfirmationEvents": 0,
+      "beforeFirstPcmSeconds": 0.192,
+      "afterFirstPcmSeconds": 0.2773333333333333
+    }
+  ],
+  "limitations": [
+    "Native harness bypasses the streaming worker and live input. Worker regression is tested separately.",
+    "Raw eligible-window counts are unchanged, because the detector is unchanged. Publication counts are not pitch accuracy.",
+    "Iowa recordings have no independent per-frame ground truth; their approximately80.44/80.56Hz median is not the standard82.4Hz target.",
+    "Speech still produces54/69 fresh pitch windows; zero confirmation events on these samples is not general speech or TV rejection.",
+    "Proxy noise and synthetic guitar cannot certify real-room performance.",
+    "Physical iPhone capture, true onset-to-lock/switch p95, device CPU/memory/dropouts and annotated broader four-preset recordings remain unmeasured.",
+    "No source audio or microphone recordings saved to app or repository."
+  ],
+  "syntheticTail": {
+    "durationSeconds": 3,
+    "sampleRate": 48000,
+    "tailStartsSeconds": 1.5,
+    "clock": "same deterministic injected model clock",
+    "waveform": "0.02*exp(-t/0.65)*(0.4*sin(phase)+0.8*sin(2*phase)+0.2*sin(3*phase)) + deterministic uniform noise of width0.001",
+    "mode": "manually selected correct string for each of four presets; same detector/model path as regression tests",
+    "cases": [
+      {
+        "freshTailReadings": 21,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 0.9487224905106206,
+        "peakToPeakCents": 0.6122930225422056,
+        "rawEligibleTailWindows": 21,
+        "string": 1,
+        "tailWindows": 70,
+        "targetHz": 329.6275569128699,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 23,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 0.37051614334371363,
+        "peakToPeakCents": 0.42185138015303403,
+        "rawEligibleTailWindows": 23,
+        "string": 2,
+        "tailWindows": 70,
+        "targetHz": 246.94165062806206,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 1.9151172430476624,
+        "peakToPeakCents": 1.6284416187020492,
+        "rawEligibleTailWindows": 24,
+        "string": 3,
+        "tailWindows": 70,
+        "targetHz": 195.99771799087463,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 25,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.6173408533455997,
+        "peakToPeakCents": 1.4514566647298808,
+        "rawEligibleTailWindows": 25,
+        "string": 4,
+        "tailWindows": 70,
+        "targetHz": 146.8323839587038,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 0.9184124480695152,
+        "peakToPeakCents": 1.576164523796223,
+        "rawEligibleTailWindows": 24,
+        "string": 5,
+        "tailWindows": 70,
+        "targetHz": 110,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 2.0868013755041788,
+        "peakToPeakCents": 2.7551112502630026,
+        "rawEligibleTailWindows": 24,
+        "string": 6,
+        "tailWindows": 70,
+        "targetHz": 82.4068892282175,
+        "tuning": "standard"
+      },
+      {
+        "freshTailReadings": 21,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 0.9487224905106206,
+        "peakToPeakCents": 0.6122930225422056,
+        "rawEligibleTailWindows": 21,
+        "string": 1,
+        "tailWindows": 70,
+        "targetHz": 329.6275569128699,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 23,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 0.37051614334371363,
+        "peakToPeakCents": 0.42185138015303403,
+        "rawEligibleTailWindows": 23,
+        "string": 2,
+        "tailWindows": 70,
+        "targetHz": 246.94165062806206,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 1.9151172430476624,
+        "peakToPeakCents": 1.6284416187020492,
+        "rawEligibleTailWindows": 24,
+        "string": 3,
+        "tailWindows": 70,
+        "targetHz": 195.99771799087463,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 25,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.6173408533455997,
+        "peakToPeakCents": 1.4514566647298808,
+        "rawEligibleTailWindows": 25,
+        "string": 4,
+        "tailWindows": 70,
+        "targetHz": 146.8323839587038,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 0.9184124480695152,
+        "peakToPeakCents": 1.576164523796223,
+        "rawEligibleTailWindows": 24,
+        "string": 5,
+        "tailWindows": 70,
+        "targetHz": 110,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 2.0212487395104093,
+        "peakToPeakCents": 1.9963047072830375,
+        "rawEligibleTailWindows": 24,
+        "string": 6,
+        "tailWindows": 70,
+        "targetHz": 73.41619197935188,
+        "tuning": "dropD"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.0527114209529598,
+        "peakToPeakCents": 0.7822490497378574,
+        "rawEligibleTailWindows": 24,
+        "string": 1,
+        "tailWindows": 70,
+        "targetHz": 293.6647679174076,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 21,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 2.062068641972809,
+        "peakToPeakCents": 1.8525817202822064,
+        "rawEligibleTailWindows": 21,
+        "string": 2,
+        "tailWindows": 70,
+        "targetHz": 220,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 1.9151172430476624,
+        "peakToPeakCents": 1.6284416187020492,
+        "rawEligibleTailWindows": 24,
+        "string": 3,
+        "tailWindows": 70,
+        "targetHz": 195.99771799087463,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 25,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.6173408533455997,
+        "peakToPeakCents": 1.4514566647298808,
+        "rawEligibleTailWindows": 25,
+        "string": 4,
+        "tailWindows": 70,
+        "targetHz": 146.8323839587038,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 0.9184124480695152,
+        "peakToPeakCents": 1.576164523796223,
+        "rawEligibleTailWindows": 24,
+        "string": 5,
+        "tailWindows": 70,
+        "targetHz": 110,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 2.0212487395104093,
+        "peakToPeakCents": 1.9963047072830375,
+        "rawEligibleTailWindows": 24,
+        "string": 6,
+        "tailWindows": 70,
+        "targetHz": 73.41619197935188,
+        "tuning": "dadgad"
+      },
+      {
+        "freshTailReadings": 21,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.334491460239076,
+        "peakToPeakCents": 1.2277244155984568,
+        "rawEligibleTailWindows": 21,
+        "string": 1,
+        "tailWindows": 70,
+        "targetHz": 311.1269837220809,
+        "tuning": "halfStepDown"
+      },
+      {
+        "freshTailReadings": 22,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 0.5575659061176101,
+        "peakToPeakCents": 0.6142798359603275,
+        "rawEligibleTailWindows": 22,
+        "string": 2,
+        "tailWindows": 70,
+        "targetHz": 233.08188075904496,
+        "tuning": "halfStepDown"
+      },
+      {
+        "freshTailReadings": 23,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.2031960134748256,
+        "peakToPeakCents": 1.2715088943063373,
+        "rawEligibleTailWindows": 23,
+        "string": 3,
+        "tailWindows": 70,
+        "targetHz": 184.9972113558172,
+        "tuning": "halfStepDown"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 14,
+        "maximumAbsoluteCents": 1.577270195388533,
+        "peakToPeakCents": 1.5648312481637445,
+        "rawEligibleTailWindows": 24,
+        "string": 4,
+        "tailWindows": 70,
+        "targetHz": 138.59131548843604,
+        "tuning": "halfStepDown"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 2.018328390965366,
+        "peakToPeakCents": 1.8350676881635524,
+        "rawEligibleTailWindows": 24,
+        "string": 5,
+        "tailWindows": 70,
+        "targetHz": 103.82617439498628,
+        "tuning": "halfStepDown"
+      },
+      {
+        "freshTailReadings": 24,
+        "heldTailWindows": 16,
+        "maximumAbsoluteCents": 1.8212775667618752,
+        "peakToPeakCents": 1.7476659779853114,
+        "rawEligibleTailWindows": 24,
+        "string": 6,
+        "tailWindows": 70,
+        "targetHz": 77.78174593052023,
+        "tuning": "halfStepDown"
+      }
+    ],
+    "summary": {
+      "cases": 24,
+      "minimumFreshTailReadings": 21,
+      "maximumAbsoluteCents": 2.0868013755041788,
+      "maximumPeakToPeakCents": 2.7551112502630026
+    }
+  }
+}

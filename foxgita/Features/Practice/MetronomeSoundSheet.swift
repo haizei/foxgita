@@ -6,6 +6,7 @@ struct MetronomeSoundSheet: View {
     var metronomeEnabled: Binding<Bool>?
     var onRecord: () -> Void = {}
     var onExpand: () -> Void = {}
+    var showsPracticeActions = true
     var onDone: () -> Void
     @State private var previewError: String?
     @State private var showAdvanced = false
@@ -50,11 +51,15 @@ struct MetronomeSoundSheet: View {
     private var header: some View {
         HStack(spacing: 12) {
             Image("MetronomeScrew").accessibilityHidden(true)
-            roundButton("录音", image: "MetronomeSettingsMic", action: onRecord)
+            if showsPracticeActions {
+                roundButton("录音", image: "MetronomeSettingsMic", action: onRecord)
+            }
             Spacer(minLength: 4)
             Text("设置").font(GitaFont.headline(.bold))
             Spacer(minLength: 4)
-            roundButton("展开节拍器", image: "MetronomeSettingsExpand", action: onExpand)
+            if showsPracticeActions {
+                roundButton("展开节拍器", image: "MetronomeSettingsExpand", action: onExpand)
+            }
             Image("MetronomeScrew").accessibilityHidden(true)
         }.padding(.bottom, 8)
             .overlay(alignment: .bottom) { GitaTheme.borderSubtle.frame(height: 0.5) }

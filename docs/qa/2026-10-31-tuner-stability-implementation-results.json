@@ -1,0 +1,130 @@
+{
+  "date": "2026-10-31",
+  "issue": "https://github.com/haizei/foxgita/issues/60",
+  "startingHead": "df0af46c53275d3cd12e47f34cabaade8fb5c852",
+  "branch": "codex/project-detail-figma-alignment",
+  "buildContext": {
+    "source": "independent git-index export, excluding unrelated working-tree changes",
+    "snapshot": "/tmp/gita-tuner-commit-snapshot-20261031",
+    "xcode": "26.6 (17F113)",
+    "swift": "6.3.3",
+    "simulator": "iOS26.5 GitaTests, F84B6A0D-4AF4-4AD5-A3BE-AF4B6CD09237",
+    "physicalDeviceUsed": false
+  },
+  "checks": {
+    "buildForTesting": {
+      "status": "passed",
+      "log": "/tmp/gita-tuner-commit-build-20261031.log"
+    },
+    "finalPresetMenuRegression": {
+      "status": "passed",
+      "test": "TunerUITests/testManualTargetAutoSwitchAndCalibration",
+      "bundle": "/tmp/gita-tuner-clean-menu-20261031.xcresult"
+    },
+    "fullScheme": {
+      "status": "passed",
+      "bundle": "/tmp/gita-tuner-complete-signed-20261031.xcresult",
+      "swiftTestingPassed": 682,
+      "streamingPassed": 3,
+      "deviceAcceptanceSkipped": 4,
+      "note": "Complete scheme without test filters; includes original600-second sustained-playback UI check. Only subsequent source change is nonisolated build workaround, separately rebuilt and tested.",
+      "uiPassed": 40,
+      "failures": 0,
+      "uiDurationSeconds": 1632.465,
+      "swiftTestingDurationSeconds": 200.864,
+      "passedExcludingSkipped": 725,
+      "xcodebuildExitCode": 0,
+      "officialSummary": {
+        "result": "Passed",
+        "totalTestCount": 729,
+        "passedTests": 725,
+        "failedTests": 0,
+        "skippedTests": 4,
+        "expectedFailures": 0,
+        "startTime": 1793449569.539,
+        "finishTime": 1793451436.778
+      }
+    },
+    "release": {
+      "status": "passed",
+      "log": "/tmp/gita-tuner-release-fixed-20261031.log",
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ]
+    },
+    "finalBuildForTesting": {
+      "status": "passed",
+      "log": "/tmp/gita-tuner-final-build-20261031.log",
+      "note": "Includes final nonisolated declaration fix; separate output from running full scheme."
+    },
+    "finalAffectedTests": {
+      "status": "passed",
+      "scope": "MediaReviewGeneratorTests",
+      "passed": 7,
+      "bundle": "/tmp/gita-tuner-final-media-20261031.xcresult",
+      "device": "D411837A-75F5-4BE8-975C-1FD07C67C634 (separate iPhone17 simulator)",
+      "note": "Built with final nonisolated declaration fix. Full-scheme test binary predates only that declaration; final Debug build, affected suite and Release build validate the last change."
+    }
+  },
+  "environmentCorrections": [
+    {
+      "problem": "Unsigned simulator run could not access keychain (-34018).",
+      "resolution": "Use local simulator signing CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-; all9 focused keychain tests passed before restarting full scheme.",
+      "bundle": "/tmp/gita-tuner-keychain-environment-20261031.xcresult"
+    },
+    {
+      "problem": "Release Swift EarlyPerfInliner crashed compiling generated WaitBox deinit in unrelated MediaReviewGenerator.",
+      "baselineReproduction": "Same crash reproduced on task-start HEAD for arm64 and x86_64; /tmp/gita-tuner-head-release-20261031.log",
+      "resolution": "Included existing one-line nonisolated WaitBox declaration fix; independent Release rebuild passed for arm64 and x86_64."
+    }
+  ],
+  "review": {
+    "skill": "code-review",
+    "standards": {
+      "verdict": "no remaining must-fix",
+      "findingsResolved": [
+        "recognizing stream timeout",
+        "replay during reference decay preserves resume intent"
+      ],
+      "buildPrerequisiteReviewed": true
+    },
+    "spec": {
+      "verdict": "no remaining concrete defect",
+      "findingsResolved": [
+        "unmatched high-quality pitch follows same hold path",
+        "isolated large spike cannot snap immediately"
+      ],
+      "validationLimitsReviewed": true
+    },
+    "note": "Both independent review axes have no remaining must-fix; signed complete-scheme assertions and final Debug/Release builds passed."
+  },
+  "behavioralCoverage": [
+    "four tuning presets and A4 calibration",
+    "independent literal flat-note labels/frequencies",
+    "freshness, ordering, run identity, format changes and setting barriers",
+    "initial recognition, hysteresis, genuine string switching and manual octave",
+    "centre crossing, isolated spikes, evidence gaps and confirmation revocation",
+    "24 synthetic decaying string cases with tail error, jitter and coverage",
+    "40cent/s tracking and20/40ms observation intervals",
+    "weak/no-candidate hold, expiration and recovery",
+    "reference playback, residual silence gate, cancellation and repeated playback",
+    "permission, background, interruption, route loss and service reset",
+    "real worker initial low E, backpressure and timed silent observation",
+    "UI confirmation, tail expiry, preset menu and accessibility layout"
+  ],
+  "replayArtifact": "2026-10-31-tuner-stability-replay.json",
+  "screenshots": [
+    "2026-10-31-tuner-stability-screenshots/Tuner-confirmed.png",
+    "2026-10-31-tuner-stability-screenshots/Tuner-tail-expired.png",
+    "2026-10-31-tuner-stability-screenshots/Tuner-accessibility-dark.png"
+  ],
+  "limitations": [
+    "No physical-iPhone microphone capture certification.",
+    "No actual-room recorded-noise comparison or broader annotated real-guitar/preset ground truth.",
+    "No physical-device initial-lock/switch p95, CPU, memory or dropout measurements.",
+    "Four existing physical-device acceptance cases intentionally skip in simulator.",
+    "UI tail fixture pauses injected clock to expose transient state; production expiry is verified with deterministic model tests.",
+    "No raw sound saved in app or repository; public samples and synthesized speech used only in temporary offline harness."
+  ]
+}
