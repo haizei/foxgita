@@ -158,7 +158,7 @@ final class PracticeFlowUITests: XCTestCase {
 
         app.buttons["确认并创建练习"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["metronome.display-card"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["完成"].exists || app.staticTexts["完成本次练习"].exists)
+        XCTAssertTrue(app.buttons["保存"].exists)
     }
 
     func testNoteComposerShowsVoiceAndPhotoCameraStates() {
@@ -242,7 +242,7 @@ final class PracticeFlowUITests: XCTestCase {
             XCTAssertGreaterThanOrEqual(parts[0] * 60 + parts[1], 590)
         }
         app.buttons["暂停"].tap()
-        XCTAssertTrue(app.buttons["开始"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["继续"].waitForExistence(timeout: 5))
     }
 
     func testMetronomeSpeedSheetMatchesCompactAndSegmentedFlows() {
