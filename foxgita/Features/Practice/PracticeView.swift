@@ -101,6 +101,10 @@ struct PracticeView: View {
 
                         justCompletedCard
 
+                        if isSelectedToday, let profileID = currentProfileId {
+                            SuggestedPracticeSection(profileID: profileID, items: allSnapshots)
+                        }
+
                         VStack(alignment: .leading, spacing: 4) {
                             Text(sectionTitle)
                                 .font(GitaFont.title())
@@ -363,7 +367,7 @@ struct PracticeView: View {
 
     @ViewBuilder
     private func todayOrPastRow(_ item: PracticeItemSnapshot, index: Int) -> some View {
-        let cta = isSelectedToday && programs.isChecklistCompleted(item.id) ? "已完成" : PracticeHomeState.ctaTitle(
+        let cta = isSelectedToday && (programs.isChecklistCompleted(item.id) || router.completedPracticeItemIds.contains(item.id)) ? "已完成" : PracticeHomeState.ctaTitle(
             isSelectedToday: isSelectedToday,
             durationSeconds: item.durationSeconds
         )

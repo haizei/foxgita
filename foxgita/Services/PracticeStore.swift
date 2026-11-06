@@ -66,6 +66,7 @@ struct HistoricalPracticeUpdate {
 @MainActor
 final class PracticeStore {
     private(set) var lastError: StoreError?
+    let suggestions: NextFocusStore
 
     @ObservationIgnored private let repository: PracticeRepository
     @ObservationIgnored private let defaults: UserDefaults
@@ -78,13 +79,15 @@ final class PracticeStore {
         defaults: UserDefaults = .standard,
         taskMemorySync: TaskMemorySync? = nil,
         aiCandidateSync: AICandidateSync? = nil,
-        invocationStore: AIInvocationStore? = nil
+        invocationStore: AIInvocationStore? = nil,
+        suggestions: NextFocusStore? = nil
     ) {
         self.repository = repository
         self.defaults = defaults
         self.taskMemorySync = taskMemorySync
         self.aiCandidateSync = aiCandidateSync
         self.invocationStore = invocationStore
+        self.suggestions = suggestions ?? NextFocusStore()
     }
 
     func clearError() { lastError = nil }
@@ -1149,6 +1152,7 @@ final class PracticeStore {
 
     func resetAll() {
         perform {
+            try suggestions.reset()
             try repository.removeAll()
             for template in SeedData.templates() { try repository.add(template) }
             try repository.save()
@@ -1186,6 +1190,12 @@ final class PracticeStore {
             return nil
         }
         return id
+    }
+
+    func scorePracticeItem(id: UUID) throws -> PracticeItem {
+        let item = try requireLivePracticeItem(id: id)
+        guard item.deletedAt == nil else { throw StoreError.notFound }
+        return item
     }
 
     private func requireProfileUUID() throws -> UUID {
@@ -1335,5 +1345,116 @@ final class PracticeStore {
             lastError = StoreError.from(error)
             return nil
         }
+    }
+}
+
+enum NextFocusLaunchError: LocalizedError {
+    case unavailableSource, missingExecution, projectConflict
+    var errorDescription: String? {
+        switch self {
+        case .unavailableSource: "来源练习、项目或曲谱已不可用。可确认后作为自由练习开始。"
+        case .missingExecution: "原先关联的当天练习已不可用，请重试或明确重新开始。"
+        case .projectConflict: "项目当前重点已变化，请核对最新内容后再决定是否覆盖。"
+        }
+    }
+}
+
+extension PracticeStore {
+    func nextFocusGenerator() -> NextFocusClient {
+        if let invocationStore { return NextFocusClient(log: LiveAIInvocationLog(store: invocationStore)) }
+        return NextFocusClient()
+    }
+
+    func nextFocusContext(itemID: UUID) throws -> NextFocusContext {
+        let item = try requireLivePracticeItem(id: itemID)
+        let project = try item.projectId.flatMap { try repository.project(id: $0, profileId: item.profileId) }
+        let library = try ScoreLibraryProvider.library(profileID: item.profileId)
+        let observations = item.recordings.filter { $0.deletedAt == nil && $0.reviewStatus == .ready }
+            .suffix(3).flatMap { [$0.reviewHighlight, $0.reviewFocus] }.filter { !$0.isEmpty }
+        return NextFocusContext(
+            profileID: item.profileId, sourceID: item.id, sourceDay: item.practiceDayKey,
+            title: item.title, categoryRaw: item.categoryRaw, steps: item.steps, note: item.note,
+            durationSeconds: item.durationSeconds, projectID: project?.id,
+            projectName: project?.name ?? "", projectFocus: project?.currentFocus ?? "",
+            bpm: item.bpm, timeSignature: item.timeSignature, targetMinutes: item.targetMin,
+            scoreLink: library.link(for: item.id), observations: observations)
+    }
+
+    /// A stable origin survives a failed association write and an application
+    /// restart. Retrying therefore reuses the created fact instead of doubling it.
+    func openSuggestedPractice(actionID: UUID, completedIDs: Set<UUID>, now: Date = .now,
+                               calendar: Calendar = .current, allowFreePractice: Bool = false,
+                               restartMissing: Bool = false) throws -> PracticeItem {
+        let profileID = try requireProfileUUID()
+        guard let action = try suggestions.document(profileID).action, action.id == actionID else {
+            throw NextFocusError.changedAction
+        }
+        let day = PracticeDayKey.make(from: now, calendar: calendar)
+        let items = try repository.practiceItems(profileId: profileID)
+        let matching = items.filter { $0.originId == action.originID && $0.practiceDayKey == day && $0.deletedAt == nil }
+        if matching.contains(where: { completedIDs.contains($0.id) }) {
+            throw NextFocusError.changedAction
+        }
+        let existing = matching.first
+        if action.executionDay == day, action.executionID != nil, existing == nil, !restartMissing {
+            throw NextFocusLaunchError.missingExecution
+        }
+        let source = try repository.practiceItem(id: action.context.sourceID, profileId: profileID)
+        let project = try action.context.projectID.flatMap { try repository.project(id: $0, profileId: profileID) }
+        let library = try ScoreLibraryProvider.library(profileID: profileID)
+        let link = action.context.scoreLink
+        let sourceMissing = source == nil || source?.deletedAt != nil
+            || (action.context.projectID != nil && project?.status != .active)
+            || (link != nil && library.score(versionID: link!.versionID) == nil)
+        // A valid existing execution remains usable even when the old source is removed.
+        if existing == nil && sourceMissing && !allowFreePractice { throw NextFocusLaunchError.unavailableSource }
+        let item: PracticeItem
+        if let existing { item = existing }
+        else {
+            item = try createPracticeItem(input: .init(
+                title: action.context.title, category: PracticeCategory(rawValue: action.context.categoryRaw) ?? .chord,
+                source: .next, originId: action.originID, bpm: action.context.bpm,
+                timeSignature: action.context.timeSignature,
+                steps: action.context.steps.isEmpty ? [action.text] : action.context.steps, subtitle: action.text,
+                targetMin: action.context.targetMinutes,
+                projectId: allowFreePractice ? nil : action.context.projectID), now: now, calendar: calendar)
+        }
+        if let link, !allowFreePractice, library.link(for: item.id) == nil {
+            try library.save(link: .init(practiceItemID: item.id, versionID: link.versionID,
+                                         range: link.range, speed: link.speed))
+        }
+        try suggestions.associate(profileID: profileID, actionID: action.id, itemID: item.id, day: day)
+        return item
+    }
+
+    func completeSuggestedPractice(item: PracticeItem) throws {
+        try suggestions.complete(profileID: item.profileId, itemID: item.id, originID: item.originId)
+    }
+
+    func applyNextFocusProjectUpdate(profileID: UUID, sourceID: UUID, overwrite: Bool = false,
+                                     reviewedFocus: String? = nil) throws {
+        guard profileID == (try requireProfileUUID()),
+              let pending = try suggestions.document(profileID).drafts[sourceID.uuidString]?.pendingProjectUpdate else { return }
+        let project = try requireLiveProject(id: pending.projectID)
+        if project.currentFocus == pending.text {
+            try suggestions.clearProjectUpdate(profileID: profileID, sourceID: sourceID)
+            return
+        }
+        guard overwrite ? project.currentFocus == reviewedFocus : project.currentFocus == pending.expectedFocus else {
+            throw NextFocusLaunchError.projectConflict
+        }
+        let previous = project.currentFocus, previousDate = project.updatedAt
+        do {
+            try updateProjectFocus(id: project.id, currentFocus: pending.text, now: .now)
+        } catch {
+            project.currentFocus = previous
+            project.updatedAt = previousDate
+            throw error
+        }
+        try suggestions.clearProjectUpdate(profileID: profileID, sourceID: sourceID)
+    }
+
+    func nextFocusProjectText(projectID: UUID) throws -> String {
+        try requireLiveProject(id: projectID).currentFocus
     }
 }

@@ -5,6 +5,7 @@ enum SkillID {
     static let reviewMedia = "practice.review.media"
     static let diagnoseVideo = "practice.diagnose.video"
     static let nextSession = "practice.next_session"
+    static let nextFocus = "practice.next_focus"
 }
 
 enum MemoryScope: String, Equatable, Sendable {
@@ -34,6 +35,13 @@ struct SkillDefinition: Equatable, Sendable {
 }
 
 extension SkillDefinition {
+    static let nextFocus = SkillDefinition(
+        id: SkillID.nextFocus, version: "1.0.0", title: "练后总结与下次重点",
+        purpose: "只依据本次已保存练习与项目当前重点整理一个待确认行动",
+        systemPrompt: NextFocusClient.systemPrompt, userPrompt: nil, timeout: 60,
+        allowsFormatRetry: true, memoryReadScopes: [], memoryWritePolicy: .deny
+    )
+
     static let planFromImage = SkillDefinition(
         id: SkillID.planFromImage,
         version: "1.1.0",

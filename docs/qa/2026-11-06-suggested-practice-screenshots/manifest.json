@@ -1,0 +1,89 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "72279904-6E08-4679-A123-4A6C6C523363.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Practice-tools-note-and-finish_0_75D4E6F8-2FE3-4C18-9A9F-A7AA9EA7DBF7.png",
+        "timestamp" : 1793965416.544
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "02EEE25F-82C7-4591-BC97-7AE522BB0D43.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Practice-tools-main_0_8F1CB742-2626-4146-95E4-073F5568EED2.png",
+        "timestamp" : 1793965413.717
+      }
+    ],
+    "testIdentifier" : "PracticeFlowUITests/testSavePreservesUnstartedPracticeAndOnlyBottomCompletes()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/PracticeFlowUITests/testSavePreservesUnstartedPracticeAndOnlyBottomCompletes"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "63E2A9E7-FBBF-4017-9F7E-F7B9B08AE9C9.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Suggested-practice-paused_0_38E32E27-EDDD-4266-B24E-31501257AA77.png",
+        "timestamp" : 1793965505.911
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "84F83C3A-69BD-4240-9403-3DD2A7F8CEB5.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Suggested-practice-ready_0_D65BE5BC-65AA-4ED5-9837-6D61DC8B2293.png",
+        "timestamp" : 1793965488.631
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "0A4DE442-722E-4708-8478-A3102B20FC1F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Next-focus-completion-manual_0_55A22224-353B-402C-B067-839783ED7D37.png",
+        "timestamp" : 1793965480.88
+      }
+    ],
+    "testIdentifier" : "SuggestedPracticeUITests/testCompleteConfirmAndResumeSuggestedPractice()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/SuggestedPracticeUITests/testCompleteConfirmAndResumeSuggestedPractice"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "C4353CC1-EA6B-4741-A940-0280656CFE4F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Next-focus-ready_0_1A89AC78-1B1D-4278-B164-7038930A23F1.png",
+        "timestamp" : 1793965558.18
+      }
+    ],
+    "testIdentifier" : "SuggestedPracticeUITests/testGeneratedFocusRequiresConfirmation()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/SuggestedPracticeUITests/testGeneratedFocusRequiresConfirmation"
+  },
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "FA292B54-4541-48CD-806B-7417D1C88AE3",
+        "deviceName" : "iPhone 17 Pro",
+        "exportedFileName" : "6C4005E4-270D-40C5-AF29-A9C1D8999AE3.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Next-focus-needs-input_0_AD8E377A-37C1-420A-BAA2-84C8F63D0A2F.png",
+        "timestamp" : 1793965605.234
+      }
+    ],
+    "testIdentifier" : "SuggestedPracticeUITests/testInsufficientInputGeneratesBeforeConfirmation()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/SuggestedPracticeUITests/testInsufficientInputGeneratesBeforeConfirmation"
+  }
+]

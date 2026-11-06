@@ -1,0 +1,12 @@
+{
+  "model": "qwen3.8-max",
+  "practice": "C to G chord transition",
+  "actualPracticeSeconds": 2,
+  "recap": "你记录了 C to G chord transition 的练习，并保存了“新步骤”与现有速度 80 BPM。",
+  "focus": "继续 C to G chord transition，沿用 80 BPM，并将“新步骤”改写为一个具体可执行的下一步。",
+  "basis": "依据本次练习名称、步骤和 existingBPM；无观察、备注或明确下次安排。",
+  "generated": true,
+  "confirmedActionMatchesGeneratedDraft": true,
+  "sourceMatches": true,
+  "generationErrorPresent": false
+}

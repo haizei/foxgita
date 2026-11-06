@@ -1,0 +1,14 @@
+{
+  "model": "qwen3.8-max",
+  "practice": "C to G chord transition",
+  "actualPracticeSeconds": 2,
+  "configuredBPM": 80,
+  "recap": "你记录了练习对象为 C 到 G 和弦切换，并保留了 80 BPM 的原有速度设置。",
+  "focus": "下次按 80 BPM 继续做 C 到 G 和弦切换。",
+  "basis": "记录包含明确练习对象和原速度；步骤为通用占位，因此只建议继续该对象。",
+  "generated": true,
+  "confirmedActionMatchesGeneratedDraft": true,
+  "sourceMatches": true,
+  "generationErrorPresent": false,
+  "clientSourceSHA256": "e8cddfccc7f804643bfe3cd40b8b4379cce8df230c4ff7b3d85fbfe66a502f98"
+}

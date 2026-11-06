@@ -1,0 +1,35 @@
+[
+  {
+    "attachments" : [
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D411837A-75F5-4BE8-975C-1FD07C67C634",
+        "deviceName" : "iPhone 17",
+        "exportedFileName" : "A2F0B979-F8E7-4721-8BC0-843598FE4116.json",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "live-ai-flow-report_0_39361757-7BEC-46EF-977F-B660310B3F75.json",
+        "timestamp" : 1793969436.078
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D411837A-75F5-4BE8-975C-1FD07C67C634",
+        "deviceName" : "iPhone 17",
+        "exportedFileName" : "B1F1FDE9-4D3B-4F3B-879E-90B8A788D29F.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Live-AI-confirmed-home-suggestion_0_BA876D4B-23A1-4093-A092-6D50429BA54C.png",
+        "timestamp" : 1793969436.076
+      },
+      {
+        "configurationName" : "Test Scheme Action",
+        "deviceId" : "D411837A-75F5-4BE8-975C-1FD07C67C634",
+        "deviceName" : "iPhone 17",
+        "exportedFileName" : "A9C27E45-B222-46ED-BD00-8DEB2F174904.png",
+        "isAssociatedWithFailure" : false,
+        "suggestedHumanReadableName" : "Live-AI-generated-summary-and-focus_0_D9CE1909-5175-4F6C-BAA2-32B1FF4E5F4C.png",
+        "timestamp" : 1793969432.953
+      }
+    ],
+    "testIdentifier" : "SuggestedPracticeLiveUITests/testCompleteGenerateConfirmAndShowSuggestedPracticeWithLiveAI()",
+    "testIdentifierURL" : "test://com.apple.xcode/foxgita/foxgitaUITests/SuggestedPracticeLiveUITests/testCompleteGenerateConfirmAndShowSuggestedPracticeWithLiveAI"
+  }
+]

@@ -166,6 +166,8 @@ struct PracticeDetailView: View {
     @State private var dictationInsertionSelection: TextSelection?
     @State private var dictationInsertionText = ""
     @State private var noteImages: [NoteImage] = []
+    @State private var showNextFocus = false
+    @State private var finishAfterNextFocus = false
     @State private var selectedNotePhotos: [PhotosPickerItem] = []
     @State private var noteAttachmentsExpanded = false
     @State private var noteCameraPresented = false
@@ -335,7 +337,21 @@ struct PracticeDetailView: View {
         }
     }
 
-    var body: some View { presentedContent }
+    var body: some View {
+        presentedContent
+            .sheet(isPresented: $showNextFocus, onDismiss: {
+                if finishAfterNextFocus {
+                    finishAfterNextFocus = false
+                    if !openedFromRecord { router.returnPracticeToToday = true }
+                    router.dismissPracticeDetail(fromRecord: openedFromRecord)
+                }
+            }) {
+                if let item {
+                    NextFocusEditor(profileID: item.profileId, sourceID: item.id,
+                                    completed: finishAfterNextFocus) { showNextFocus = false }
+                }
+            }
+    }
 
     private var screen: some View {
         ZStack {
@@ -638,11 +654,11 @@ struct PracticeDetailView: View {
                     .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
                     .disabled(draftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 } else {
-                    Button("完成") { complete(item) }
+                    Button("保存") { saveCurrentPractice(item) }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(GitaTheme.brand500)
                         .frame(minWidth: 44, minHeight: 44, alignment: .trailing)
-                        .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
+                        .disabled(isCompleting || attachmentImportInProgress)
                 }
             }
             .frame(minHeight: 56)
@@ -731,18 +747,25 @@ struct PracticeDetailView: View {
                     }
                     noteCard(item)
 
+                    if router.completedPracticeItemIds.contains(item.id) || mode == .historical {
+                        Button("本次总结与下次重点") { showNextFocus = true }
+                            .font(GitaFont.callout())
+                            .accessibilityIdentifier("practice.next-focus")
+                    }
+
                     Button { complete(item) } label: {
                         Text("完成本次练习")
                             .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(GitaTheme.brandOn)
+                            .foregroundStyle(canCompletePractice ? GitaTheme.brandOn : GitaTheme.textSecondary)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 13)
-                            .background(GitaTheme.brand500)
+                            .background(canCompletePractice ? GitaTheme.brand500 : GitaTheme.borderSubtle)
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 4)
-                    .disabled(!PracticeDetailState.shouldAllowComplete(mode: mode))
+                    .disabled(!canCompletePractice || isCompleting)
+                    .accessibilityIdentifier("practice.finish")
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 32)
@@ -1672,7 +1695,8 @@ struct PracticeDetailView: View {
         case .running: return String(localized: "暂停")
         case .completed: return String(localized: "再来一次")
         case .paused: return String(localized: "继续")
-        case .inactive: return practiceTimer.isRunning ? String(localized: "暂停") : String(localized: "开始")
+        case .inactive: return practiceTimer.isRunning ? String(localized: "暂停")
+            : (practiceTimer.elapsedSec > 0 ? String(localized: "继续") : String(localized: "开始"))
         }
     }
 
@@ -2201,9 +2225,23 @@ struct PracticeDetailView: View {
         practiceTimer.restore(elapsedSec: storedDurationSeconds, startedAt: nil)
     }
 
+    private var canCompletePractice: Bool {
+        PracticeDetailState.shouldAllowComplete(mode: mode)
+            && (practiceTimer.startedAt != nil || practiceTimer.elapsedSec > 0
+                || storedDurationSeconds > 0 || recorder.isRecording || video.isPresenting)
+    }
+
+    private func saveCurrentPractice(_ item: PracticeItem) {
+        guard !attachmentImportInProgress else { show("请等待文件导入完成"); return }
+        noteFocused = false
+        if practiceTimer.isRunning { practiceTimer.refresh() }
+        guard flushNote(), persistPending(item: item), saveItemIfNeeded(item) else { return }
+        show("已保存")
+    }
+
     private func complete(_ item: PracticeItem) {
         guard !attachmentImportInProgress else { show("请等待文件导入完成"); return }
-        guard PracticeDetailState.shouldAllowComplete(mode: mode) else { return }
+        guard canCompletePractice else { return }
         guard !isCompleting else { return }
         noteFocused = false
         isCompleting = true
@@ -2226,9 +2264,19 @@ struct PracticeDetailView: View {
             || !noteImages.isEmpty
             || !item.recordings.filter({ $0.deletedAt == nil }).isEmpty
         if hadContent {
+            do {
+                try store.completeSuggestedPractice(item: item)
+            } catch {
+                isCompleting = false
+                show("练习记录已保存，完成状态尚未更新：\(error.localizedDescription)")
+                return
+            }
             Haptics.success()
             router.lastCompletedPracticeItemId = item.id
             router.markPracticeItemCompleted(item.id)
+            finishAfterNextFocus = true
+            showNextFocus = true
+            return
         } else if router.practiceToast == nil {
             router.practiceToast = String(localized: "这次没有留下记录")
         }

@@ -463,6 +463,7 @@ struct DaySessionCard: View {
     let minutesText: String
     var projectCapsule: String? = nil
     var sourceLabel: String? = nil
+    var subtitleLineLimit: Int? = 2
     var onProjectCapsule: (() -> Void)? = nil
     var action: (() -> Void)?
 
@@ -478,6 +479,7 @@ struct DaySessionCard: View {
         projectCapsule: String? = nil,
         sourceLabel: String? = nil,
         onProjectCapsule: (() -> Void)? = nil,
+        subtitleLineLimit: Int? = 2,
         action: (() -> Void)? = nil
     ) {
         self.title = title
@@ -490,6 +492,7 @@ struct DaySessionCard: View {
         self.minutesText = minutesText ?? String(localized: "已练 \(minutes) 分钟")
         self.projectCapsule = projectCapsule
         self.sourceLabel = sourceLabel
+        self.subtitleLineLimit = subtitleLineLimit
         self.onProjectCapsule = onProjectCapsule
         self.action = action
     }
@@ -535,7 +538,7 @@ struct DaySessionCard: View {
                     Text(subtitle)
                         .font(GitaFont.caption())
                         .foregroundStyle(GitaTheme.textSecondary)
-                        .lineLimit(2)
+                        .lineLimit(subtitleLineLimit)
                 }
             }
             Spacer(minLength: 0)

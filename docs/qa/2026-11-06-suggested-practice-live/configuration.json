@@ -1,0 +1,7 @@
+{
+  "credentialLookupStatus": 0,
+  "credentialPresent": true,
+  "model": "qwen3.8-max",
+  "networkRequestMade": false,
+  "secureEndpointConfigured": true
+}
