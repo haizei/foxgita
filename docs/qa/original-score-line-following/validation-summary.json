@@ -1,0 +1,88 @@
+{
+  "date": "2026-11-07",
+  "featureCommit": "5dc328f",
+  "branch": "codex/follow-score-practice",
+  "scope": "Incremental implementation validated against the existing working tree; prior uncommitted FollowScore foundation retained.",
+  "newTests": {
+    "core": 11,
+    "practiceStoreIntegration": 2,
+    "nativeUI": 2,
+    "allPassed": true
+  },
+  "swiftPackage": {
+    "total": 137,
+    "passed": 137
+  },
+  "nativeUnitBatch": {
+    "totalTestCount": 947,
+    "passedTests": 904,
+    "failedTests": 1,
+    "skippedTests": 42
+  },
+  "nativeUnitBatchFailures": [
+    {
+      "failureText": "Test crashed with signal trap.",
+      "targetName": "foxgitaTests",
+      "testIdentifier": 449,
+      "testIdentifierString": "PracticeStoreInvocationTests/savePracticeItemMarksInvocationCompleteOnce()",
+      "testIdentifierURL": "test://com.apple.xcode/foxgita/foxgitaTests/PracticeStoreInvocationTests/savePracticeItemMarksInvocationCompleteOnce()",
+      "testName": "savePracticeItemMarksInvocationCompleteOnce()"
+    }
+  ],
+  "nativeUnitFailureIsolatedRecheck": {
+    "total": 1,
+    "passed": 1
+  },
+  "nativeUI": {
+    "total": 70,
+    "firstPassPassed": 53,
+    "skipped": 9,
+    "parallelFailures": 8,
+    "isolatedRecheckPassed": 8
+  },
+  "remainingUIBatch": {
+    "totalTestCount": 61,
+    "passedTests": 44,
+    "failedTests": 8,
+    "skippedTests": 9
+  },
+  "remainingUIFailures": [
+    {
+      "testName": "testCompleteConfirmAndResumeSuggestedPractice()",
+      "failureText": "XCTAssertTrue failed"
+    },
+    {
+      "testName": "testDarkCombinedScorePausesInBackgroundAndRequiresManualResume()",
+      "failureText": "XCTAssertTrue failed"
+    },
+    {
+      "testName": "testInsufficientInputGeneratesBeforeConfirmation()",
+      "failureText": "Failed to synthesize event: Neither element nor any descendant has keyboard focus. Event dispatch snapshot: TextField, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\nElement debug description:\nAttributes: TextField, 0x116da7200, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\nElement subtree:\n →TextField, 0x116da7200, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\nPath to element:\n →Application, 0x117c0aa80, pid: 39910, label: 'Gita'\n  ↳Window (Main), 0x117c0abc0, {{0.0, 0.0}, {402.0, 874.0}}\n   ↳Other, 0x116da6080, {{0.0, 0.0}, {402.0, 874.0}}\n    ↳Other, 0x116da6300, {{8.0, 353.3}, {386.0, 512.7}}\n     ↳Other, 0x116da6440, {{8.0, 353.3}, {386.0, 512.7}}\n      ↳Other, 0x116da6580, {{8.0, 353.3}, {386.0, 512.7}}\n       ↳Other, 0x116da66c0, {{8.0, 353.3}, {386.0, 512.7}}\n        ↳Other, 0x116da6800, {{8.0, 353.3}, {386.0, 512.7}}\n         ↳ScrollView, 0x116da6bc0, {{8.0, 407.0}, {386.0, 351.4}}\n          ↳Other, 0x116da6d00, {{8.0, 407.0}, {386.0, 289.0}}\n           ↳TextField, 0x116da7200, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\nQuery chain:\n →Find: Target Application 'com.haizei.foxgita'\n  Output: {\n    Application, 0x11776dcc0, pid: 39910, label: 'Gita'\n  }\n  ↪︎Find: Descendants matching type TextField\n    Output: {\n      TextField, 0x11776b480, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\n    }\n    ↪︎Find: Elements matching predicate '\"practice.create-name\" IN identifiers'\n      Output: {\n        TextField, 0x11771f480, {{40.6, 488.3}, {204.5, 20.2}}, identifier: 'practice.create-name', placeholderValue: '练习名称', value: 练习名称\n      }\n"
+    },
+    {
+      "testName": "testLiveSignalShowsRealCentsAndSixTargets()",
+      "failureText": "XCTAssertFalse failed"
+    },
+    {
+      "testName": "testRecommendSheetCanBeOpenedAndDismissed()",
+      "failureText": "Failed to get background assertion for target app with pid 50085: Timed out while acquiring background assertion."
+    },
+    {
+      "testName": "testRecommendSheetShowsImageGenerateEntry()",
+      "failureText": "XCTAssertTrue failed"
+    },
+    {
+      "testName": "testStandaloneMetronomeCanPlayConfigureAndReturn()",
+      "failureText": "XCTAssertTrue failed"
+    },
+    {
+      "testName": "testToolsTabShowsGroupedCatalog()",
+      "failureText": "XCTAssertTrue failed"
+    }
+  ],
+  "reviews": {
+    "standardsUnresolved": 0,
+    "specUnresolved": 0
+  },
+  "wholeBatchGreen": false
+}

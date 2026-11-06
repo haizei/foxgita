@@ -24,7 +24,7 @@
 | 原生上传到跟弹端到端首次重跑 | 1 / 1 通过：上传、框行、保存、准备取消不计时、播放、关闭、重开 |
 | 最终原生针对性验收 | 18 / 18 单元用例、2 / 2 UI 用例通过；含连续两行、完整 3 秒准备、创建页直接上传与 5 个已有视频生成用例 |
 | 完整原生单元套件（正确签名） | 947 项：904 通过、42 跳过、1 个已有用例进程退出；该用例隔离复核通过，批跑结果仍不标记为全绿 |
-| 完整原生 UI 回归 | 方案 5 项、节拍器 2 项、原谱分组已通过；剩余分组两路执行中，最终结果待补 |
+| 完整原生 UI 回归（分组执行） | 70 项：53 首轮通过、9 跳过、8 并行失败；8 项随后串行复核全部通过，批跑仍不标记为全绿 |
 | SwiftLint | 环境未安装；Swift 编译检查已执行 |
 
 TDD 记录：模型、准备计时、草稿入库、同次修订精确恢复先出现编译失败；超大输入校验先出现预期失败，再实现并验证通过。测试使用公开模型接口与真实临时目录。
@@ -51,6 +51,16 @@ TDD 记录：模型、准备计时、草稿入库、同次修订精确恢复先�
 
 正确签名的完整单元结果：`/private/tmp/gita-original-score-full-unit-signed.xcresult`，统计 947 项。唯一失败为 `PracticeStoreInvocationTests.savePracticeItemMarksInvocationCompleteOnce()`：`Test crashed with signal trap`；其测试文件及 AI 调用记录模块本次未修改。随后同一签名版本隔离运行该用例，通过（`/private/tmp/gita-original-score-invocation-isolated.xcresult`）。保留批跑失败事实，不用单独重跑覆盖原结果。
 
-完整 UI 回归分组续跑：`/private/tmp/gita-original-score-remaining-ui.xcresult`；已通过的方案、节拍器和原谱分组不重复执行。最初串行命令在分组切换后主动结束，以降低等待时长。
+完整 UI 回归分组续跑已结束：`/private/tmp/gita-original-score-remaining-ui.xcresult`，61 项中 44 通过、9 跳过、8 失败。此前通过的方案 5 项、节拍器 2 项，加上最终原谱 UI 2 项，合计覆盖 70 项。已通过的分组不重复执行；最初串行命令在分组切换后主动结束，以降低等待时长。
+
+并行批跑中，旧暗色双谱用例失败于“跟谱设置”导航栏断言（尚未进入后台暂停步骤），旧建议练习名称输入失败于键盘焦点。两者在同一签名版本上串行复核均通过：`/private/tmp/gita-original-score-entry-regression-recheck.xcresult`（2 / 2），无需为这些失败修改产品代码。批跑失败与复核结果分别保留。
+
+其余 4 条并行失败（独立节拍器、工具目录返回、建议练习续练、调音器实时信号）串行复核也全部通过：`/private/tmp/gita-original-score-legacy-regression-recheck.xcresult`（4 / 4）。原有练习详情持续播放测试通过，含固定 600 秒观察，总执行约 643 秒。没有为这些复核修改工具、调音器或 AI 建议模块。
+
+收尾阶段新增的 2 条创建页失败中，一条发生在测试 App 启动阶段（系统后台断言超时），另一条是等待创建页标题超时。独立复核均通过：`/private/tmp/gita-original-score-create-sheet-recheck.xcresult`（2 / 2）。因此并行失败的 8 条 UI 用例均有通过的串行复核记录，但不能据此宣称完整批跑已经通过。
+
+[结构化验证摘要](original-score-line-following/validation-summary.json) 保留计数、复核结果与本次提交范围。跳过项主要需要外部谱页、服务或设备条件；本次未伪造这些条件。
 
 本轮工作区原有跟谱、节拍器、AI 等未提交改动保留；提交范围以本次原谱实现和必要接入/测试为准。
+
+功能提交为 `5dc328f`（`codex/follow-score-practice`）。这是基于现有工作区的增量提交：先前未提交的跟谱基础文件仍保留在工作区，构建与测试使用完整工作区；本记录不声称已验证只检出该提交即可独立构建。
