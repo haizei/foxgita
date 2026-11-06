@@ -12,7 +12,7 @@ private enum GuitarTool: String, CaseIterable, Identifiable {
         case .tuner: String(localized: "调音器")
         case .alternateTuning: String(localized: "交替调音")
         case .chromaticTuner: String(localized: "半音调音器")
-        case .playAlong: String(localized: "一起演奏")
+        case .playAlong: String(localized: "跟谱练习")
         case .playChords: String(localized: "弹奏和弦")
         case .chordMemory: String(localized: "和弦记忆")
         }
@@ -25,7 +25,7 @@ private enum GuitarTool: String, CaseIterable, Identifiable {
         case .tuner: String(localized: "调准六根弦，开始今天的练习")
         case .alternateTuning: String(localized: "探索更多调弦方式")
         case .chromaticTuner: String(localized: "准确识别每一个音")
-        case .playAlong: String(localized: "跟随伴奏，找到感觉")
+        case .playAlong: String(localized: "看着曲谱，跟着节奏练")
         case .playChords: String(localized: "听一听和弦的声音")
         case .chordMemory: String(localized: "把常用和弦练熟")
         }
@@ -82,6 +82,7 @@ struct ToolsView: View {
             .navigationDestination(for: GuitarTool.self) { tool in
                 if tool == .metronome { ToolMetronomeView() }
                 if tool == .tuner { TunerView() }
+                if tool == .playAlong { ScorePracticeLibraryView(entry: .tool) }
             }
             .alert(unavailableTool?.title ?? "", isPresented: Binding(
                 get: { unavailableTool != nil },
@@ -124,7 +125,7 @@ struct ToolsView: View {
                 .foregroundStyle(GitaTheme.textPrimary)
                 .accessibilityAddTraits(.isHeader)
             ForEach(tools) { tool in
-                if tool == .metronome || tool == .tuner {
+                if tool == .metronome || tool == .tuner || tool == .playAlong {
                     NavigationLink(value: tool) { ToolRow(tool: tool) }
                         .buttonStyle(.plain)
                         .accessibilityIdentifier("tools.item.\(tool.id)")

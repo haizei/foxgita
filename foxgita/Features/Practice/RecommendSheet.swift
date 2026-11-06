@@ -12,6 +12,9 @@ struct RecommendSheet: View {
     @State private var duration = 20
     @State private var selectedProjectId: UUID?
     @State private var showProjectSelection = false
+    @State private var showScoreEntry = false
+    @State private var scoreMode = false
+    @State private var scoreMethod: ScorePlayAlongMethod = .structured
     @State private var showPhotoFlow = false
     @State private var isCameraPresented = false
     @State private var pickerItems: [PhotosPickerItem] = []
@@ -53,6 +56,19 @@ struct RecommendSheet: View {
 
             ScrollView {
                 VStack(spacing: 12) {
+                    Picker("练习方式", selection: $scoreMode) {
+                        Text("自由练习").tag(false)
+                        Text("跟谱练习").tag(true)
+                    }.pickerStyle(.segmented).accessibilityIdentifier("practice.create-mode")
+                    if scoreMode {
+                        Text("跟弹方式").font(GitaFont.callout(.bold))
+                        Picker("跟弹方式", selection: $scoreMethod) {
+                            ForEach(ScorePlayAlongMethod.allCases) { Text($0.rawValue).tag($0) }
+                        }.pickerStyle(.segmented).accessibilityIdentifier("practice.score-method")
+                        Text(scoreMethod == .original ? "上传自己的谱子，标记谱行后跟线弹奏。" : "选择曲谱，跟着节奏练。")
+                            .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
+                    }
+                    if !scoreMode {
                     HStack(spacing: 8) {
                         TextField("练习名称", text: $name)
                             .font(.system(size: 16, weight: .semibold))
@@ -110,6 +126,7 @@ struct RecommendSheet: View {
                     }
                     .padding(.top, 8)
 
+                    }
                     if let toast {
                         Text(toast)
                             .font(.system(size: 13))
@@ -121,8 +138,10 @@ struct RecommendSheet: View {
                 .padding(.top, 22)
             }
 
-            Button(action: createManualPractice) {
-                Text("确认并创建练习")
+            Button(action: {
+                if scoreMode { showScoreEntry = true } else { createManualPractice() }
+            }) {
+                Text(scoreMode ? (scoreMethod == .original ? "上传谱子" : "选择曲谱") : "确认并创建练习")
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(GitaTheme.brandOn)
                     .frame(maxWidth: .infinity)
@@ -137,6 +156,12 @@ struct RecommendSheet: View {
             .padding(.bottom, 22)
         }
         .background(GitaTheme.bgSurface)
+        .fullScreenCover(isPresented: $showScoreEntry) {
+            NavigationStack {
+                ScorePracticeLibraryView(entry: .newPractice, automaticallyImport: scoreMethod == .original, method: scoreMethod)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("关闭") { showScoreEntry = false; dismiss() } } }
+            }
+        }
         .sheet(isPresented: $showProjectSelection) {
             PracticeProjectSelectionView(selectedProjectId: $selectedProjectId)
         }

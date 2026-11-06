@@ -168,6 +168,10 @@ struct PracticeDetailView: View {
     @State private var noteImages: [NoteImage] = []
     @State private var showNextFocus = false
     @State private var finishAfterNextFocus = false
+    @State private var showScoreEntry = false
+    @State private var originalScoreSettings = OriginalScoreSettings()
+    @State private var scoreEntryMethod: ScorePlayAlongMethod = .structured
+    @State private var scoreMaterialRefresh = UUID()
     @State private var selectedNotePhotos: [PhotosPickerItem] = []
     @State private var noteAttachmentsExpanded = false
     @State private var noteCameraPresented = false
@@ -351,6 +355,18 @@ struct PracticeDetailView: View {
                                     completed: finishAfterNextFocus) { showNextFocus = false }
                 }
             }
+            .fullScreenCover(isPresented: $showScoreEntry,onDismiss: {
+            if let item {
+                storedDurationSeconds = item.durationSeconds
+                practiceTimer.restore(elapsedSec: item.durationSeconds,startedAt: nil)
+                scoreMaterialRefresh = UUID()
+            }
+        }) {
+            NavigationStack {
+                ScorePracticeLibraryView(entry: .existing(itemId), settings: originalScoreSettings, method: scoreEntryMethod)
+                    .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("关闭") { showScoreEntry = false } } }
+            }
+        }
     }
 
     private var screen: some View {
@@ -739,6 +755,16 @@ struct PracticeDetailView: View {
                         }
                     )
                     timerCard
+                    OriginalScorePracticeMaterialView(item: item, refresh: scoreMaterialRefresh) {
+                        originalScoreSettings = OriginalScoreSettings(engine: metronome)
+                        if let library = try? OriginalScoreLibraryProvider.library(profileID: item.profileId),
+                           library.records.contains(where: { $0.practiceItemID == item.id }) {
+                            scoreEntryMethod = .original
+                        } else { scoreEntryMethod = .structured }
+                        handlePlaybackBoundary(reason: "follow_score",itemTitle: item.title)
+                        guard saveItemIfNeeded(item) else { return }
+                        showScoreEntry = true
+                    }
                     if tempoController.isRampActive || tempoController.rampState == .interrupted {
                         rampStatusBanner
                     }
