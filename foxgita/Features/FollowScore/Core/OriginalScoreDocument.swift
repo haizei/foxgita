@@ -6,10 +6,10 @@ nonisolated enum OriginalScoreError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .invalidDocument: "请检查曲名、谱页、拍号与速度（40–200 BPM）。"
-        case .invalidRow: "请检查谱行区域和总拍数，拍数最少 0.5 拍、按半拍递增。"
+        case .invalidRow: "未能读清谱行与拍数，请换用清晰谱页后重试。"
         case .invalidRange: "练习范围已失效，请重新选择谱行。"
         case .missingVersion: "找不到对应原谱版本或谱页。"
-        case .conflict: "原谱已有新版本，请重新打开后修订。标记草稿已保留。"
+        case .conflict: "原谱已有新版本，请重新打开后读取。原文件已保留。"
         case .unsupportedVersion: "原谱库版本不兼容，请升级 App。原文件已保留。"
         }
     }
@@ -58,6 +58,7 @@ nonisolated struct OriginalScoreDocument: Codable, Identifiable, Equatable, Send
     var rows: [OriginalScoreRow] = []
     var createdAt = Date()
     var manuallyOrdered: Bool? = nil
+    var readingNote: String? = nil
 
     var fullRange: OriginalScoreRange? {
         guard let first = rows.first, let last = rows.last else { return nil }

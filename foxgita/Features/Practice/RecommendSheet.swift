@@ -65,7 +65,7 @@ struct RecommendSheet: View {
                         Picker("跟弹方式", selection: $scoreMethod) {
                             ForEach(ScorePlayAlongMethod.allCases) { Text($0.rawValue).tag($0) }
                         }.pickerStyle(.segmented).accessibilityIdentifier("practice.score-method")
-                        Text(scoreMethod == .original ? "上传自己的谱子，标记谱行后跟线弹奏。" : "选择曲谱，跟着节奏练。")
+                        Text(scoreMethod == .original ? "上传自己的谱子，自动读取后直接跟练。" : "选择曲谱，跟着节奏练。")
                             .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
                     }
                     if !scoreMode {

@@ -89,7 +89,7 @@ struct OriginalScorePlayerView: View {
                 }.accessibilityIdentifier("original.player-close")
             }
             ToolbarItem(placement: .topBarTrailing) {
-                Button("修改标记") {
+                Button("重新读取") {
                     runtime?.pause()
                     guard runtime?.saveFailed != true else { return }
                     do { editing = try library.beginRevision(document) } catch { self.error = error.localizedDescription }
@@ -100,21 +100,21 @@ struct OriginalScorePlayerView: View {
         .onChange(of: scenePhase) { _, phase in if phase != .active { runtime?.pause() } }
         .onDisappear { runtime?.close() }
         .sheet(isPresented: $ranges) { rangeSheet }
-        .sheet(item: $editing, onDismiss: {
-            if let latest = library.documents.first(where: { $0.id == document.id }), latest.versionID != document.versionID {
-                runtime?.close(); document = latest; runtime = nil; load(rowStart: false)
-            }
-        }) { draft in
+        .sheet(item: $editing) { draft in
             NavigationStack {
-                OriginalScoreMarkingView(draft: draft, library: library, entry: entry,
-                                         settings: settings, sameSessionRevision: true)
+                OriginalScoreReadingView(draft: draft, library: library, entry: entry, settings: settings) { latest in
+                    runtime?.close(); document = latest; runtime = nil; load(); editing = nil
+                }
             }
-                .interactiveDismissDisabled()
         }
     }
 
     private func controls(_ runtime: OriginalScoreRuntime) -> some View {
         VStack(spacing: 10) {
+            if let note = document.readingNote {
+                Text(note).font(.caption2).foregroundStyle(GitaTheme.textSecondary)
+                    .accessibilityIdentifier("original.read-summary")
+            }
             HStack {
                 Text("原谱跟弹 · \(document.numerator)/\(document.denominator)").font(.caption)
                 Spacer()
@@ -122,7 +122,7 @@ struct OriginalScorePlayerView: View {
                     .font(.caption).monospacedDigit().accessibilityIdentifier("original.position")
             }
             Stepper(value: Binding(get: { runtime.run.bpm }, set: { runtime.setBPM($0) }), in: 40...200, step: 1) {
-                Text("\(MetronomeMeter.beatUnitName(document.denominator)) = \(Int(runtime.run.bpm)) BPM").font(.callout.bold())
+                Text("练习速度 · \(MetronomeMeter.beatUnitName(document.denominator)) = \(Int(runtime.run.bpm)) BPM").font(.callout.bold())
             }.accessibilityIdentifier("original.tempo")
             HStack(spacing: 10) {
                 Button {

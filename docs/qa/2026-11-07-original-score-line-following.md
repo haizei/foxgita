@@ -1,3 +1,5 @@
+> 2026-11-07 更新：用户已纠正为自动读取并直接跟练；手工标记流程不再作为当前入口。最新验收见 [原谱自动读取](2026-11-07-original-score-automatic-reading.md)。以下保留历史记录。
+
 # 原谱跟弹开发与验证记录
 
 日期：2026-11-07。需求依据：[开发规格 v1.0](../superpowers/specs/2026-11-06-original-score-line-following-spec.md)。

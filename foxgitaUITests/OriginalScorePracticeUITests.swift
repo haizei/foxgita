@@ -16,11 +16,14 @@ final class OriginalScorePracticeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["从相册选择"].exists)
     }
 
-    func testUploadMarkPrepareCancelPlayAndReopenMaterial() throws {
+    func testUploadAutomaticallyReadPrepareCancelPlayAndReopenMaterial() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-UITesting", "-ScoreRecoveryFixture", "-OriginalScoreFixture", "-AppleLanguages", "(zh-Hans)"]
         app.launchEnvironment["GITA_RECOVERY_RUN_ID"] = UUID().uuidString
+        if let path = ProcessInfo.processInfo.environment["GITA_ORIGINAL_SCORE_PAGE"] {
+            app.launchEnvironment["GITA_ORIGINAL_SCORE_PAGE"] = path
+        }
         app.launch()
         let tools = app.tabBars.buttons["工具"]
         XCTAssertTrue(tools.waitForExistence(timeout: 20)); tools.tap()
@@ -31,21 +34,11 @@ final class OriginalScorePracticeUITests: XCTestCase {
         XCTAssertTrue(original.waitForExistence(timeout: 10)); original.tap()
         app.buttons["original.upload"].tap()
         app.buttons["导入 PDF 或图片"].tap()
-        XCTAssertTrue(app.navigationBars["标记谱行"].waitForExistence(timeout: 10))
-        let canvas = app.descendants(matching: .any).matching(identifier: "original.mark-canvas").firstMatch
-        for _ in 0..<5 where !canvas.isHittable { app.swipeUp() }
-        XCTAssertTrue(canvas.exists)
-        let start = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.14))
-        let end = canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.25))
-        start.press(forDuration: 0.1, thenDragTo: end)
-        canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.08, dy: 0.32))
-            .press(forDuration: 0.1, thenDragTo: canvas.coordinate(withNormalizedOffset: CGVector(dx: 0.92, dy: 0.43)))
-        let publish = app.buttons["original.publish"]
-        for _ in 0..<8 where !publish.isHittable { app.swipeUp() }
-        XCTAssertTrue(app.textFields["original.beats.1"].exists, "新增第二行不能覆盖第一行")
-        XCTAssertTrue(publish.isEnabled, app.debugDescription); publish.tap()
         let prepare = app.buttons["original.prepare"]
-        XCTAssertTrue(prepare.waitForExistence(timeout: 10))
+        XCTAssertTrue(prepare.waitForExistence(timeout: 30), app.debugDescription)
+        XCTAssertFalse(app.navigationBars["标记谱行"].exists)
+        XCTAssertFalse(app.buttons["original.publish"].exists)
+        XCTAssertTrue(app.staticTexts["original.read-summary"].label.contains("4 行、16 小节"))
         XCTAssertTrue(app.staticTexts["待机"].exists)
         XCTAssertEqual(app.switches["original.loop"].value as? String, "0")
         prepare.tap()

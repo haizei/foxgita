@@ -49,7 +49,7 @@ struct OriginalScoreLibraryView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("我的曲谱").font(GitaFont.largeTitle())
-                Text("上传自己的谱子，标记谱行，跟着线弹奏。")
+                Text("上传自己的谱子，自动读取后直接跟练。")
                     .font(GitaFont.callout()).foregroundStyle(GitaTheme.textSecondary)
                 Menu {
                     Button("导入 PDF 或图片") { selectFiles() }
@@ -59,16 +59,16 @@ struct OriginalScoreLibraryView: View {
                         .frame(maxWidth: .infinity).padding(14)
                         .foregroundStyle(.white).background(GitaTheme.brand500, in: RoundedRectangle(cornerRadius: 12))
                 }.accessibilityIdentifier("original.upload").disabled(loading)
-                Text("最多 20 页、30 MB · 无需识谱").font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
+                Text("最多 20 页、30 MB · 自动读取，无需手工标记").font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
                 if loading { ProgressView("正在读取谱页…") }
                 if let error { Text(error).foregroundStyle(GitaTheme.statusError).accessibilityIdentifier("original.error") }
                 TextField("搜索曲名", text: $search).textFieldStyle(.roundedBorder)
                 if let library {
                     if !library.drafts.isEmpty {
-                        Text("标记草稿").font(GitaFont.callout(.bold))
+                        Text("待读取的曲谱").font(GitaFont.callout(.bold))
                         ForEach(library.drafts) { item in
                             HStack {
-                                Button { draft = item } label: { Label(item.document.title, systemImage: "pencil.and.outline") }
+                                Button { draft = item } label: { Label(item.document.title, systemImage: "doc.viewfinder") }
                                 Spacer()
                                 Button("删除", role: .destructive) { attempt { try library.discardDraft(item.id) } }
                             }
@@ -90,7 +90,7 @@ struct OriginalScoreLibraryView: View {
                             }.padding(14).background(GitaTheme.bgSurface, in: RoundedRectangle(cornerRadius: 12))
                         }.buttonStyle(.plain).accessibilityIdentifier("original.material.\(document.id.uuidString)")
                         .contextMenu {
-                            Button("修订标记") { attempt { draft = try library.beginRevision(document) } }
+                            Button("重新读取") { attempt { draft = try library.beginRevision(document) } }
                             Button("从我的曲谱删除", role: .destructive) { attempt { try library.hide(document.id) } }
                         }
                     }
@@ -145,8 +145,8 @@ struct OriginalScoreLibraryView: View {
         .sheet(item: $draft) { item in
             if let library {
                 NavigationStack {
-                    OriginalScoreMarkingView(draft: item, library: library, entry: entry, settings: settings)
-                }.interactiveDismissDisabled()
+                    OriginalScoreReadingView(draft: item, library: library, entry: entry, settings: settings)
+                }
             }
         }
         .onDisappear { generation = UUID(); loading = false }
@@ -189,7 +189,12 @@ struct OriginalScoreLibraryView: View {
     private func selectFiles() {
         #if DEBUG && targetEnvironment(simulator)
         if ProcessInfo.processInfo.arguments.contains("-OriginalScoreFixture") {
-            attempt { try importPages(ScoreImportSelection.images([OriginalScoreUITestPage.data])) }
+            attempt {
+                let page = try ProcessInfo.processInfo.environment["GITA_ORIGINAL_SCORE_PAGE"].map {
+                    try Data(contentsOf: URL(fileURLWithPath: $0))
+                } ?? OriginalScoreUITestPage.data
+                try importPages(ScoreImportSelection.images([page]))
+            }
             return
         }
         #endif
