@@ -5,6 +5,11 @@ struct AITransportResult: Equatable, Sendable {
     var formatRetryUsed: Bool
 }
 
+nonisolated struct AICompletionOptions: Equatable, Sendable {
+    var enableThinking: Bool? = nil
+    var maxCompletionTokens: Int? = nil
+}
+
 struct AITransport: Sendable {
     private let session: URLSession
 
@@ -51,7 +56,8 @@ struct AITransport: Sendable {
         imageJPEGData: [Data],
         includeResponseFormat: Bool,
         allowsFormatRetry: Bool,
-        timeout: TimeInterval?
+        timeout: TimeInterval?,
+        options: AICompletionOptions? = nil
     ) async throws -> AITransportResult {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -66,7 +72,8 @@ struct AITransport: Sendable {
                 systemPrompt: systemPrompt,
                 userText: userText,
                 imageJPEGData: imageJPEGData,
-                includeResponseFormat: includeResponseFormat
+                includeResponseFormat: includeResponseFormat,
+                options: options
             )
         } catch {
             throw VisionPracticeError.transport
@@ -101,7 +108,8 @@ struct AITransport: Sendable {
                     imageJPEGData: imageJPEGData,
                     includeResponseFormat: false,
                     allowsFormatRetry: false,
-                    timeout: timeout
+                    timeout: timeout,
+                    options: options
                 )
                 return AITransportResult(content: nested.content, formatRetryUsed: true)
             }
@@ -134,12 +142,13 @@ struct AITransport: Sendable {
         throw VisionPracticeError.transport
     }
 
-    private static func buildBody(
+    static func buildBody(
         model: String,
         systemPrompt: String,
         userText: String,
         imageJPEGData: [Data],
-        includeResponseFormat: Bool
+        includeResponseFormat: Bool,
+        options: AICompletionOptions? = nil
     ) throws -> Data {
         var userContent: [[String: Any]] = [
             ["type": "text", "text": userText]
@@ -162,6 +171,8 @@ struct AITransport: Sendable {
         if includeResponseFormat {
             body["response_format"] = ["type": "json_object"]
         }
+        if let thinking = options?.enableThinking { body["enable_thinking"] = thinking }
+        if let limit = options?.maxCompletionTokens { body["max_completion_tokens"] = limit }
         return try JSONSerialization.data(withJSONObject: body)
     }
 }

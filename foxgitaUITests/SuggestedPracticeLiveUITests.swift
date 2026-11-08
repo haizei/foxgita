@@ -10,8 +10,10 @@ final class SuggestedPracticeLiveUITests: XCTestCase {
         }
         continueAfterFailure = false
         let app = XCUIApplication()
+        let timingRunID = UUID().uuidString
+        app.launchEnvironment["GITA_NEXT_FOCUS_TIMING_RUN_ID"] = timingRunID
         // Practice facts are isolated, while the configured endpoint/model/Keychain remain available.
-        app.launchArguments = ["-UITesting", "-gita.nextFocus.autoGenerate", "YES", "-AppleLanguages", "(zh-Hans)"]
+        app.launchArguments = ["-UITesting", "-NextFocusPageTiming", "-gita.nextFocus.autoGenerate", "YES", "-AppleLanguages", "(zh-Hans)"]
         app.launch()
         let create = app.buttons["practice.create-button"]
         XCTAssertTrue(create.waitForExistence(timeout: 15))
@@ -35,6 +37,7 @@ final class SuggestedPracticeLiveUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["本次练习完成"].waitForExistence(timeout: 10))
         // This badge requires a parsed generated result; manual fallback cannot satisfy the assertion.
         XCTAssertTrue(app.staticTexts["AI 建议"].waitForExistence(timeout: 150), app.debugDescription)
+        let generationSeconds = Date().timeIntervalSince(started)
         let input = app.textViews["next-focus.input"]
         let focus = (input.value as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         XCTAssertFalse(focus.isEmpty)
@@ -44,7 +47,6 @@ final class SuggestedPracticeLiveUITests: XCTestCase {
         XCTAssertTrue(save.isEnabled)
         XCTAssertFalse(app.buttons["suggested-practice.card"].exists)
         attach(app, name: "Live-AI-generated-summary-and-focus")
-        let generationSeconds = Date().timeIntervalSince(started)
         save.tap()
         let card = app.buttons["suggested-practice.card"]
         XCTAssertTrue(card.waitForExistence(timeout: 15))
@@ -53,8 +55,11 @@ final class SuggestedPracticeLiveUITests: XCTestCase {
         attach(app, name: "Live-AI-confirmed-home-suggestion")
         let report: [String: Any] = [
             "liveRequestEnabled": true, "deterministicFixtureEnabled": false,
+            "timingRunID": timingRunID,
             "practice": "C to G chord transition", "focus": focus,
             "completionToGeneratedSeconds": generationSeconds,
+            "measurementEndsAt": "first XCTest observation of generated badge",
+            "includesXCTestOverhead": true, "excludesScreenshotTime": true,
             "explicitlyConfirmed": true, "homeShowsGeneratedFocus": true
         ]
         let data = try JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])

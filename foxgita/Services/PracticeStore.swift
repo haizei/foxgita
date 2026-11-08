@@ -1192,10 +1192,54 @@ final class PracticeStore {
         return id
     }
 
+    // MARK: - Score-guided practice
+
+    func scoreProfileID() throws -> UUID { try requireProfileUUID() }
+
     func scorePracticeItem(id: UUID) throws -> PracticeItem {
         let item = try requireLivePracticeItem(id: id)
         guard item.deletedAt == nil else { throw StoreError.notFound }
         return item
+    }
+
+    func editableScorePracticeItem(id: UUID,completedIDs: Set<UUID>,now: Date) throws -> PracticeItem {
+        let item = try scorePracticeItem(id: id)
+        guard item.practiceDayKey == PracticeDayKey.make(from: now,calendar: .current),!completedIDs.contains(id) else { throw StoreError.saveFailed }
+        return item
+    }
+
+    func openScorePractice(
+        score: ScoreDocument, preferredItemID: UUID?, completedIDs: Set<UUID>,
+        now: Date, calendar: Calendar, origin: String
+    ) throws -> PracticeItem {
+        let profileID = try requireProfileUUID()
+        let day = PracticeDayKey.make(from: now, calendar: calendar)
+        var preferred: PracticeItem?
+        if let preferredItemID {
+            preferred = try repository.practiceItem(id: preferredItemID, profileId: profileID)
+            if let preferred, preferred.deletedAt == nil, preferred.practiceDayKey == day,
+               !completedIDs.contains(preferred.id) { return preferred }
+        }
+        let originID = "score:\(origin)"
+        if let existing = try repository.practiceItems(profileId: profileID).first(where: {
+            $0.originId == originID && $0.practiceDayKey == day && $0.deletedAt == nil && !completedIDs.contains($0.id)
+        }) { return existing }
+        var projectID = preferred?.projectId
+        if let id = projectID, try repository.project(id: id, profileId: profileID)?.status != .active { projectID = nil }
+        return try createPracticeItem(input: .init(
+            title: preferred?.title ?? score.title, category: .song, source: .custom,
+            originId: originID, bpm: Int(score.tempo.bpm.rounded()),
+            timeSignature: "\(score.bars.first?.numerator ?? 4)/\(score.bars.first?.denominator ?? 4)",
+            steps: preferred?.steps ?? [], subtitle: score.title, targetMin: preferred?.targetMin ?? 10, projectId: projectID
+        ), now: now, calendar: calendar)
+    }
+
+    /// Replayed journal writes must never add the same run twice or regress a
+    /// newer save. The checkpoint's day is checked independently of wall-clock today.
+    func commitScoreElapsed(itemID: UUID, expectedDayKey: String, absoluteSeconds: Int, now: Date) throws {
+        let item = try scorePracticeItem(id: itemID)
+        guard item.practiceDayKey == expectedDayKey, absoluteSeconds >= 0 else { throw StoreError.saveFailed }
+        try savePracticeItem(id: itemID,durationSeconds: max(item.durationSeconds,absoluteSeconds),note: item.note,now: now)
     }
 
     private func requireProfileUUID() throws -> UUID {
@@ -1360,6 +1404,25 @@ enum NextFocusLaunchError: LocalizedError {
 }
 
 extension PracticeStore {
+    @discardableResult
+    func startNextFocusAfterCompletion(itemID: UUID, enabled: Bool, baseURL: String, model: String,
+                                      apiKey: String?, client: (any NextFocusGenerating)? = nil) throws -> Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        guard !NextFocusUITestScenario.isActive else { return false }
+        #endif
+        guard enabled, let apiKey, !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return false }
+        let context = try nextFocusContext(itemID: itemID)
+        let draft = try suggestions.prepare(context)
+        guard !draft.generated, draft.revision == 0, draft.generationError == nil,
+              suggestions.generationError(context) == nil,
+              !suggestions.isGenerating(context) else { return false }
+        try suggestions.generate(context, baseURL: baseURL, model: model, apiKey: apiKey,
+                                 client: client ?? nextFocusGenerator())
+        return true
+    }
+
     func nextFocusGenerator() -> NextFocusClient {
         if let invocationStore { return NextFocusClient(log: LiveAIInvocationLog(store: invocationStore)) }
         return NextFocusClient()

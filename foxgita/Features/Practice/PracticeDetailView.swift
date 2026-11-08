@@ -147,6 +147,7 @@ struct PracticeDetailView: View {
     private var projects: [Project]
     @AppStorage(LLMSettingsKey.baseURL) private var llmBaseURL = ""
     @AppStorage(LLMSettingsKey.model) private var llmModel = ""
+    @AppStorage("gita.nextFocus.autoGenerate") private var nextFocusAutoGenerate = true
     private let llmCredentials = LLMCredentialsStore()
 
     private enum ToolMode {
@@ -166,12 +167,13 @@ struct PracticeDetailView: View {
     @State private var dictationInsertionSelection: TextSelection?
     @State private var dictationInsertionText = ""
     @State private var noteImages: [NoteImage] = []
-    @State private var showNextFocus = false
-    @State private var finishAfterNextFocus = false
     @State private var showScoreEntry = false
     @State private var originalScoreSettings = OriginalScoreSettings()
     @State private var scoreEntryMethod: ScorePlayAlongMethod = .structured
     @State private var scoreMaterialRefresh = UUID()
+    @State private var showNextFocus = false
+    @State private var nextFocusStartupError: String?
+    @State private var finishAfterNextFocus = false
     @State private var selectedNotePhotos: [PhotosPickerItem] = []
     @State private var noteAttachmentsExpanded = false
     @State private var noteCameraPresented = false
@@ -179,7 +181,11 @@ struct PracticeDetailView: View {
     @State private var attachmentImportInProgress = false
     @State private var previewNoteImage: NoteImage?
     @State private var noteVoiceHeld = false
-    @State private var noteVoiceCancelArmed = false
+    @State private var noteVoiceGestureActive = false
+    @ScaledMetric(relativeTo: .title) private var practiceClockSize: CGFloat = 40
+    @State private var noteVoiceTarget = NoteDictationTarget.listening
+    @State private var dictationFrame = CGRect.zero
+    @State private var dictationInteractionID = UUID()
     @State private var storedNote = ""
     @State private var storedDurationSeconds = 0
     @State private var steps: [String] = []
@@ -352,7 +358,7 @@ struct PracticeDetailView: View {
             }) {
                 if let item {
                     NextFocusEditor(profileID: item.profileId, sourceID: item.id,
-                                    completed: finishAfterNextFocus) { showNextFocus = false }
+                                    completed: finishAfterNextFocus, startupError: nextFocusStartupError) { showNextFocus = false }
                 }
             }
             .fullScreenCover(isPresented: $showScoreEntry,onDismiss: {
@@ -378,6 +384,15 @@ struct PracticeDetailView: View {
                 Text("任务不存在").foregroundStyle(GitaTheme.textSecondary)
             }
 
+            if noteVoiceHeld || noteDictation.isFinishing {
+                NoteDictationOverlay(
+                    service: noteDictation, target: noteVoiceTarget,
+                    onCancel: { endNoteDictation(cancelled: true) },
+                    onTranscribe: { endNoteDictation(cancelled: false) }
+                )
+                .allowsHitTesting(noteDictation.isFinishing || UIAccessibility.isVoiceOverRunning)
+            }
+
             if let toast {
                 VStack {
                     Spacer()
@@ -385,9 +400,15 @@ struct PracticeDetailView: View {
                 }
             }
         }
+        .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { dictationFrame = $0 }
         .navigationBarHidden(true)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .tabBar)
+        .overlay {
+            if metronomeSheetAnchor == .speed {
+                MetronomeSpeedBackdrop { metronomeSheetAnchor = nil }
+            }
+        }
     }
 
     private var lifecycleContent: some View {
@@ -482,8 +503,7 @@ struct PracticeDetailView: View {
             guard !video.isPresenting, !isSourcePresented, !noteCameraPresented, !showFullscreenMetronome,
                   previewNoteImage == nil, analysisRoute == nil, diagnosisRoute == nil,
                   videoPlayURL == nil else { return }
-            noteVoiceHeld = false
-            noteDictation.cancel()
+            cancelNoteDictation()
             recorder.cancelStart()
             UIApplication.shared.isIdleTimerDisabled = false
             metronome.foregroundFeedbackEnabled = false
@@ -523,7 +543,14 @@ struct PracticeDetailView: View {
             metronome.applyVisualPreferences(value)
         }
         .onChange(of: scenePhase) { _, newPhase in
-            if newPhase != .active { _ = flushNote() }
+            if newPhase != .active {
+                _ = flushNote()
+                // A system alert can cancel the touch without delivering onEnded.
+                // Never continue capture after the user loses the hold gesture.
+                if noteVoiceHeld || newPhase == .background {
+                    cancelNoteDictation()
+                }
+            }
             metronome.foregroundFeedbackEnabled = newPhase == .active
             UIApplication.shared.isIdleTimerDisabled = PracticeDetailState.shouldPreventScreenSleep(
                 isMetronomePlaying: metronome.isPlaying,
@@ -532,6 +559,12 @@ struct PracticeDetailView: View {
             if newPhase == .active {
                 if practiceTimer.isRunning { practiceTimer.refresh() }
                 countdown.refresh()
+            }
+        }
+        .onChange(of: noteDictation.lastError) { _, error in
+            if noteVoiceHeld, let error {
+                cancelNoteDictation(resetGesture: false)
+                show(error)
             }
         }
         .onChange(of: noteText) { _, text in
@@ -728,6 +761,17 @@ struct PracticeDetailView: View {
                             .accessibilityLabel(Text(line))
                     }
 
+                    timerCard
+                    OriginalScorePracticeMaterialView(item: item, refresh: scoreMaterialRefresh) {
+                        originalScoreSettings = OriginalScoreSettings(engine: metronome)
+                        if let library = try? OriginalScoreLibraryProvider.library(profileID: item.profileId),
+                           library.records.contains(where: { $0.practiceItemID == item.id }) {
+                            scoreEntryMethod = .original
+                        } else { scoreEntryMethod = .structured }
+                        handlePlaybackBoundary(reason: "follow_score",itemTitle: item.title)
+                        guard saveItemIfNeeded(item) else { return }
+                        showScoreEntry = true
+                    }
                     MetronomeDisplayCard(
                         metronome: metronome,
                         onEntryTap: { anchor in
@@ -742,6 +786,7 @@ struct PracticeDetailView: View {
                             metronomeSheetAnchor = nil
                             showMetronomeSoundSheet = true
                         },
+                        onTapTempo: { _ = tempoController.registerTap() },
                         onAccentTap: { index in
                             guard PracticeDetailState.shouldAllowContentEditing(mode: mode) else { return }
                             metronome.cycleAccent(at: index)
@@ -754,16 +799,10 @@ struct PracticeDetailView: View {
                             show(String(localized: "变速训练中暂不可调整重音"))
                         }
                     )
-                    timerCard
-                    OriginalScorePracticeMaterialView(item: item, refresh: scoreMaterialRefresh) {
-                        originalScoreSettings = OriginalScoreSettings(engine: metronome)
-                        if let library = try? OriginalScoreLibraryProvider.library(profileID: item.profileId),
-                           library.records.contains(where: { $0.practiceItemID == item.id }) {
-                            scoreEntryMethod = .original
-                        } else { scoreEntryMethod = .structured }
-                        handlePlaybackBoundary(reason: "follow_score",itemTitle: item.title)
-                        guard saveItemIfNeeded(item) else { return }
-                        showScoreEntry = true
+                    if tempoController.tapReadyToApply, let estimate = tempoController.tapAttempt.estimatedBPM {
+                        Button("采用测速 \(estimate) BPM") { tempoController.applyMeasuredTempo(estimate) }
+                            .font(GitaFont.caption()).foregroundStyle(GitaTheme.brand500)
+                            .frame(minHeight: 44)
                     }
                     if tempoController.isRampActive || tempoController.rampState == .interrupted {
                         rampStatusBanner
@@ -911,7 +950,7 @@ struct PracticeDetailView: View {
         adaptiveLayout(spacing: 8).callAsFunction {
             VStack(alignment: .leading, spacing: 2) {
                 Text(countdown.isActive ? countdown.display : practiceTimer.display)
-                    .font(GitaFont.timer())
+                    .font(.system(size: practiceClockSize, weight: .semibold)).monospacedDigit()
                 Text(timerSupportingText)
                     .font(GitaFont.micro())
                     .foregroundStyle(GitaTheme.textSecondary)
@@ -920,6 +959,15 @@ struct PracticeDetailView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            Button(timerPrimaryTitle) { togglePlay() }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(GitaTheme.brandOn)
+                .padding(.horizontal, 16)
+                .frame(minHeight: 44)
+                .background(GitaTheme.brand500)
+                .clipShape(Capsule())
+                .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode))
+                .accessibilityIdentifier("practice.toggle-running")
             if PracticeDetailState.shouldAllowTimer(mode: mode) {
                 Button("倒计时") { openCountdownSettings() }
                     .font(GitaFont.caption(.semibold))
@@ -933,37 +981,13 @@ struct PracticeDetailView: View {
                     .accessibilityIdentifier("countdown.open-settings")
             }
 
-            Button(timerPrimaryTitle) { togglePlay() }
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(GitaTheme.brandOn)
-                .padding(.horizontal, 16)
-                .frame(minHeight: 44)
-                .background(GitaTheme.brand500)
-                .clipShape(Capsule())
-                .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode))
-                .accessibilityIdentifier("practice.toggle-running")
-            Button("TAP") {
-                _ = tempoController.registerTap()
-            }
-            .font(GitaFont.caption(.medium))
-            .foregroundStyle(GitaTheme.brand500)
-            .frame(minWidth: 44, minHeight: 44)
-            .overlay(Capsule().stroke(GitaTheme.brand500))
-            .disabled(!PracticeDetailState.shouldAllowTimer(mode: mode) || tempoController.isRampActive)
-        }
-        .overlay(alignment: .bottomLeading) {
-            if tempoController.tapReadyToApply, let estimate = tempoController.tapAttempt.estimatedBPM {
-                Button("采用测速 \(estimate) BPM") { tempoController.applyMeasuredTempo(estimate) }
-                    .font(GitaFont.caption()).foregroundStyle(GitaTheme.brand500)
-                    .offset(y: 24)
-            }
         }
         .contextMenu { Button("重置计时", action: resetTimerCard) }
         .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .frame(minHeight: 64)
+        .padding(.vertical, 12)
+        .frame(minHeight: 92)
         .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 20))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private var rampStatusBanner: some View {
@@ -1082,7 +1106,7 @@ struct PracticeDetailView: View {
                 "记下卡点或这次的进步…", text: $noteText, selection: $noteSelection, axis: .vertical
             )
             .font(.system(size: 14))
-            .lineLimit(3...6)
+            .lineLimit(2...6)
             .focused($noteFocused)
             .accessibilityIdentifier("practice.note-editor")
             .disabled(!PracticeDetailState.shouldAllowContentEditing(mode: mode))
@@ -1226,10 +1250,21 @@ struct PracticeDetailView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 14))
     }
 
+    private func cancelNoteDictation(resetGesture: Bool = true) {
+        dictationInteractionID = UUID()
+        noteVoiceHeld = false
+        if resetGesture { noteVoiceGestureActive = false }
+        noteVoiceTarget = .listening
+        noteDictation.cancel()
+        dictationInsertionSelection = nil
+    }
+
     private func beginNoteDictation(_ item: PracticeItem) {
-        guard !noteVoiceHeld, !noteDictation.isFinishing else { return }
+        guard !noteVoiceHeld, !noteDictation.isPreparing, !noteDictation.isFinishing else { return }
+        let interactionID = UUID()
+        dictationInteractionID = interactionID
         noteVoiceHeld = true
-        noteVoiceCancelArmed = false
+        noteVoiceTarget = .listening
         dictationInsertionSelection = noteSelection
         dictationInsertionText = noteText
         noteFocused = false
@@ -1245,26 +1280,35 @@ struct PracticeDetailView: View {
             metronome.stop()
         }
         Task {
+            guard dictationInteractionID == interactionID, noteVoiceHeld else { return }
             let started = await noteDictation.start()
+            guard dictationInteractionID == interactionID else { return }
             if !noteVoiceHeld && started {
                 noteDictation.cancel()
                 show("请再次按住说话")
             }
-            if !started, let error = noteDictation.lastError { show(error) }
+            if !started {
+                noteVoiceHeld = false
+                dictationInsertionSelection = nil
+                if let error = noteDictation.lastError { show(error) }
+            }
         }
     }
 
     private func endNoteDictation(cancelled: Bool) {
         guard noteVoiceHeld else { return }
         noteVoiceHeld = false
-        noteVoiceCancelArmed = false
-        if cancelled {
-            noteDictation.cancel()
-            dictationInsertionSelection = nil
+        noteVoiceTarget = .listening
+        if cancelled || noteDictation.isPreparing {
+            cancelNoteDictation()
             return
         }
+        let interactionID = dictationInteractionID
         Task {
-            if let text = await noteDictation.finish() {
+            guard dictationInteractionID == interactionID else { return }
+            let text = await noteDictation.finish()
+            guard dictationInteractionID == interactionID else { return }
+            if let text {
                 insertDictation(text)
                 noteFocused = true
             } else if let error = noteDictation.lastError {
@@ -1345,33 +1389,35 @@ struct PracticeDetailView: View {
     /// Historical items stay view-only: notes, existing clips, and review remain;
     /// 录音 / 录视频 / import and the complete CTA must not start capture or persist.
     private func toolsRow(_ item: PracticeItem) -> some View {
+        // Keep the adaptive row's metadata shallow. Expanding the gesture-heavy
+        // button types together exhausted the iOS 26.1 render stack on cover exit.
         adaptiveLayout(spacing: 4).callAsFunction {
-            noteDictationButton(item)
-            tool(title: recorder.isRecording ? "录音中" : "录音", systemImage: "mic", on: recorder.isRecording) {
+            AnyView(noteDictationButton(item))
+            AnyView(tool(title: recorder.isRecording ? "录音中" : "录音", systemImage: "mic", on: recorder.isRecording) {
                 toggleRecording(item)
             }
-            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode))
-            tool(title: "录像", systemImage: "video", on: false) {
+            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode)))
+            AnyView(tool(title: "录像", systemImage: "video", on: false) {
                 noteFocused = false
                 recorder.cancelStart()
                 player.stop()
                 videoPlayURL = nil
                 isSourcePresented = true
             }
-            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode))
-            tool(title: "添加附件", systemImage: "paperclip", on: noteAttachmentsExpanded) {
+            .disabled(!PracticeDetailState.shouldAllowCapture(mode: mode)))
+            AnyView(tool(title: "添加附件", systemImage: "paperclip", on: noteAttachmentsExpanded) {
                 noteFocused = false
                 noteAttachmentsExpanded.toggle()
             }
             .disabled(isPastDayRecord)
-            .accessibilityLabel("添加笔记图片")
+            .accessibilityLabel("添加笔记图片"))
         }
     }
 
     private func toggleRecording(_ item: PracticeItem) {
         guard PracticeDetailState.shouldAllowCapture(mode: mode) else { return }
         noteFocused = false
-        noteDictation.cancel()
+        cancelNoteDictation()
         Task { @MainActor in
             if recorder.isRecording {
                 recorder.stop(label: item.title)
@@ -1393,23 +1439,38 @@ struct PracticeDetailView: View {
     }
 
     private func noteDictationButton(_ item: PracticeItem) -> some View {
-        Label(noteVoiceCancelArmed ? "上滑取消" : noteDictation.isFinishing ? "转文字中" : noteDictation.isRecording ? "松手转文字" : "语音输入", systemImage: "mic")
-            .font(GitaFont.caption())
-            .foregroundStyle(noteVoiceCancelArmed ? GitaTheme.brand500 : GitaTheme.textPrimary)
-            .frame(maxWidth: .infinity, minHeight: 44)
+        VStack(spacing: 3) {
+            Image(systemName: "mic").font(.system(size: 20))
+            Text("语音输入").font(GitaFont.caption(.medium))
+        }
+            .foregroundStyle(GitaTheme.textPrimary)
+            .frame(maxWidth: .infinity, minHeight: 50)
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0)
+            .gesture(DragGesture(minimumDistance: 0, coordinateSpace: .global)
                 .onChanged { value in
-                    if !noteVoiceHeld { beginNoteDictation(item) }
-                    noteVoiceCancelArmed = value.translation.height < -60
+                    if !noteVoiceGestureActive {
+                        noteVoiceGestureActive = true
+                        beginNoteDictation(item)
+                    }
+                    noteVoiceTarget = NoteDictationTarget.resolve(
+                        translation: value.translation, location: value.location, frame: dictationFrame
+                    )
                 }
-                .onEnded { value in endNoteDictation(cancelled: value.translation.height < -60) }
+                .onEnded { value in
+                    noteVoiceGestureActive = false
+                    let target = NoteDictationTarget.resolve(
+                        translation: value.translation, location: value.location, frame: dictationFrame
+                    )
+                    endNoteDictation(cancelled: target == .cancel)
+                }
             )
+            .accessibilityElement(children: .ignore)
+            .accessibilityIdentifier("practice.dictation.start")
             .accessibilityLabel("语音转文字")
             .accessibilityHint("按住说话，松手转成文字，上滑取消")
             .accessibilityAddTraits(.isButton)
             .accessibilityAction {
-                if noteDictation.isRecording { endNoteDictation(cancelled: false) }
+                if noteVoiceHeld { endNoteDictation(cancelled: false) }
                 else { beginNoteDictation(item) }
             }
             .disabled(!PracticeDetailState.shouldAllowContentEditing(mode: mode))
@@ -1678,24 +1739,23 @@ struct PracticeDetailView: View {
         title: String, systemImage: String, on: Bool, action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            VStack(spacing: 3) {
                 Image(systemName: systemImage)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 20, weight: .regular))
                 Text(title)
-                    .font(.system(size: 14, weight: .medium))
+                    .font(GitaFont.caption(.medium))
                     .lineLimit(1)
                     .minimumScaleFactor(0.85)
             }
             .foregroundStyle(on ? GitaTheme.brand500 : GitaTheme.textPrimary)
             .frame(maxWidth: .infinity)
-            .frame(minHeight: 44)
+            .frame(minHeight: 50)
             .background(GitaTheme.bgSurface)
             .overlay(
                 RoundedRectangle(cornerRadius: 14)
                     .stroke(on ? GitaTheme.brand500 : Color.clear, lineWidth: 1.5)
             )
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .shadow(color: GitaTheme.shadowCard, radius: 4, y: 2)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(title))
@@ -1840,6 +1900,10 @@ struct PracticeDetailView: View {
         practiceMetronomeLog.notice(
             "boundary reason=\(reason, privacy: .public) playing=\(self.metronome.isPlaying, privacy: .public) recording=\(self.recorder.isRecording, privacy: .public) ramp=\(self.tempoController.isRampActive, privacy: .public)"
         )
+        if noteVoiceHeld || noteDictation.isFinishing {
+            cancelNoteDictation()
+            show("语音输入已中断，请重试")
+        }
         tempoController.handleInterruption()
         updateActiveTrainingSnapshot()
         metronome.stop()
@@ -2269,6 +2333,7 @@ struct PracticeDetailView: View {
         guard !attachmentImportInProgress else { show("请等待文件导入完成"); return }
         guard canCompletePractice else { return }
         guard !isCompleting else { return }
+        NextFocusPageTiming.begin(sourceID: item.id)
         noteFocused = false
         isCompleting = true
         recorder.cancelStart()
@@ -2283,6 +2348,7 @@ struct PracticeDetailView: View {
             isCompleting = false
             return
         }
+        NextFocusPageTiming.mark(sourceID: item.id, .factsSaved)
         queueProjectDeletedToastIfNeeded(for: item)
         let hadContent = hasUnsavedWork
             || storedDurationSeconds > 0
@@ -2300,6 +2366,16 @@ struct PracticeDetailView: View {
             Haptics.success()
             router.lastCompletedPracticeItemId = item.id
             router.markPracticeItemCompleted(item.id)
+            NextFocusPageTiming.mark(sourceID: item.id, .completionStateSaved)
+            nextFocusStartupError = nil
+            if nextFocusAutoGenerate {
+                do {
+                    try store.startNextFocusAfterCompletion(itemID: item.id, enabled: true,
+                        baseURL: llmBaseURL, model: llmModel, apiKey: llmCredentials.loadAPIKey())
+                } catch {
+                    nextFocusStartupError = "练习记录已保存，AI 整理暂不可用：\(error.localizedDescription)"
+                }
+            }
             finishAfterNextFocus = true
             showNextFocus = true
             return

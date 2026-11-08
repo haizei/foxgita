@@ -135,8 +135,10 @@ struct NextFocusEditor: View {
     let profileID: UUID
     let sourceID: UUID
     var completed = false
+    var startupError: String? = nil
     var onClose: () -> Void
     @Environment(PracticeStore.self) private var store
+    @Environment(\.scenePhase) private var scenePhase
     @Query(filter: #Predicate<LocalProfile> { $0.isActive == true }) private var activeProfiles: [LocalProfile]
     @AppStorage(LLMSettingsKey.baseURL) private var baseURL = ""
     @AppStorage(LLMSettingsKey.model) private var model = ""
@@ -161,6 +163,7 @@ struct NextFocusEditor: View {
     @State private var confirmProjectOverwrite = false
     @State private var projectCanBeReviewed = false
     @State private var textSaveFailed = false
+    @State private var providerConfigured = false
 
     private var draft: NextFocusDraft? { store.suggestions.documents[profileID]?.drafts[sourceID.uuidString] }
     private var isGenerating: Bool { context.map(store.suggestions.isGenerating) ?? false }
@@ -168,7 +171,7 @@ struct NextFocusEditor: View {
         #if DEBUG && targetEnvironment(simulator)
         if NextFocusUITestScenario.isActive { return true }
         #endif
-        return LLMCredentialsStore().isConfigured(baseURL: baseURL, model: model)
+        return providerConfigured
     }
     private var canSave: Bool { !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && text.count <= 600 }
 
@@ -240,8 +243,17 @@ struct NextFocusEditor: View {
         .background(GitaTheme.bgSurface)
         .safeAreaInset(edge: .bottom, spacing: 0) { fixedActions }
         .task { load() }
+        .onChange(of: baseURL) { _, _ in refreshProviderConfiguration() }
+        .onChange(of: model) { _, _ in refreshProviderConfiguration() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshProviderConfiguration() }
+        }
         .onChange(of: draft) { _, latest in
-            if !userEdited, let latest { text = latest.text; supplement = latest.supplement ?? "" }
+            if !userEdited, let latest {
+                text = latest.text
+                supplement = latest.supplement ?? ""
+                if latest.generated, didLoad { NextFocusPageTiming.mark(sourceID: sourceID, .viewStateReady) }
+            }
         }
         .onChange(of: activeProfiles.first?.id) { _, _ in onClose() }
         .sheet(isPresented: $showReview, onDismiss: { refreshContext() }) {
@@ -413,6 +425,7 @@ struct NextFocusEditor: View {
 
     private func load() {
         guard !didLoad else { return }
+        refreshProviderConfiguration()
         do {
             _ = try store.suggestions.document(profileID)
             do { context = try store.nextFocusContext(itemID: sourceID) }
@@ -434,16 +447,26 @@ struct NextFocusEditor: View {
             text = prepared.text
             supplement = prepared.supplement ?? ""
             didLoad = true
+            NextFocusPageTiming.mark(sourceID: sourceID, .editorLoaded)
+            if prepared.generated {
+                NextFocusPageTiming.preparedDraftReady(sourceID: sourceID)
+            }
             projectFailed = prepared.pendingProjectUpdate != nil
             if projectFailed { readLatestProjectFocus() }
-            if completed, autoGenerate, configured, !prepared.generated,
-               prepared.revision == 0, prepared.generationError == nil, !isGenerating { generate() }
+            if let startupError { self.error = startupError }
+            if completed, startupError == nil, autoGenerate, configured, !prepared.generated,
+               prepared.revision == 0, prepared.generationError == nil,
+               store.suggestions.generationError(context) == nil, !isGenerating { generate() }
         } catch { self.error = error.localizedDescription }
     }
 
     private func refreshContext() {
         do { context = try store.nextFocusContext(itemID: sourceID) }
         catch { self.error = error.localizedDescription }
+    }
+
+    private func refreshProviderConfiguration() {
+        providerConfigured = LLMCredentialsStore().isConfigured(baseURL: baseURL, model: model)
     }
 
     private func persistText() {

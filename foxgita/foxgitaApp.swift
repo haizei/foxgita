@@ -8,6 +8,7 @@ import os
 
 @main
 struct foxgitaApp: App {
+    @UIApplicationDelegateAdaptor(ScoreOrientation.self) private var scoreOrientation
     @AppStorage(AppAppearance.storageKey) private var appearance: AppAppearance = .system
     @State private var router = AppRouter()
     @State private var store: PracticeStore
@@ -35,8 +36,14 @@ struct foxgitaApp: App {
         #else
         let isDNAProgramsUITest = false
         #endif
-        let config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isProjectDetailUITest || isDNAProgramsUITest || PracticeTestEnvironment.isActive)
-        if PracticeTestEnvironment.isActive {
+        let config: ModelConfiguration
+        if let runID = PracticeTestEnvironment.recoveryRunID {
+            let url = URL.applicationSupportDirectory.appendingPathComponent("Recovery-" + runID.uuidString + ".store")
+            config = ModelConfiguration(schema: schema, url: url, cloudKitDatabase: .none)
+        } else {
+            config = ModelConfiguration(schema: schema, isStoredInMemoryOnly: isProjectDetailUITest || isDNAProgramsUITest || PracticeTestEnvironment.isActive)
+        }
+        if PracticeTestEnvironment.isActive && PracticeTestEnvironment.recoveryRunID == nil {
             PracticeTestEnvironment.defaults.removeObject(forKey: SeedData.seededKey)
         }
         do {

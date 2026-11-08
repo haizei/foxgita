@@ -1,6 +1,70 @@
 import XCTest
 
 final class MetronomeBeatUnitUITests: XCTestCase {
+    func testSpeedTabsAndTempoStayInSyncAfterTapAndManualAdjustment() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-UITesting"]
+        app.launch()
+        app.buttons["practice.create-button"].tap()
+        let field = app.textFields.firstMatch
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("调速同步测试")
+        app.buttons["practice.confirm-create"].tap()
+        let speed = app.buttons["metronome.open-speed"]
+        XCTAssertTrue(speed.waitForExistence(timeout: 5))
+        speed.tap()
+        let adjustTab = app.buttons["metronome.speed.tab.adjust"]
+        XCTAssertTrue(adjustTab.waitForExistence(timeout: 5))
+        let current = app.staticTexts["metronome.speed.bpm"]
+        XCTAssertEqual(current.label, "80")
+        capture(app, name: "speed-adjust-figma")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(speed.isHittable, "The dimmed backdrop must dismiss the sheet without activating practice controls")
+        speed.tap()
+        for _ in 0..<4 { app.buttons["metronome.tap"].tap() }
+        XCTAssertEqual(current.label, "80", "TAP preview must not replace the active BPM")
+        let apply = app.buttons["metronome.tap.apply"]
+        XCTAssertTrue(apply.waitForExistence(timeout: 5))
+        let ready = XCTNSPredicateExpectation(predicate: NSPredicate(format: "enabled == true"), object: apply)
+        XCTAssertEqual(XCTWaiter.wait(for: [ready], timeout: 5), .completed)
+        capture(app, name: "speed-tap-preview-synced")
+        let measured = Int(apply.label.filter(\.isNumber))!
+        apply.tap()
+        XCTAssertEqual(current.label, String(measured))
+        app.buttons["metronome.speed.increase"].tap()
+        XCTAssertEqual(current.label, String(min(200, measured + 1)))
+        app.buttons["metronome.speed.decrease"].tap()
+        XCTAssertEqual(current.label, String(min(200, measured + 1) - 1))
+        let ruler = app.otherElements["metronome.speed.ruler"]
+        ruler.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertEqual(current.label, "100")
+        capture(app, name: "speed-adjust-synced")
+        app.buttons["metronome.speed.tab.ramp"].tap()
+        if app.alerts["变速训练"].waitForExistence(timeout: 1) {
+            app.alerts["变速训练"].buttons["知道了"].tap()
+        }
+        XCTAssertTrue(app.buttons["metronome.ramp.start"].waitForExistence(timeout: 5))
+        capture(app, name: "speed-ramp-figma")
+        adjustTab.tap()
+        XCTAssertEqual(current.label, "100")
+        app.buttons["metronome.speed.handle"].swipeDown()
+        XCTAssertTrue(current.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(speed.isHittable)
+        XCTAssertEqual(speed.value as? String, "100 BPM")
+        speed.tap()
+        XCTAssertTrue(current.waitForExistence(timeout: 5))
+        XCTAssertEqual(current.label, "100")
+        app.buttons["metronome.speed.tab.ramp"].tap()
+        app.buttons["metronome.ramp.start"].tap()
+        XCTAssertTrue(speed.waitForExistence(timeout: 5))
+        speed.tap()
+        XCTAssertTrue(adjustTab.waitForExistence(timeout: 5))
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(app.buttons["practice.toggle-running"].isHittable, "Training must not trap users in the speed sheet")
+    }
+
     func testBeatUnitUpdatesNotationAndMainMeter() {
         continueAfterFailure = false
         let app = XCUIApplication()

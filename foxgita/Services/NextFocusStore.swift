@@ -224,6 +224,7 @@ final class NextFocusStore {
             draft.generationError = nil
             doc.drafts[source] = draft
         }
+        NextFocusPageTiming.mark(sourceID: ticket.context.sourceID, .draftSaved)
     }
 
     @discardableResult
@@ -337,12 +338,15 @@ final class NextFocusStore {
     func generate(_ context: NextFocusContext, supplement: String = "", baseURL: String,
                   model: String, apiKey: String, client: (any NextFocusGenerating)? = nil) throws {
         let client = client ?? NextFocusClient()
+        let requestModel = NextFocusClient.preferredModel(for: model)
         let ticket = try beginGeneration(context)
         let key = jobKey(context)
         generationErrors[key] = nil
         jobs[key]?.cancel()
         generating.insert(key)
-        jobs[key] = Task { [weak self] in
+        NextFocusPageTiming.mark(sourceID: context.sourceID, .generationQueued)
+        NextFocusPageTiming.setModel(sourceID: context.sourceID, model: requestModel)
+        jobs[key] = Task(priority: .userInitiated) { [weak self] in
             guard let self else { return }
             defer {
                 if self.documents[context.profileID]?.drafts[context.sourceID.uuidString]?.generationID == ticket.generationID {
@@ -351,9 +355,12 @@ final class NextFocusStore {
                 }
             }
             do {
-                let output = try await client.generate(context: context, supplement: supplement,
-                                                       baseURL: baseURL, model: model, apiKey: apiKey)
                 try Task.checkCancellation()
+                NextFocusPageTiming.mark(sourceID: context.sourceID, .requestStarted)
+                let output = try await client.generate(context: context, supplement: supplement,
+                                                       baseURL: baseURL, model: requestModel, apiKey: apiKey)
+                try Task.checkCancellation()
+                NextFocusPageTiming.mark(sourceID: context.sourceID, .responseParsed)
                 try self.applyGenerated(output, ticket: ticket)
             } catch is CancellationError {
                 return

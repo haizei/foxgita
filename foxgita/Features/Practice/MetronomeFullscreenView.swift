@@ -59,6 +59,11 @@ struct MetronomeFullscreenView: View {
                 }, onExpand: { showSound = false }, onDone: { showSound = false })
             }
         }
+        .overlay {
+            if anchor == .speed {
+                MetronomeSpeedBackdrop { anchor = nil }
+            }
+        }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("metronome.fullscreen")
     }

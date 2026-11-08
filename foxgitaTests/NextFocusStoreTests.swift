@@ -176,6 +176,7 @@ struct NextFocusStoreTests {
         let value = try #require(try JSONSerialization.jsonObject(with: data) as? [String: Any])
         #expect(value["userNextIntention"] as? String == "下次练主歌")
         #expect(value["note"] as? String == c.note)
+        #expect(value["actualSeconds"] == nil)
         #expect(!prompt.contains(c.profileID.uuidString))
         #expect(!prompt.contains(c.sourceID.uuidString))
         #expect(value["memory"] == nil)

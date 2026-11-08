@@ -196,7 +196,7 @@ final class PracticeFlowUITests: XCTestCase {
         field.typeText("语音响应测试")
         app.buttons["确认并创建练习"].tap()
 
-        let voice = app.descendants(matching: .any)["语音转文字"]
+        let voice = app.buttons["practice.dictation.start"]
         if !voice.isHittable { app.swipeUp() }
         XCTAssertTrue(voice.waitForExistence(timeout: 5))
         voice.press(forDuration: 2)
@@ -262,7 +262,7 @@ final class PracticeFlowUITests: XCTestCase {
         speed.tap()
         XCTAssertTrue(app.descendants(matching: .any)["metronome.speed-sheet"].waitForExistence(timeout: 3))
         XCTAssertTrue(app.buttons["TAP"].exists)
-        let rampEntry = app.staticTexts["进入设置"]
+        let rampEntry = app.buttons["metronome.speed.tab.ramp"]
         XCTAssertTrue(rampEntry.exists)
         XCTContext.runActivity(named: "Metronome Speed A Compact") { activity in
             activity.add(XCTAttachment(screenshot: app.screenshot()))
@@ -273,7 +273,6 @@ final class PracticeFlowUITests: XCTestCase {
             app.alerts["变速训练"].buttons["知道了"].tap()
         }
         XCTAssertTrue(app.buttons["调速"].waitForExistence(timeout: 3))
-        XCTAssertTrue(app.buttons["测速"].exists)
         XCTAssertTrue(app.buttons["变速"].exists)
         XCTAssertTrue(app.buttons["开始变速训练"].exists)
         XCTContext.runActivity(named: "Metronome Speed B Segmented") { activity in
@@ -325,17 +324,63 @@ final class PracticeFlowUITests: XCTestCase {
         XCTAssertEqual(pendulum.value as? String, "已选择")
         app.buttons["metronome.sound.done"].tap()
 
-        XCTContext.runActivity(named: "Metronome Display Card — Figma 841:140") { activity in
+        XCTContext.runActivity(named: "Metronome Display Card — Figma 2313:116") { activity in
             let attachment = XCTAttachment(screenshot: app.screenshot())
             attachment.lifetime = .keepAlways
             activity.add(attachment)
         }
 
         XCTAssertEqual(card.frame.width, 370, accuracy: 1.5)
-        XCTAssertEqual(card.frame.height, 243, accuracy: 1.5)
+        XCTAssertEqual(card.frame.height, 304, accuracy: 1.5)
     }
 
-    func testEmptyCompleteStaysOnPracticeTab() {
+    func testSavePreservesUnstartedPracticeAndOnlyBottomCompletes() {
+        addTeardownBlock { [weak self] in
+            self?.deleteCreatedTask(named: "练习界面同步")
+        }
+        app.buttons["practice.create-button"].tap()
+        let field = app.textFields["practice.create-name"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        field.tap()
+        field.typeText("练习界面同步")
+        app.buttons["确认并创建练习"].tap()
+
+        let save = app.buttons["保存"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        let start = app.buttons["practice.toggle-running"]
+        let countdown = app.buttons["countdown.open-settings"]
+        let card = app.descendants(matching: .any)["metronome.display-card"]
+        XCTAssertLessThan(start.frame.minX, countdown.frame.minX)
+        XCTAssertLessThan(start.frame.maxY, card.frame.minY)
+        let mainImage = XCTAttachment(screenshot: app.screenshot())
+        mainImage.name = "Practice-tools-main"
+        mainImage.lifetime = .keepAlways
+        add(mainImage)
+        save.tap()
+        XCTAssertTrue(start.exists, "保存不能结束本次练习")
+
+        let finish = app.buttons["practice.finish"]
+        if !finish.isHittable { app.swipeUp() }
+        XCTAssertTrue(finish.exists)
+        XCTAssertFalse(finish.isEnabled)
+        let noteImage = XCTAttachment(screenshot: app.screenshot())
+        noteImage.name = "Practice-tools-note-and-finish"
+        noteImage.lifetime = .keepAlways
+        add(noteImage)
+        if !start.isHittable { app.swipeDown() }
+        start.tap()
+        if !finish.isHittable { app.swipeUp() }
+        XCTAssertTrue(finish.isEnabled)
+        finish.tap()
+        let returnFromFocus = app.buttons["next-focus.return"]
+        if returnFromFocus.waitForExistence(timeout: 5) {
+            for _ in 0..<5 where !returnFromFocus.isHittable { app.swipeUp() }
+            returnFromFocus.tap()
+        }
+        XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
+    }
+
+    func testEmptyPracticeCanReturnWithoutCompleting() {
         addTeardownBlock { [weak self] in
             self?.deleteCreatedTask(named: "空完成")
         }
@@ -347,8 +392,8 @@ final class PracticeFlowUITests: XCTestCase {
         field.tap()
         field.typeText("空完成")
         app.buttons["确认并创建练习"].tap()
-        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
-        app.buttons["完成"].tap()
+        XCTAssertTrue(app.buttons["保存"].waitForExistence(timeout: 5))
+        app.buttons["返回"].tap()
 
         XCTAssertTrue(app.staticTexts["今日练习"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.staticTexts["练习记录"].exists)
@@ -426,13 +471,14 @@ final class PracticeFlowUITests: XCTestCase {
         }
 
         app.buttons["开始这项练习"].tap()
-        XCTAssertTrue(app.buttons["完成"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["保存"].waitForExistence(timeout: 5))
         let note = app.descendants(matching: .any)["practice.note-editor"]
         for _ in 0..<3 where !note.isHittable { app.swipeUp() }
         XCTAssertTrue(note.waitForExistence(timeout: 3))
         note.tap()
         note.typeText("今天把节奏放慢后更稳定")
-        app.buttons["完成"].tap()
+        app.buttons["保存"].tap()
+        app.buttons["返回"].tap()
         XCTAssertTrue(app.staticTexts["项目详情"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.staticTexts["今天把节奏放慢后更稳定"].exists)
         app.buttons["查看全部 ›"].tap()

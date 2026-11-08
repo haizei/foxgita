@@ -80,15 +80,15 @@ final class PracticeSettingsUITests: XCTestCase {
         field.typeText("共享工具状态测试")
         app.buttons["practice.confirm-create"].tap()
         app.buttons["metronome.open-speed"].tap()
-        XCTAssertTrue(app.buttons["metronome.ramp.entry"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["metronome.speed.tab.ramp"].waitForExistence(timeout: 5))
         capture(app, name: "MT01-speed")
-        app.buttons["metronome.ramp.entry"].tap()
+        app.buttons["metronome.speed.tab.ramp"].tap()
         if app.alerts["变速训练"].waitForExistence(timeout: 1) {
             app.alerts["变速训练"].buttons["知道了"].tap()
         }
         XCTAssertTrue(app.buttons["metronome.ramp.start"].waitForExistence(timeout: 5))
         capture(app, name: "MT02-ramp")
-        app.buttons["metronome.speed.done"].tap()
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
         app.buttons["拍号，打开节拍器设置"].tap()
         XCTAssertTrue(app.buttons["metronome.denominator.increase"].waitForExistence(timeout: 5))
         app.buttons["metronome.denominator.increase"].tap()

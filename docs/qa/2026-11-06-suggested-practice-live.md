@@ -4,6 +4,8 @@
 
 已通过正常 App 客户端跑通：完成练习 → 真实生成本次总结与下次重点 → 用户确认保存 → 首页「建议练习」。测试使用独立档案和测试练习内容，沿用模拟器已保存的 HTTPS 接口配置及 Keychain 凭据。
 
+2026-11-07 已完成 [关闭思考与限制输出后的延迟优化复验](2026-11-07-next-focus-latency.md)：同输入单轮接口对照由 20.672 秒降至 1.751 秒，38 项相关验证通过。本记录保留首次联调结果。
+
 ## 真实返回与保存结果
 
 练习为 `C to G chord transition`，原设置为 80 BPM，实际计时 2 秒，没有练习备注或媒体分析。
@@ -12,7 +14,7 @@
 - 重点：下次按 80 BPM 继续做 C 到 G 和弦切换。
 - 依据：记录包含明确练习对象和原速度；步骤为通用占位，因此只建议继续该对象。
 
-点击完成至测试观察到生成结果约 33.27 秒，包含界面操作和读取耗时，不作为纯接口延迟。草稿的 `generated` 为真，首页行动原文与生成草稿一致，来源身份相同，没有生成错误。
+旧UI脚本计时约33.27秒，包含读取、断言和截图，不作为纯接口延迟或实际显示等待。后续已[修正页面计时口径并加入App内分段记录](2026-11-07-next-focus-page-timing.md)。草稿的 `generated` 为真，首页行动原文与生成草稿一致，来源身份相同，没有生成错误。
 
 [持久化核对结果](2026-11-06-suggested-practice-live/persisted-result.json)、[界面测试报告](2026-11-06-suggested-practice-live/verified-screenshots/7075F528-F2A1-4BA2-93F9-811DDDB1B1C9.json)、[生成总结与重点截图](2026-11-06-suggested-practice-live/verified-screenshots/C9850BF6-8916-4EE8-B41C-2C901D3928D1.png)、[确认后的首页截图](2026-11-06-suggested-practice-live/verified-screenshots/4B9354FF-1FB6-4E8F-B9C3-CCFD27308A44.png)。两张最终截图已目视核对。
 

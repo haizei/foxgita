@@ -9,6 +9,16 @@ final class NoteDictationService {
     private(set) var isFinishing = false
     private(set) var transcript = ""
     private(set) var lastError: String?
+    private(set) var inputLevels = Array(repeating: Float.zero, count: 32)
+    private(set) var elapsedSeconds: TimeInterval = 0
+
+    var elapsedDisplay: String {
+        let seconds = Int(elapsedSeconds)
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+
+    private var captureStartedAt: Date?
+    private var lastLevelUpdate = Date.distantPast
 
     private var engine: AVAudioEngine?
     private var request: SFSpeechAudioBufferRecognitionRequest?
@@ -25,6 +35,9 @@ final class NoteDictationService {
         isPreparing = true
         lastError = nil
         transcript = ""
+        inputLevels = Array(repeating: 0, count: 32)
+        elapsedSeconds = 0
+        lastLevelUpdate = .distantPast
         recognitionFinished = false
         let currentGeneration = UUID()
         generation = currentGeneration
@@ -65,8 +78,19 @@ final class NoteDictationService {
             request.shouldReportPartialResults = true
             let input = engine.inputNode
             let format = input.outputFormat(forBus: 0)
-            input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
+            input.installTap(onBus: 0, bufferSize: 1024, format: format) { [weak self] buffer, _ in
                 request.append(buffer)
+                // Only a scalar crosses to the main actor; audio buffers stay on the capture thread.
+                let level = Self.captureLevel(buffer)
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == currentGeneration, self.isRecording else { return }
+                    let now = Date()
+                    guard now.timeIntervalSince(self.lastLevelUpdate) >= 0.05 else { return }
+                    self.lastLevelUpdate = now
+                    self.inputLevels.removeFirst()
+                    self.inputLevels.append(level)
+                    self.elapsedSeconds = max(0, now.timeIntervalSince(self.captureStartedAt ?? now))
+                }
             }
             tapInstalled = true
             self.engine = engine
@@ -95,6 +119,7 @@ final class NoteDictationService {
             }
             engine.prepare()
             try engine.start()
+            captureStartedAt = Date()
             isRecording = true
             return true
         } catch {
@@ -115,9 +140,12 @@ final class NoteDictationService {
                 resolve(transcript)
                 return
             }
+            let finishingGeneration = generation
             timeoutTask = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(3))
-                self?.resolve(self?.transcript)
+                do { try await Task.sleep(for: .seconds(3)) }
+                catch { return }
+                guard let self, self.generation == finishingGeneration else { return }
+                self.resolve(self.transcript)
             }
         }
     }
@@ -131,8 +159,21 @@ final class NoteDictationService {
         }
     }
 
+    nonisolated static func normalizedLevel(rms: Float) -> Float {
+        guard rms.isFinite, rms > 0 else { return 0 }
+        return min(1, max(0, (20 * log10(rms) + 50) / 50))
+    }
+
+    nonisolated private static func captureLevel(_ buffer: AVAudioPCMBuffer) -> Float {
+        guard buffer.frameLength > 0, let samples = buffer.floatChannelData?[0] else { return 0 }
+        var sum: Float = 0
+        for index in 0..<Int(buffer.frameLength) { sum += samples[index] * samples[index] }
+        return normalizedLevel(rms: sqrt(sum / Float(buffer.frameLength)))
+    }
+
     private func stopCapture() {
         guard isRecording else { return }
+        if let captureStartedAt { elapsedSeconds = max(0, Date().timeIntervalSince(captureStartedAt)) }
         engine?.inputNode.removeTap(onBus: 0)
         tapInstalled = false
         engine?.stop()
@@ -164,6 +205,7 @@ final class NoteDictationService {
         }
         if engine?.isRunning == true { engine?.stop() }
         engine = nil
+        captureStartedAt = nil
         isRecording = false
         if ownsAudioSession {
             AudioSessionCoordinator.shared.release(.record)

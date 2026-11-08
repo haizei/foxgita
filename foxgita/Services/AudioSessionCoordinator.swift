@@ -14,6 +14,7 @@ final class AudioSessionCoordinator {
         case playback
         case record
         case tuning
+        case followScore
     }
 
     enum InterruptionEvent: Equatable, Sendable {
@@ -28,8 +29,15 @@ final class AudioSessionCoordinator {
     private let applyOverride: (@MainActor () throws -> Void)?
     private var interruptionObservers: [UUID: (InterruptionEvent) -> Void] = [:]
 
-    var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 || needCounts[.tuning, default: 0] > 0 }
-    var inputMode: AVAudioSession.Mode { needCounts[.tuning, default: 0] > 0 ? .measurement : .default }
+    var prefersPlayAndRecord: Bool { needCounts[.record, default: 0] > 0 || needCounts[.tuning, default: 0] > 0 || needCounts[.followScore, default: 0] > 0 }
+    var inputMode: AVAudioSession.Mode { needCounts[.tuning, default: 0] > 0 || needCounts[.followScore, default: 0] > 0 ? .measurement : .default }
+    var categoryOptions: AVAudioSession.CategoryOptions {
+        var options: AVAudioSession.CategoryOptions = [.defaultToSpeaker,.mixWithOthers]
+        // Simultaneous guitar input must retain the selected Bluetooth music output.
+        // Enable this only for follow-score; other consumers keep their own policy.
+        if needCounts[.followScore,default: 0] > 0 { options.insert(.allowBluetoothA2DP) }
+        return options
+    }
 
     init(apply: (@MainActor () throws -> Void)? = nil) {
         applyOverride = apply
@@ -120,7 +128,7 @@ final class AudioSessionCoordinator {
         let session = AVAudioSession.sharedInstance()
         if prefersPlayAndRecord {
             try session.setCategory(
-                .playAndRecord, mode: inputMode, options: [.defaultToSpeaker, .mixWithOthers]
+                .playAndRecord, mode: inputMode, options: categoryOptions
             )
         } else {
             try session.setCategory(.playback, mode: .default, options: [.mixWithOthers])

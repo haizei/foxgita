@@ -24,17 +24,17 @@ struct MetronomeDisplayCard: View {
     }
 
     enum Layout {
-        static let cardHeight: CGFloat = 243
-        static let horizontalPadding: CGFloat = 12
-        static let topPadding: CGFloat = 10
-        static let bottomPadding: CGFloat = 13
-        static let controlHeight: CGFloat = 60
-        static let controlToBarsSpacing: CGFloat = 3
-        static let barsHeight: CGFloat = 95
-        static let barsToTrackSpacing: CGFloat = 5
-        static let trackHeight: CGFloat = 56
-        static let fourBeatSpacing: CGFloat = 23.5
-        static let fourBeatSideInset: CGFloat = 11.75
+        static let cardHeight: CGFloat = 304
+        static let horizontalPadding: CGFloat = 14
+        static let topPadding: CGFloat = 12
+        static let bottomPadding: CGFloat = 12
+        static let controlHeight: CGFloat = 52
+        static let controlToBarsSpacing: CGFloat = 8
+        static let barsHeight: CGFloat = 130
+        static let barsToTrackSpacing: CGFloat = 8
+        static let trackHeight: CGFloat = 48
+        static let fourBeatSpacing: CGFloat = 20
+        static let fourBeatSideInset: CGFloat = 0
         static let barCornerRadius: CGFloat = 0
     }
 
@@ -48,7 +48,6 @@ struct MetronomeDisplayCard: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var typeSize
-    private var valueHeight: CGFloat { typeSize.isAccessibilitySize ? 76 : 40 }
     @State private var trackPulseShape = BeatTrackPulseShape.none
     @State private var trackPulseKind = MetronomeBeatKind.weak
     @State private var pendulumAtTrailing = false
@@ -62,39 +61,24 @@ struct MetronomeDisplayCard: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                entryColumn(anchor: .meter, label: String(localized: "拍号")) {
-                    Text(meterText)
-                        .font(GitaFont.largeTitle(.bold))
-                        .foregroundStyle(GitaTheme.brand500)
-                        .monospacedDigit()
-                        .lineLimit(1).minimumScaleFactor(0.5)
-                        .frame(height: valueHeight)
+            HStack {
+                Text("节拍器").font(GitaFont.headline(.semibold))
+                Spacer()
+                Button(action: onSoundTap) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 15))
+                        .foregroundStyle(GitaTheme.textSecondary)
+                        .frame(width: 44, height: 26)
+                        .padding(.vertical, 9)
+                        .contentShape(Rectangle())
                 }
-                .accessibilityValue(meterText)
-
-                VStack(spacing: 0) {
-                    metricLabel(String(localized: "速度 (BPM)"))
-                    HStack(spacing: 0) {
-                        Button { metronome.bump(-1) } label: {
-                            Image(systemName: "minus.circle").frame(width: 44, height: 44)
-                        }.accessibilityLabel("降低速度")
-                            .disabled(isAccentEditingLocked || metronome.bpm <= 40)
-                        Button { onEntryTap(.speed) } label: { speedValue }
-                            .accessibilityLabel("速度，打开调整速度")
-                            .accessibilityIdentifier("metronome.open-speed")
-                        Button { metronome.bump(1) } label: {
-                            Image(systemName: "plus.circle").frame(width: 44, height: 44)
-                        }.accessibilityLabel("提高速度")
-                            .disabled(isAccentEditingLocked || metronome.bpm >= 200)
-                    }
-                    .foregroundStyle(GitaTheme.brand500)
-                }.frame(width: 132)
-
-
-
+                .accessibilityLabel("音效与视觉设置")
+                .accessibilityIdentifier("metronome.open-sound-settings")
             }
-            .frame(height: Layout.controlHeight + (typeSize.isAccessibilitySize ? 60 : 0))
+            .frame(height: typeSize.isAccessibilitySize ? nil : 26)
+            .padding(.bottom, 8)
+
+            controls
 
             Color.clear.frame(height: Layout.controlToBarsSpacing)
             beatBars
@@ -104,22 +88,9 @@ struct MetronomeDisplayCard: View {
         .padding(.horizontal, Layout.horizontalPadding)
         .padding(.top, Layout.topPadding)
         .padding(.bottom, Layout.bottomPadding)
-        .frame(height: Layout.cardHeight + (typeSize.isAccessibilitySize ? 60 : 0))
+        .frame(height: typeSize.isAccessibilitySize ? nil : Layout.cardHeight)
         .background(GitaTheme.bgSurface)
-        .clipShape(RoundedRectangle(cornerRadius: GitaTheme.radius8))
-        .overlay {
-            RoundedRectangle(cornerRadius: GitaTheme.radius8)
-                .stroke(GitaTheme.borderSubtle, lineWidth: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            Button(action: onSoundTap) {
-                Image(systemName: "gearshape").font(.system(size: 15))
-                    .foregroundStyle(GitaTheme.textSecondary)
-                    .frame(width: 44, height: 44)
-            }
-            .accessibilityLabel("音效与视觉设置")
-            .accessibilityIdentifier("metronome.open-sound-settings")
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 16))
         .onChange(of: metronome.visualEvent) { _, event in
             guard let event else {
                 resetPlaybackFeedback()
@@ -139,50 +110,63 @@ struct MetronomeDisplayCard: View {
         .accessibilityIdentifier("metronome.display-card")
     }
 
-    private var speedValue: some View {
-        Text("\(metronome.bpm)")
-            .font(GitaFont.largeTitle(.bold))
-            .foregroundStyle(GitaTheme.brand500)
-            .monospacedDigit()
-            .lineLimit(1)
-            .minimumScaleFactor(0.5)
-        .frame(height: valueHeight)
-    }
-
-    private var soundColumn: some View {
-        Button(action: onSoundTap) {
-            VStack(spacing: 6) {
-                metricLabel(String(localized: "声音"))
-                Image("MetronomeSoundIcon")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 32, height: 32)
-                    .frame(height: 40)
+    private var controls: some View {
+        let layout = typeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8))
+            : AnyLayout(HStackLayout(spacing: 4))
+        return layout {
+            HStack(spacing: 4) {
+                Button { onEntryTap(.meter) } label: {
+                    Text(meterText)
+                        .font(GitaFont.metric())
+                        .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("拍号，打开节拍器设置")
+                .accessibilityValue(meterText)
             }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+            if !typeSize.isAccessibilitySize { Spacer(minLength: 0) }
+            HStack(spacing: 0) {
+                Button { metronome.bump(-1) } label: {
+                    Image(systemName: "minus").font(GitaFont.callout(.semibold))
+                        .frame(width: 36, height: 36)
+                        .background(GitaTheme.brand50, in: Circle())
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("降低速度")
+                .disabled(isAccentEditingLocked || metronome.bpm <= 40)
+                Button { onEntryTap(.speed) } label: {
+                    VStack(spacing: 0) {
+                        Text("\(metronome.bpm)")
+                            .font(GitaFont.largeTitle())
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.7)
+                        Text("BPM").font(GitaFont.micro())
+                    }.frame(minWidth: 44, minHeight: 44)
+                }
+                .accessibilityLabel("速度，打开调整速度")
+                .accessibilityValue("\(metronome.bpm) BPM")
+                .accessibilityIdentifier("metronome.open-speed")
+                Button { metronome.bump(1) } label: {
+                    Image(systemName: "plus").font(GitaFont.callout(.semibold))
+                        .frame(width: 36, height: 36)
+                        .background(GitaTheme.brand50, in: Circle())
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("提高速度")
+                .disabled(isAccentEditingLocked || metronome.bpm >= 200)
+            }
+            if let onTapTempo {
+                Button("TAP", action: onTapTempo)
+                    .font(GitaFont.caption(.semibold))
+                    .frame(minWidth: 64, minHeight: 44)
+                    .background(GitaTheme.brand50, in: Capsule())
+                    .disabled(isAccentEditingLocked)
+                    .accessibilityLabel("TAP 测速")
+            }
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(Text(String(localized: "声音，打开节拍提示")))
-    }
-
-    private func entryColumn<Content: View>(
-        anchor: MetronomeSheetAnchor,
-        label: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        Button {
-            onEntryTap(anchor)
-        } label: {
-            VStack(spacing: 6) {
-                metricLabel(label)
-                content()
-            }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text("\(label)，打开节拍器设置"))
+        .foregroundStyle(GitaTheme.brand500)
+        .frame(minHeight: Layout.controlHeight)
     }
 
     private var beatBars: some View {
@@ -495,12 +479,7 @@ struct MetronomeDisplayCard: View {
         activeBeat = nil
     }
 
-    private func metricLabel(_ text: String) -> some View {
-        Text(text)
-            .font(GitaFont.micro())
-            .foregroundStyle(GitaTheme.textSecondary)
-            .frame(height: 22)
-    }
+
 }
 
 #Preview("Default") {

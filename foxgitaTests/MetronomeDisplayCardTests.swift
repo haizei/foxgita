@@ -31,13 +31,13 @@ struct MetronomeDisplayCardTests {
     }
 
     @Test func figmaLayoutConstantsMatchMetronomeOptimizationNode() {
-        #expect(MetronomeDisplayCard.Layout.cardHeight == 243)
-        #expect(MetronomeDisplayCard.Layout.horizontalPadding == 12)
-        #expect(MetronomeDisplayCard.Layout.controlHeight == 60)
-        #expect(MetronomeDisplayCard.Layout.barsHeight == 95)
-        #expect(MetronomeDisplayCard.Layout.trackHeight == 56)
-        #expect(MetronomeDisplayCard.Layout.fourBeatSpacing == 23.5)
-        #expect(MetronomeDisplayCard.Layout.fourBeatSideInset == 11.75)
+        #expect(MetronomeDisplayCard.Layout.cardHeight == 304)
+        #expect(MetronomeDisplayCard.Layout.horizontalPadding == 14)
+        #expect(MetronomeDisplayCard.Layout.controlHeight == 52)
+        #expect(MetronomeDisplayCard.Layout.barsHeight == 130)
+        #expect(MetronomeDisplayCard.Layout.trackHeight == 48)
+        #expect(MetronomeDisplayCard.Layout.fourBeatSpacing == 20)
+        #expect(MetronomeDisplayCard.Layout.fourBeatSideInset == 0)
     }
 
     @Test func muteUsesOneNeutralSegmentWhileAccentStrengthKeepsItsSemanticCount() {

@@ -2,7 +2,6 @@ import SwiftUI
 
 private enum SpeedSheetTab: String, CaseIterable, Identifiable {
     case adjust = "调速"
-    case tap = "测速"
     case ramp = "变速"
     var id: Self { self }
 }
@@ -14,7 +13,6 @@ struct MetronomeSpeedSheet: View {
     var onEndRamp: (Int?) -> Void
     var practiceItemId: UUID?
 
-    @State private var expanded = false
     @State private var selectedTab: SpeedSheetTab = .adjust
     @State private var rampSettings: TempoRampSettings
     @State private var pendingManualTempo: Int?
@@ -40,24 +38,43 @@ struct MetronomeSpeedSheet: View {
 
     var body: some View {
         ScrollView {
-          VStack(spacing: 0) {
-            Capsule().fill(Color(.systemGray3)).frame(width: 40, height: 4).padding(.top, 12)
-            header.padding(.top, 12)
-            if expanded {
-                segmentedControl.padding(.top, 10)
-                expandedContent.padding(.top, 16)
-            } else {
-                compactContent.padding(.top, 16)
+            VStack(spacing: 0) {
+                Button(action: onDone) {
+                    Capsule().fill(Color(.systemGray3))
+                        .frame(width: 40, height: 4)
+                        .padding(.top, 12).padding(.bottom, 10)
+                        .frame(maxWidth: .infinity)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .simultaneousGesture(
+                    DragGesture(minimumDistance: 12).onEnded { value in
+                        if value.translation.height > 40,
+                           value.translation.height > abs(value.translation.width) {
+                            onDone()
+                        }
+                    }
+                )
+                .accessibilityLabel("收起速度设置")
+                .accessibilityIdentifier("metronome.speed.handle")
+                segmentedControl
+                if selectedTab == .ramp {
+                    rampPanel.padding(.top, 16)
+                } else {
+                    adjustPanel.padding(.top, 8)
+                }
             }
-            Spacer(minLength: 12)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 20)
-        .frame(maxWidth: .infinity, alignment: .top)
-          }
+        .scrollIndicators(.hidden)
+        .ignoresSafeArea(.container, edges: .bottom)
         .background(GitaTheme.bgSurface)
-        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(expanded ? 498 : 382), .large])
+        .presentationDetents(typeSize.isAccessibilitySize ? [.large] : [.height(sheetHeight)])
+        .presentationCornerRadius(24)
+        .presentationBackgroundInteraction(.enabled)
         .presentationDragIndicator(.hidden)
-        .interactiveDismissDisabled(controller.isRampActive)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("metronome.speed-sheet")
         .onAppear {
@@ -67,6 +84,16 @@ struct MetronomeSpeedSheet: View {
             )
         }
         .onDisappear { controller.resetTap() }
+        .accessibilityAction(.escape, onDone)
+        .onChange(of: selectedTab) { _, tab in
+            guard tab == .ramp else { return }
+            controller.resetTap()
+            MetronomeAnalytics.emit(
+                "metronome_ramp_settings_opened", itemId: practiceItemId?.uuidString ?? "",
+                ["current_bpm": String(controller.engine.bpm), "last_plan": String(controller.savedRampSettings != nil)]
+            )
+            if !hasSeenRampHelp { showRampHelp = true }
+        }
         .confirmationDialog(
             "变速训练进行中",
             isPresented: Binding(
@@ -96,68 +123,52 @@ struct MetronomeSpeedSheet: View {
         }
     }
 
-    private var header: some View {
-        HStack {
-            Text(expanded ? "速度设置" : "调整速度")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(GitaTheme.textPrimary)
-            Spacer()
-            Button("完成", action: onDone)
-                .font(.system(size: 14))
-                .foregroundStyle(GitaTheme.brand500)
-                .frame(minWidth: 48, minHeight: 44, alignment: .trailing)
-                .accessibilityIdentifier("metronome.speed.done")
-        }.frame(height: 34)
+    private var sheetHeight: CGFloat {
+        if selectedTab == .ramp { return 418 }
+        return 240 + (controller.tapAttempt.tapCount > 0 ? 44 : 0)
+            + (controller.pendingTempo != nil ? 26 : 0)
     }
 
-    private var compactContent: some View {
-        VStack(spacing: 18) {
-            tempoControls(showTap: true)
+    private var adjustPanel: some View {
+        VStack(spacing: 0) {
+            tempoControls.frame(height: 78)
+            if controller.tapAttempt.tapCount > 0 {
+                tapFeedback.frame(minHeight: 44)
+            }
             if let pendingTempo = controller.pendingTempo {
                 Text("将在下一小节切换为 \(pendingTempo) BPM")
                     .font(GitaFont.caption(.semibold))
                     .foregroundStyle(GitaTheme.brand500)
+                    .frame(minHeight: 26)
                     .accessibilityIdentifier("metronome.pendingTempo")
-            }
-            if controller.tapReadyToApply, let bpm = controller.tapAttempt.estimatedBPM {
-                Button("采用 \(min(200, max(40, bpm))) BPM") { adoptMeasuredTempo(bpm) }
-                    .font(GitaFont.callout(.semibold))
-                    .foregroundStyle(GitaTheme.brand500)
-                    .frame(minHeight: 32)
-                    .accessibilityIdentifier("metronome.tap.apply")
             }
             MetronomeTempoRulerView(bpm: controller.engine.bpm) { requestTempo($0) }
                 .padding(.horizontal, 20)
-            Divider()
-            Button {
-                MetronomeAnalytics.emit(
-                    "metronome_ramp_settings_opened", itemId: practiceItemId?.uuidString ?? "",
-                    ["current_bpm": String(controller.engine.bpm), "last_plan": String(controller.savedRampSettings != nil)]
-                )
-                expanded = true
-                selectedTab = .ramp
-                if !hasSeenRampHelp { showRampHelp = true }
-            } label: {
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("变速训练").font(GitaFont.body(.semibold)).foregroundStyle(GitaTheme.textPrimary)
-                        Text("\(compactRampSettings.startBPM) → \(compactRampSettings.targetBPM) BPM")
-                            .font(.system(size: 18, weight: .medium)).foregroundStyle(GitaTheme.brand500)
-                        Text("每 \(compactRampSettings.barsPerStage) 小节增加 \(compactRampSettings.stepBPM) BPM")
-                            .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
-                    }
-                    Spacer()
-                    VStack(alignment: .trailing, spacing: 10) {
-                        Image(systemName: "chevron.right").font(.system(size: 20)).foregroundStyle(GitaTheme.brand500)
-                        Text("进入设置").font(GitaFont.caption(.semibold)).foregroundStyle(GitaTheme.brand500)
-                    }
-                }
-                .padding(14)
-                .background(Color.orange.opacity(0.10))
-                .clipShape(RoundedRectangle(cornerRadius: 14))
+            Text("调整即时生效 · 下滑或点遮罩收起")
+                .font(GitaFont.caption())
+                .foregroundStyle(GitaTheme.textSecondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 10)
+        }
+    }
+
+    @ViewBuilder private var tapFeedback: some View {
+        if let bpm = controller.tapAttempt.estimatedBPM {
+            HStack {
+                Text("测得 \(bpm) BPM")
+                    .foregroundStyle(GitaTheme.textSecondary)
+                    .accessibilityIdentifier("metronome.tap.estimate")
+                Spacer()
+                Button("采用 \(min(200, max(40, bpm))) BPM") { adoptMeasuredTempo(bpm) }
+                    .foregroundStyle(GitaTheme.brand500)
+                    .frame(minHeight: 44)
+                    .disabled(!controller.tapReadyToApply)
+                    .accessibilityIdentifier("metronome.tap.apply")
             }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("metronome.ramp.entry")
+            .font(GitaFont.caption())
+        } else {
+            Text("跟随节奏连续轻点（至少 4 次）")
+                .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
         }
     }
 
@@ -169,73 +180,42 @@ struct MetronomeSpeedSheet: View {
                         .font(GitaFont.callout(selectedTab == tab ? .semibold : .regular))
                         .foregroundStyle(selectedTab == tab ? GitaTheme.brand500 : GitaTheme.textSecondary)
                         .frame(maxWidth: .infinity, minHeight: 36)
-                        .background(selectedTab == tab ? GitaTheme.bgSurface : Color.clear)
+                        .background(selectedTab == tab ? GitaTheme.brand50 : Color.clear)
                         .clipShape(RoundedRectangle(cornerRadius: 9))
-                        .shadow(color: selectedTab == tab ? GitaTheme.shadowCard : .clear, radius: 4, y: 1)
+                        .overlay(RoundedRectangle(cornerRadius: 9).stroke(selectedTab == tab ? GitaTheme.brand500 : .clear, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selectedTab == tab ? .isSelected : [])
+                .accessibilityIdentifier(tab == .adjust ? "metronome.speed.tab.adjust" : "metronome.speed.tab.ramp")
             }
         }
         .padding(4).background(GitaTheme.bgSubtle)
         .clipShape(RoundedRectangle(cornerRadius: 12)).frame(height: 44)
     }
 
-    @ViewBuilder private var expandedContent: some View {
-        switch selectedTab {
-        case .adjust:
-            VStack(spacing: 24) {
-                tempoControls(showTap: false)
-                MetronomeTempoRulerView(bpm: controller.engine.bpm) { requestTempo($0) }
-                    .padding(.horizontal, 20)
-            }
-        case .tap: tapPanel
-        case .ramp: rampPanel
-        }
-    }
-
-    private func tempoControls(showTap: Bool) -> some View {
-        HStack(spacing: 12) {
+    private var tempoControls: some View {
+        HStack(spacing: 14) {
             MetronomeStepButton(kind: .decrease, diameter: 44, enabled: controller.engine.bpm > 40) { requestTempo(controller.engine.bpm - 1) }
+                .accessibilityLabel("降低速度")
+                .accessibilityIdentifier("metronome.speed.decrease")
             VStack(spacing: 1) {
-                Text("\(displayedTempo(showTap: showTap))")
+                Text("\(controller.engine.bpm)")
                     .font(.system(size: 46, weight: .medium)).monospacedDigit()
                     .foregroundStyle(GitaTheme.brand500)
-                Text(showTap && controller.tapAttempt.estimatedBPM != nil ? "测得 BPM" : "BPM")
+                    .accessibilityIdentifier("metronome.speed.bpm")
+                Text("BPM")
                     .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
             }.frame(maxWidth: .infinity)
             MetronomeStepButton(kind: .increase, diameter: 44, enabled: controller.engine.bpm < 200) { requestTempo(controller.engine.bpm + 1) }
-            if showTap {
-                Button("TAP") { handleTap() }
-                    .font(.system(size: 16, weight: .bold)).foregroundStyle(GitaTheme.brandOn)
-                    .frame(width: 74, height: 44).background(GitaTheme.brand500).clipShape(Capsule())
-                    .disabled(controller.isRampActive).accessibilityHint("连续轻点以测量速度")
-                    .accessibilityIdentifier("metronome.tap")
-            }
-        }
-    }
-
-    private var tapPanel: some View {
-        VStack(spacing: 18) {
-            Text(controller.tapAttempt.estimatedBPM.map(String.init) ?? "—")
-                .font(.system(size: 58, weight: .medium)).monospacedDigit().foregroundStyle(GitaTheme.brand500)
-            Text(controller.tapReadyToApply ? "可以采用测得速度" : (controller.tapAttempt.isStable ? "速度已稳定" : "跟随节奏连续轻点（至少 4 次）"))
-                .font(GitaFont.callout()).foregroundStyle(GitaTheme.textSecondary)
+                .accessibilityLabel("提高速度")
+                .accessibilityIdentifier("metronome.speed.increase")
             Button("TAP") { handleTap() }
-                .font(.system(size: 20, weight: .bold)).foregroundStyle(GitaTheme.brandOn)
-                .frame(maxWidth: .infinity, minHeight: 56).background(GitaTheme.brand500).clipShape(Capsule())
-                .disabled(controller.isRampActive)
+                .font(.system(size: 14, weight: .medium)).foregroundStyle(GitaTheme.brandOn)
+                .frame(width: 74, height: 44).background(GitaTheme.brand500).clipShape(Capsule())
+                .disabled(controller.isRampActive).accessibilityHint("连续轻点以测量速度")
                 .accessibilityIdentifier("metronome.tap")
-            if let bpm = controller.tapAttempt.estimatedBPM, controller.tapReadyToApply {
-                Button("采用 \(min(200, max(40, bpm))) BPM") { adoptMeasuredTempo(bpm) }
-                    .font(GitaFont.body(.semibold)).foregroundStyle(GitaTheme.brand500).frame(minHeight: 44)
-                    .accessibilityIdentifier("metronome.tap.apply")
-            }
-            if let bpm = controller.tapAttempt.estimatedBPM, bpm > 200 {
-                Text("采用时将使用上限 200 BPM")
-                    .font(GitaFont.caption()).foregroundStyle(GitaTheme.textSecondary)
-            }
         }
+        .padding(.horizontal, 4)
     }
 
     private var rampPanel: some View {
@@ -335,6 +315,7 @@ struct MetronomeSpeedSheet: View {
         if controller.isRampActive {
             pendingManualTempo = value
         } else {
+            controller.resetTap()
             controller.setTempo(value)
         }
     }
@@ -347,15 +328,6 @@ struct MetronomeSpeedSheet: View {
             stageBPM = min(rampSettings.targetBPM, stageBPM + rampSettings.stepBPM)
         }
         return String(format: "%.1f", seconds / 60)
-    }
-
-    private func displayedTempo(showTap: Bool) -> Int {
-        if showTap, let estimated = controller.tapAttempt.estimatedBPM { return estimated }
-        return controller.engine.bpm
-    }
-
-    private var compactRampSettings: TempoRampSettings {
-        controller.savedRampSettings ?? .suggested(currentBPM: controller.engine.bpm)
     }
 
     private func rampMenu(

@@ -6,6 +6,21 @@ private struct ApplyBoom: Error {}
 
 @MainActor
 struct AudioSessionCoordinatorTests {
+    @Test func followScoreAllowsBluetoothOutputWithoutChangingOtherRecordingConsumers() throws {
+        let coordinator = AudioSessionCoordinator(apply: {})
+        try coordinator.acquire(.record)
+        #expect(!coordinator.categoryOptions.contains(.allowBluetoothA2DP))
+        try coordinator.acquire(.followScore)
+        #expect(coordinator.prefersPlayAndRecord)
+        #expect(coordinator.inputMode == .measurement)
+        #expect(coordinator.categoryOptions.contains(.allowBluetoothA2DP))
+        coordinator.release(.followScore)
+        #expect(coordinator.inputMode == .default)
+        #expect(!coordinator.categoryOptions.contains(.allowBluetoothA2DP))
+        #expect(coordinator.count(for: .record) == 1)
+        coordinator.release(.record)
+        #expect(!coordinator.prefersPlayAndRecord)
+    }
     @Test func tuningUsesMeasurementAndRestoresOverlappingRecordingMode() throws {
         let coordinator = AudioSessionCoordinator(apply: {})
         try coordinator.acquire(.record)
